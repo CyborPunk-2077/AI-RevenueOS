@@ -15,9 +15,6 @@
 .PARAMETER Password
     The demo password. When omitted a random one is generated and shown once.
 
-.PARAMETER Reset
-    Delete the database volume first and start from an empty schema.
-
 .PARAMETER SkipBuild
     Reuse existing images instead of rebuilding.
 
@@ -29,7 +26,13 @@
     .\scripts\demo.ps1
 
 .EXAMPLE
-    .\scripts\demo.ps1 -Reset -Password 'my-local-passphrase'
+    .\scripts\demo.ps1 -Password 'my-local-passphrase'
+
+.NOTES
+    This never destroys data. Stopping and restarting keeps every lead, user and
+    tenant, because the database lives in the named `pgdata` volume and nothing
+    here removes it. To start from an empty schema, run the separate, explicitly
+    confirmed `RESET_DEMO.cmd` (or `scripts/reset-demo.ps1`).
 #>
 [CmdletBinding()]
 # Write-Host is correct here: this is an interactive launcher whose output is for
@@ -48,7 +51,6 @@
     Justification = 'New-DemoPassword returns a string and changes nothing.')]
 param(
     [string]$Password,
-    [switch]$Reset,
     [switch]$SkipBuild,
     [int]$TimeoutSeconds = 300
 )
@@ -61,7 +63,20 @@ Push-Location $RepoRoot
 
 $ApiUrl   = 'http://localhost:8000'
 $WebUrl   = 'http://localhost:3000'
-$Services = @('postgres', 'redis', 'api', 'web')
+# The whole stack. Compose resolves the actual ordering from depends_on +
+# healthchecks; this list is what gets started, not the order it happens in.
+# Postgres and Redis gate the API and every worker pool; a worker pool gates Beat;
+# the API gates the web app.
+$Services = @(
+    'postgres', 'redis', 'api',
+    'worker-comms', 'worker-ai', 'worker-general', 'worker-bulk',
+    'beat', 'web'
+)
+# Services that report health to Docker. Beat has no probe of its own -- Celery
+# Beat exposes nothing to check -- so it is verified as running, not healthy.
+$HealthyServices = @(
+    'postgres', 'redis', 'api', 'worker-comms', 'worker-ai', 'worker-general', 'worker-bulk'
+)
 
 function Write-Step { param([string]$Text) Write-Host "==> $Text" -ForegroundColor Cyan }
 function Write-Ok   { param([string]$Text) Write-Host "    $Text" -ForegroundColor Green }
@@ -123,6 +138,65 @@ function Wait-ForUrl {
     & docker compose logs --tail=40 $Name 2>&1 | Out-Host
     throw "$Name did not become ready within $Timeout seconds."
 }
+
+function Wait-ForStack {
+    <#
+        Wait until every named service reports healthy, and throw if it does not.
+
+        Workers and Beat expose no HTTP endpoint, so polling a URL cannot tell you
+        whether the tier came up. This reads Docker's own health state instead.
+
+        Bounded, and it gives up early rather than spinning: a container that has
+        already exited will never become healthy, so waiting the full timeout for
+        it only delays showing the operator the logs that explain why.
+    #>
+    param(
+        [Parameter(Mandatory)][string[]]$Names,
+        [int]$Timeout = $TimeoutSeconds
+    )
+    $deadline = (Get-Date).AddSeconds($Timeout)
+    while ((Get-Date) -lt $deadline) {
+        $pending = @()
+        $dead = @()
+        foreach ($name in $Names) {
+            $state = (& docker inspect --format '{{.State.Health.Status}}' "airevenueos-$name-1" 2>$null)
+            if ($LASTEXITCODE -ne 0 -or -not $state) {
+                # No health block, or the container is not there yet.
+                $running = (& docker inspect --format '{{.State.Status}}' "airevenueos-$name-1" 2>$null)
+                if ($running -eq 'exited' -or $running -eq 'dead') { $dead += $name } else { $pending += $name }
+                continue
+            }
+            switch ($state.Trim()) {
+                'healthy'   { }
+                'unhealthy' { $dead += $name }
+                default     { $pending += $name }
+            }
+        }
+
+        if ($dead.Count -gt 0) {
+            Write-Host ''
+            Write-Err "These services failed to start: $($dead -join ', ')"
+            foreach ($name in $dead) {
+                Write-Warn "--- $name ---"
+                & docker compose logs --tail=30 $name 2>&1 | Out-Host
+            }
+            throw "$($dead -join ', ') did not start"
+        }
+        if ($pending.Count -eq 0) {
+            Write-Host "`r    all services healthy                                   " -ForegroundColor Green
+            return
+        }
+        Write-Host "`r    waiting for $($pending -join ', ')          " -NoNewline
+        Start-Sleep -Seconds 3
+    }
+
+    Write-Host ''
+    Write-Err "Timed out after $Timeout seconds waiting for the stack. Recent logs:"
+    & docker compose ps 2>&1 | Out-Host
+    foreach ($name in $Names) { & docker compose logs --tail=15 $name 2>&1 | Out-Host }
+    throw "the stack did not become healthy within $Timeout seconds"
+}
+
 
 function Test-DemoLogin {
     <#
@@ -202,13 +276,6 @@ try {
         exit 1
     }
 
-    # --- reset -------------------------------------------------------------
-    if ($Reset) {
-        Write-Step 'Removing existing containers and the database volume'
-        Invoke-Compose -ComposeArgs @('down', '-v')
-        Write-Ok 'Previous state removed'
-    }
-
     # --- build -------------------------------------------------------------
     if (-not $SkipBuild) {
         Write-Step 'Building images (api, web) - several minutes on a first run'
@@ -223,6 +290,9 @@ try {
 
     Write-Step 'Waiting for the API'
     Wait-ForUrl -Url "$ApiUrl/health/liveness" -Name 'api'
+
+    Write-Step 'Waiting for the worker tier and scheduler'
+    Wait-ForStack -Names $HealthyServices
 
     # --- migrate and seed --------------------------------------------------
     # These run inside the api container. It carries ALEMBIC_DATABASE_URL, the
@@ -285,7 +355,7 @@ catch {
     Write-Host ''
     Write-Warn 'Troubleshooting:'
     Write-Warn '  docker compose logs api web      show what failed'
-    Write-Warn '  .\scripts\demo.ps1 -Reset        start from an empty database'
+    Write-Warn '  RESET_DEMO.cmd                   start from an empty database (destructive)'
     exit 1
 }
 finally {

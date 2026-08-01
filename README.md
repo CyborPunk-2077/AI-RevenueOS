@@ -15,8 +15,14 @@ Docker Desktop running, then double-click **`RUN_DEMO.cmd`** — or from a termi
 powershell -ExecutionPolicy Bypass -File scripts\demo.ps1
 ```
 
-It builds the images, starts Postgres, Redis, the API and the web app, waits for
-them, applies migrations, seeds demo data, and prints the URL and sign-in details.
+It builds the images and starts the whole stack — Postgres, Redis, the API, four
+worker pools, the Beat scheduler and the web app — waits for each to report
+healthy, applies migrations, seeds demo data, verifies both demo sign-ins through
+the browser path, and prints the URL and credentials.
+
+Stopping and restarting keeps your data: the database lives in a named volume and
+nothing on this path removes it. To start from an empty schema, run
+**`RESET_DEMO.cmd`**, which asks you to type `reset` before it deletes anything.
 
 ## Quick start (Linux, macOS, WSL)
 
