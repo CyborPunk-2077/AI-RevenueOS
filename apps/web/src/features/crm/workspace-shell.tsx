@@ -17,7 +17,7 @@ export function WorkspaceShell({
 }: {
   tenantSlug: string;
   email: string;
-  active: 'leads' | 'contacts' | 'accounts' | 'deals';
+  active: 'leads' | 'contacts' | 'accounts' | 'deals' | 'inbox';
   children: React.ReactNode;
 }): JSX.Element {
   const tabs = [
@@ -25,6 +25,7 @@ export function WorkspaceShell({
     { key: 'contacts', href: '/contacts', label: 'Contacts' },
     { key: 'accounts', href: '/accounts', label: 'Accounts' },
     { key: 'deals', href: '/deals', label: 'Deals' },
+    { key: 'inbox', href: '/inbox', label: 'Inbox' },
   ] as const;
 
   return (

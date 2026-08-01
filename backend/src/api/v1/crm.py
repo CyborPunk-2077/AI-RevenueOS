@@ -25,9 +25,12 @@ from api.v1.schemas import (
     ActivityLogRequest,
     ContactCreate,
     ContactUpdate,
+    ConversationCreate,
+    ConversationUpdate,
     DealCreate,
     DealStageMoveRequest,
     DealUpdate,
+    MessageCreate,
     NoteCreateRequest,
     NoteUpdateRequest,
     TaskCreate,
@@ -473,3 +476,140 @@ async def deal_tasks(
     principal.require("task", "list")
     tasks = await _tasks(principal).for_entity("deal", deal_id)
     return success({"tasks": tasks}, request_id=_request_id(request))
+
+
+# --- inbox: conversations and messages ---------------------------------------
+
+conversations_router = APIRouter(prefix="/conversations", tags=["crm"])
+
+
+def _inbox(principal: Any) -> Any:
+    from application.crm.inbox import InboxService
+
+    return InboxService.for_principal(principal)
+
+
+@conversations_router.get("", summary="The inbox")
+async def list_conversations(
+    request: Request,
+    principal: CurrentPrincipal,
+    query: Annotated[ListQuery, Depends(list_query)],
+    conversation_status: Annotated[str | None, Query(alias="status", max_length=20)] = None,
+    mine: bool = False,
+) -> dict[str, Any]:
+    principal.require("conversation", "list")
+    page = await _inbox(principal).list_conversations(query, status=conversation_status, mine=mine)
+    return success(
+        {"conversations": page.items}, pagination=page.meta(), request_id=_request_id(request)
+    )
+
+
+@conversations_router.get("/channels", summary="Which channels can actually send")
+async def channel_readiness(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    """Honest capability reporting: a channel is ready only when it is configured."""
+    principal.require("conversation", "list")
+    return success(
+        {"channels": await _inbox(principal).channel_readiness()},
+        request_id=_request_id(request),
+    )
+
+
+@conversations_router.post("", status_code=status.HTTP_201_CREATED, summary="Open a conversation")
+async def open_conversation(
+    payload: ConversationCreate,
+    request: Request,
+    response: Response,
+    principal: CurrentPrincipal,
+) -> dict[str, Any]:
+    principal.require("conversation", "create")
+    conversation = await _inbox(principal).open_conversation(payload.model_dump())
+    response.headers["ETag"] = f'W/"{conversation["version"]}"'
+    return success(conversation, request_id=_request_id(request))
+
+
+@conversations_router.get("/{conversation_id}", summary="Read a conversation")
+async def read_conversation(
+    conversation_id: UUID, request: Request, response: Response, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("conversation", "read")
+    conversation = await _inbox(principal).get(conversation_id)
+    response.headers["ETag"] = f'W/"{conversation["version"]}"'
+    return success(conversation, request_id=_request_id(request))
+
+
+@conversations_router.get("/{conversation_id}/messages", summary="The thread")
+async def conversation_thread(
+    conversation_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("conversation", "read")
+    principal.require("message", "list")
+    messages = await _inbox(principal).thread(conversation_id)
+    return success({"messages": messages}, request_id=_request_id(request))
+
+
+@conversations_router.patch("/{conversation_id}", summary="Assign, resolve or archive")
+async def update_conversation(
+    conversation_id: UUID,
+    payload: ConversationUpdate,
+    request: Request,
+    response: Response,
+    principal: CurrentPrincipal,
+    if_match: Annotated[int | None, Depends(parse_if_match)] = None,
+) -> dict[str, Any]:
+    principal.require("conversation", "update")
+    conversation = await _inbox(principal).update_conversation(
+        conversation_id, payload.model_dump(exclude_unset=True), expected_version=if_match
+    )
+    response.headers["ETag"] = f'W/"{conversation["version"]}"'
+    return success(conversation, request_id=_request_id(request))
+
+
+@conversations_router.post("/{conversation_id}/read", summary="Clear the unread count")
+async def mark_conversation_read(
+    conversation_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("conversation", "update")
+    conversation = await _inbox(principal).mark_read(conversation_id)
+    return success(conversation, request_id=_request_id(request))
+
+
+@conversations_router.post(
+    "/{conversation_id}/messages",
+    status_code=status.HTTP_201_CREATED,
+    summary="Queue an outbound reply",
+)
+async def send_message(
+    conversation_id: UUID,
+    payload: MessageCreate,
+    request: Request,
+    principal: CurrentPrincipal,
+) -> dict[str, Any]:
+    """201 with status `queued`, never `sent`.
+
+    Nothing here contacts a provider. When WhatsApp or email is genuinely
+    activated the worker drains the queued rows; until then the response says
+    plainly that the message is held.
+    """
+    principal.require("message", "send")
+    message = await _inbox(principal).send(conversation_id, payload.model_dump())
+    return success(message, request_id=_request_id(request))
+
+
+@conversations_router.post(
+    "/{conversation_id}/inbound",
+    status_code=status.HTTP_201_CREATED,
+    summary="Record an inbound message",
+)
+async def receive_message(
+    conversation_id: UUID,
+    payload: MessageCreate,
+    request: Request,
+    principal: CurrentPrincipal,
+) -> dict[str, Any]:
+    """Inbound needs no provider credential -- the message already arrived.
+
+    Provider webhooks land on the same service path after signature verification.
+    """
+    principal.require("message", "create")
+    message = await _inbox(principal).receive(conversation_id, payload.model_dump())
+    return success(message, request_id=_request_id(request))

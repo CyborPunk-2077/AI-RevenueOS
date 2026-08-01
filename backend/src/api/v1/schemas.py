@@ -204,6 +204,24 @@ class DealStageMoveRequest(StrictModel):
     loss_reason: Annotated[str | None, Field(max_length=200)] = None
 
 
+class ConversationCreate(StrictModel):
+    primary_channel: Literal["whatsapp", "email", "web_chat", "voice", "sms"] = "web_chat"
+    subject: Annotated[str | None, Field(max_length=300)] = None
+    contact_id: UUID | None = None
+    assignee_id: UUID | None = None
+
+
+class ConversationUpdate(StrictModel):
+    subject: Annotated[str | None, Field(max_length=300)] = None
+    status: Literal["active", "resolved", "archived", "spam"] | None = None
+    assignee_id: UUID | None = None
+
+
+class MessageCreate(StrictModel):
+    content: Annotated[str, Field(min_length=1, max_length=20_000)]
+    channel: Literal["whatsapp", "email", "web_chat", "voice", "sms"] | None = None
+
+
 class TaskCreate(StrictModel):
     title: Annotated[str, Field(min_length=1, max_length=250)]
     description: Annotated[str | None, Field(max_length=5000)] = None
