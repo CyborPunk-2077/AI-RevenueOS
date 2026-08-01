@@ -4,47 +4,54 @@ Read this first when picking the project back up. Do not re-plan the project.
 
 ## Where things stand
 
-**Commit:** `4f6b953` — "P0-4: activity and note timeline on contacts and accounts"
-**Branch:** `master`
-**Working tree:** clean
+**Commit:** `a502695` — "P0-4: tasks with due dates and overdue tracking"
+**Branch:** `master` · **Working tree:** clean
 
 **Verified working** (by test or recorded execution, not assertion):
 
 - P0-1 worker tier — 34 integration tests, real Postgres + Redis + Celery.
 - P0-2 auth — 21 `/v1/auth` operations, 37 e2e tests.
 - P0-3 frontend toolchain — frozen-lockfile install, lint, strict typecheck,
-  production build, 14 vitest tests.
-- Local runtime — full nine-service stack through `RUN_DEMO.cmd`, bounded health
+  production build (16 routes), 14 vitest tests.
+- Local runtime — nine-service stack through `RUN_DEMO.cmd`, bounded health
   waits, idempotent migrate/seed, data preserved across restarts, destructive
   reset behind `RESET_DEMO.cmd`.
-- CRM contacts, accounts, and the activity/note timeline — 39 e2e tests, plus the
-  browser path checked live with the API receiving `Host: api:8000`.
+- CRM: contacts, accounts, activity/note timeline, **deals and pipelines**,
+  **tasks**. 79 CRM e2e tests in total.
 
-**Gates at that commit:** ruff, ruff-format, mypy (173 files), import-linter 6/6,
+**Gates at that commit:** ruff, ruff-format, mypy (175 files), import-linter 6/6,
 unit + contract + integration + CRM e2e green, web lint/typecheck/build clean.
+
+**Browser path re-verified** through the real Next BFF with the API receiving
+`Host: api:8000`: deals board renders, create/move/won/lost-refusal, deal detail,
+overdue task created and shown, task completed with `completed_at` set, and
+globex getting 404 on acme's deal and task.
 
 ## Exact next task
 
-Deals and pipelines (`P0-4`, module three of six).
+Conversations and messages (`P0-4`, module five of six).
 
-Copy `application/crm/service.py` and `application/crm/timeline.py` — the pattern
-is now established three times and should not be re-derived:
+Copy `application/crm/deals.py` and `application/crm/tasks.py` — the pattern is
+established five times and should not be re-derived:
 
 - `scoped_query` / `get_scoped` for every read; never a bare tenant filter.
 - `SqlAlchemyUnitOfWork` for state + outbox + audit in one transaction.
-- Pydantic boundary schemas in `api/v1/schemas.py`, routes in `api/v1/`.
+- Pydantic boundary schemas in `api/v1/schemas.py`, routes in `api/v1/crm.py`.
 - ETag concurrency on anything editable.
-- Real outbox handlers, registered in `application/crm/handlers.py` and wired in
-  `infrastructure/celery/tasks/scheduled.py`. No `pending_handler` stubs.
-- Tests in `tests/e2e/`, including a cross-tenant 404 case.
+- Real outbox handlers registered in `application/crm/handlers.py`.
+- Tests in `tests/e2e/`, including a cross-tenant 404 case. Reuse the fixtures
+  imported from `tests/e2e/test_crm_contacts_accounts.py` and add the module to
+  the `F811` per-file-ignore list in `pyproject.toml`.
 
-`Pipeline`, `Stage` and `Deal` already exist in
-`infrastructure/database/models/crm.py` with `DEAL_STATUSES`. The event catalog
-already carries `OPPORTUNITY_*` constants.
+`Conversation` and `Message` exist in `infrastructure/database/models/communications.py`.
+`app.messages` is **partitioned**, so check `docs/runbooks/database.md` before
+writing to it. Message sending is gated (WhatsApp/email are off), so build the
+inbox around *reading* threads and internal notes; an outbound send must return
+`queued`, never a fabricated delivery.
 
-After deals: conversations/messages, documents/files, appointments (admin side),
-analytics. Then P1-2 (audit wiring for the remaining modules — contacts,
-accounts and notes are already done).
+After that: documents/files, appointments (admin side), analytics. Then P1-2
+(audit wiring for the remaining modules — contacts, accounts, notes, deals and
+tasks are already done).
 
 ## Blockers that engineering cannot clear
 
@@ -58,20 +65,21 @@ accounts and notes are already done).
 | Google sign-in | OAuth app verification. |
 | SMS | DLT registration (India). |
 
-All of the above are built, gated off, and return "not configured" rather than
-faking success. See `docs/GA-ACTIVATION-CHECKLIST.md`.
+All built, gated off, returning "not configured" rather than faking success. See
+`docs/GA-ACTIVATION-CHECKLIST.md`.
 
 ## Environment limitations of the machine this was built on
 
-Two things could never be verified here and must be checked on Windows:
-
-1. **No Docker daemon.** `docker compose build` and `up` are unrun. Everything
-   was verified against a real API, real PostgreSQL, real Redis and the real
-   Next.js BFF as separate processes instead.
+1. **No Docker daemon.** `docker compose build` and `up` are unrun. Everything is
+   verified against a real API, real PostgreSQL, real Redis and the real Next.js
+   BFF as separate processes instead.
 2. **Playwright browsers cannot be installed** (needs root; download blocked).
    The specs exist and `make e2e` runs them.
+3. `/tmp` is wiped between sessions. Rebuild the pnpm workspace with
+   `corepack pnpm install --frozen-lockfile` in a scratch dir, and the live
+   PostgreSQL harness from scratch, before browser-path checks.
 
-Also: the mounted filesystem refuses `unlink` on directories and on files inside
+The mounted filesystem refuses `unlink` on directories and on files inside
 `.git`. If git reports "Another git process seems to be running", move the stale
 lock aside rather than deleting it:
 

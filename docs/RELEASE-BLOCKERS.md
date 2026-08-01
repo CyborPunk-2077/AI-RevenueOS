@@ -13,7 +13,7 @@ No release gate may be waived without recorded evidence.
 | P0-1 worker tier | **RESOLVED** — 34 integration tests on real Postgres + Redis + Celery |
 | P0-2 auth endpoints | **RESOLVED** — 21 operations, 37 e2e tests on real Postgres + Redis |
 | P0-3 frontend build | **RESOLVED** — reproducible install, lint, strict typecheck, production build, 14 unit tests |
-| P0-4 domain services | **partial** — contacts and accounts done; deals, conversations, documents, appointments, analytics open |
+| P0-4 domain services | **partial** — contacts, accounts, timeline, deals/pipelines and tasks done; conversations, documents, appointments, analytics open |
 | P0-5 AWS account | open (external) |
 | P0-6 legal sign-off | open (external) |
 
@@ -297,9 +297,24 @@ A new handler stamps `last_contact_at` when a call, email, meeting or WhatsApp i
 logged -- notes deliberately do not count, and the stamp only moves forward.
 Verified by 16 further e2e tests and through the browser path.
 
-**Still open under P0-4:** deals and pipelines, conversations and messages,
-documents and files, appointments (admin side), analytics. Five modules, and the
-pattern to copy is now established three times over.
+**Also done (2026-08-02): deals, pipelines and tasks.** A tenant gets a default
+pipeline lazily on first use. Stage moves go through the existing
+`domain/deals/pipeline_policy.py` -- required fields, direction limits, loss
+reasons, resulting status -- rather than a second copy of those rules; probability
+and status come from the target stage, never from the client. The board reports
+open, weighted and won totals using the domain's `weighted_pipeline_value`, which
+excludes closed deals. Tasks hang off a contact, account or deal or stand alone;
+overdueness is computed and filtered server-side against the database clock, and
+`completed_at` is stamped by the server so "closed on time" stays answerable.
+Completion emits `task.completed` rather than a generic update.
+
+Fixed while building it: `DomainError` had no exception handler, so a broken
+business rule became a 500 instead of a 422 -- it would have paged somebody for a
+user error. See audit A30.
+
+**Still open under P0-4:** conversations and messages, documents and files,
+appointments (admin side), analytics. Four modules, and the pattern to copy is
+now established five times over.
 
 ---
 
