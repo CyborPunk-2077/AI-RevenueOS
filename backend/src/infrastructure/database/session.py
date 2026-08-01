@@ -19,11 +19,20 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from infrastructure.logging.context import get_tenant_id
+from infrastructure.logging.setup import get_logger
 from infrastructure.monitoring.metrics import tenant_isolation_violations
 from shared.exceptions import TenantContextMissing
 from shared.settings import Settings, get_settings
+
+
+class MaintenanceCredentialMissing(RuntimeError):
+    """Raised when privileged DDL is attempted without a maintenance credential."""
+
+
+_logger = get_logger("infra.session")
 
 _engine: AsyncEngine | None = None
 _sessionmaker: async_sessionmaker[AsyncSession] | None = None
@@ -132,3 +141,70 @@ async def ping(cfg: Settings | None = None) -> None:
     engine = get_engine(cfg)
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
+
+
+@asynccontextmanager
+async def maintenance_session(cfg: Settings | None = None) -> AsyncIterator[AsyncSession]:
+    """Elevated session for partition and retention DDL.
+
+    The runtime application role has DML only: it must not be able to create or
+    drop tables. Maintenance therefore uses a separate credential. When one is not
+    configured the caller is told explicitly instead of failing deep inside DDL.
+    """
+    c = cfg or get_settings()
+    if not c.maintenance_database_url:
+        raise MaintenanceCredentialMissing(
+            "MAINTENANCE_DATABASE_URL is not configured; partition and retention DDL "
+            "requires a role with CREATE on the app and audit schemas"
+        )
+    engine = create_async_engine(c.maintenance_database_url, poolclass=NullPool, future=True)
+    try:
+        maker = async_sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
+        async with maker() as session, session.begin():
+            yield session
+    finally:
+        await engine.dispose()
+
+
+@asynccontextmanager
+async def platform_session(reason: str, cfg: Settings | None = None) -> AsyncIterator[AsyncSession]:
+    """Cross-tenant read for platform maintenance, with the reason recorded.
+
+    Only tables carrying the platform-maintenance policy widen under this context
+    (currently the dead letter queue). Ordinary tenant tables stay isolated, so this
+    is a narrow, auditable escape rather than a general bypass.
+    """
+    maker = get_sessionmaker(cfg)
+    async with maker() as session, session.begin():
+        await bind_platform_context(session, reason)
+        _logger.info("platform_context_bound", reason=reason)
+        yield session
+
+
+@asynccontextmanager
+async def admin_session(cfg: Settings | None = None) -> AsyncIterator[AsyncSession]:
+    """Administrative session for seeding and other privileged reference-data writes.
+
+    The runtime application role has read-only access to `public.plans`,
+    `public.permissions` and `public.industry_templates`, so seeding cannot use it.
+    Prefers `MAINTENANCE_DATABASE_URL`, then `ALEMBIC_DATABASE_URL`, and fails with
+    a clear message rather than a bare permission error.
+    """
+    import os
+
+    c = cfg or get_settings()
+    # Seeding runs alongside migrations, so it prefers the migration credential.
+    url = os.environ.get("ALEMBIC_DATABASE_URL") or c.maintenance_database_url
+    if not url:
+        raise MaintenanceCredentialMissing(
+            "seeding requires ALEMBIC_DATABASE_URL (or MAINTENANCE_DATABASE_URL): the "
+            "runtime role has read-only access to the reference tables"
+        )
+    url = url.replace("+psycopg", "+asyncpg")
+    engine = create_async_engine(url, poolclass=NullPool, future=True)
+    try:
+        maker = async_sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
+        async with maker() as session, session.begin():
+            yield session
+    finally:
+        await engine.dispose()

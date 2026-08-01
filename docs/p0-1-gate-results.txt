@@ -1,0 +1,40 @@
+AI RevenueOS - P0-1 worker tier verification
+date: 2026-08-01T12:08:04Z
+python 3.10.12 | PostgreSQL 16.2 (pgserver) | Redis 6.2.14 (redislite) | Celery 5.x
+
+STATIC AND ARCHITECTURE
+  ruff check                 All checks passed!
+  ruff format --check        195 files already formatted
+  mypy (strict)              Success: no issues found in 151 source files
+  import-linter              Contracts: 6 kept, 0 broken
+  bandit (SAST)              0 issues (High 0 / Medium 0 / Low 0)
+  pip-audit                  No known vulnerabilities found
+
+DATABASE
+  migration safety           3 migrations verified (expand-only)
+  0001..0003 up/down/up      OK on PostgreSQL 16
+
+TESTS
+  unit                       503 passed
+  integration                53 passed  (34 new worker tests)
+  contract                   146 passed
+  e2e                        24 passed
+  TOTAL                      726 passed, 0 failed  (was 692)
+  release gates              8/8 passed
+
+LOCAL STACK (compose services substituted: no Docker in this sandbox)
+  postgres + redis           up
+  init-db roles              airevenueos_app + airevenueos_maintenance created
+  alembic upgrade head       0001..0003 applied
+  seed.py                    ok (3 plans, 720 permissions, 9 templates)
+  worker_health.py           exit 0 {"status":"ready","broker":"up","database":"up"}
+  worker pool                consuming all 8 queues
+  queue_status.py            ok
+
+BEAT TASKS DRIVEN THROUGH A REAL WORKER
+  scheduled.relay_outbox             {"claimed":0,"dispatched":0,"failed":0,"dead_lettered":0}
+  scheduled.rollup_metrics           {"outbox_pending":0,"queue_depths":{...8 queues}}
+  scheduled.reconcile_payments       {"skipped":true,"reason":"PROVIDER_NOT_CONFIGURED"}
+  webhook.sweep_pending              {"queued":0}
+  maintenance.nightly_cleanup        {"partitions_created":51,"outbox_pruned":0}
+  maintenance.reap_dead_letters      {"removed":0}

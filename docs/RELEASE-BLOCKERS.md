@@ -1,10 +1,20 @@
 # Release blockers — AI RevenueOS
 
 **Status: NOT GA-ready.**
-**Audit date:** 2026-08-01 · Full findings: `docs/IMPLEMENTATION-AUDIT.md`
+**Audit date:** 2026-08-01 · **P0-1 closed:** 2026-08-01
+Full findings: `docs/IMPLEMENTATION-AUDIT.md` · P0-1 evidence: `docs/p0-1-gate-results.txt`
 
-GA is blocked by **6 P0** items — 4 code gaps and 2 external gates — plus 11 P1.
+GA is blocked by **5 P0** items — 3 code gaps and 2 external gates — plus 11 P1.
 No release gate may be waived without recorded evidence.
+
+| P0 | Status |
+|---|---|
+| P0-1 worker tier | **RESOLVED** — 34 integration tests on real Postgres + Redis + Celery |
+| P0-2 auth endpoints | open |
+| P0-3 frontend build | open |
+| P0-4 domain services | open |
+| P0-5 AWS account | open (external) |
+| P0-6 legal sign-off | open (external) |
 
 Effort is engineering-days for one experienced engineer, excluding external
 turnaround.
@@ -15,33 +25,57 @@ turnaround.
 
 ### Code gaps
 
-#### P0-1 · No worker tier exists
-`src/infrastructure/celery/` is absent, yet `docker-compose.yml` and the Makefile run
-`celery -A infrastructure.celery.app`. Three compose services and the deployment
-would fail immediately.
+#### ~~P0-1 · No worker tier exists~~ — **RESOLVED 2026-08-01**
 
-Everything asynchronous is therefore unimplemented: SLA escalation, appointment
-reminders, payment reconciliation (spec: every 30 min), export generation, template
-sync, retention/purge, partition maintenance, workflow scheduling and DLQ handling.
+`src/infrastructure/celery/` now exists and is the deployment contract compose and
+the Makefile already referenced.
 
-**Blocks:** M09, M14, M17, M18, M20, M22 · criteria 4, 5, 9, 15, 16, 17, 20, 27
+**Delivered**
 
-**Remediation**
-1. Create `src/infrastructure/celery/app.py` with the 8 queues already declared in
-   `application/workflows/executor.py::QUEUES`, `acks_late`, `prefetch_multiplier=1`,
-   JSON serialisation, `soft 480s / hard 600s`.
-2. Bind tenant context at task entry from the task header — never from payload data
-   alone — and reject a task with no tenant for tenant-scoped work.
-3. Add Beat schedules: scheduler 10s, webhook sweep 60s, maintenance 03:00 UTC,
-   metrics rollup 15m, reconciliation 30m.
-4. Implement the DLQ writer against the existing `dead_letters` table with 14-day
-   retention.
-5. Integration test: enqueue → execute → fail → retry → dead-letter, asserting
-   tenant context at every hop.
+- `app.py` — Celery app with the specification's exact settings: JSON only (never
+  pickle), `acks_late`, `reject_on_worker_lost`, prefetch 1, hard 600s / soft 480s
+  narrowed per queue.
+- `queues.py` — all 8 queues with their concurrency, priority and timeout, plus the
+  spec→broker priority inversion (spec 10 = most urgent, Redis 0 = delivered first)
+  and 4 isolated worker pools.
+- `context.py` — tenant, correlation and actor identity travel in message
+  **headers**, not the payload, so task code cannot rewrite provenance and a replay
+  keeps its original attribution. A tenant-scoped task **refuses to run** without a
+  tenant header.
+- `reliability.py` — retry classification (validation, permission, domain-rule and
+  terminal business failures are never retried), exponential backoff with jitter,
+  three idempotency layers with atomic `SET NX` claims, and durable dead lettering
+  to `app.dead_letters` with 14-day retention and single-use replay.
+- `tasks/` — outbox relay, workflow execute/resume, webhook sweep and deliver,
+  metrics rollup, payment reconciliation, nightly maintenance, DLQ reaper.
+- `health.py` + `src/scripts/worker_health.py` — liveness (broker) and readiness
+  (broker + database), wired as the compose healthcheck for every pool.
+- `src/scripts/run_worker.py`, `queue_status.py` — pool entrypoint with concurrency
+  derived from the queue table, and an operator CLI for depths, live workers, dead
+  letters and replay.
+- Beat schedules at the specified cadences: outbox relay 500 ms, scheduler 10 s,
+  webhook sweep 60 s, metrics rollup 15 m, reconciliation 30 m, maintenance
+  03:00 UTC.
+- `docker-compose.yml` now runs 4 real worker pools plus Beat, each with a health
+  check. The placeholder services that invoked a non-existent package are gone.
 
-**Effort:** 5–8 days
+**Verified** — 34 integration tests against real PostgreSQL 16, real Redis 6.2 and a
+real in-process Celery worker (not eager mode, not mocks). Full suite 692 → **726
+passing**. Raw output in `docs/p0-1-gate-results.txt`.
 
----
+**Defects found and fixed while building it**
+
+| # | Severity | Defect |
+|---|---|---|
+| W1 | **P1 concurrency** | The cached asyncio loop was a class attribute shared across worker threads, producing "Future attached to a different loop" under a threaded pool. Now thread-local. |
+| W2 | **P1 security** | `write_dead_letter` wrote a tenant-owned row from an unscoped session. RLS correctly rejected it; the write now binds the tenant. |
+| W3 | **P1 security** | Partition creation and RLS enablement need CREATE and ownership. The runtime role deliberately has neither, so a separate `airevenueos_maintenance` role was introduced (migration 0003) — the API role still cannot create or drop a table. |
+| W4 | **P2** | Seeding reference data used the runtime role, which migration 0001 correctly revokes write access from. It now uses an administrative session. |
+
+**Residual scope deliberately left open** (tracked under P0-4, not P0-1): concrete
+workflow action handlers and the outbound webhook HTTP transport are stubs that
+report `pending_handler` / `pending_transport` rather than claiming success. The
+queues, retry, idempotency, DLQ and scheduling around them are complete.
 
 #### P0-2 · No authentication endpoints
 Every auth primitive is built and tested (Argon2id, RS256/JWKS, refresh rotation with
@@ -141,6 +175,7 @@ signed-off copy and policy that the code enforces against.
 | P1-2 | **`AuditRecorder` is never called** and has 0% coverage. The audit trail is empty. | criterion 22 | Wire into every `MANDATORY_AUDIT_ACTIONS` path; assert an audit row per mutation in E2E | 3 days |
 | P1-3 | **No alert rules exist.** Spec requires warning/critical alerts with owner and runbook per signal. | M02, M21, criterion 27 | Define alerts for API P95, queue depth/age, DLQ size, circuit opening, AI error >2%, budget 80%, RPO backup failure, WAF events | 2 days |
 | P1-4 | **No restore drill.** `infra/scripts/verify-restore.sh` is referenced by the nightly workflow and does not exist. | M22, criterion 24 | Write the script (restore → `alembic current` → row-count reconciliation → **re-run the RLS suite against the restored instance**) and run it | 2 days + AWS |
+| P1-12 | **Worker action handlers are stubs.** The workflow action dispatch and outbound webhook HTTP transport report `pending_handler`/`pending_transport`. Queues, retry, idempotency and DLQ around them are complete. | M18, criteria 16, 27 | Implement handlers per module as each service lands under P0-4 | folded into P0-4 |
 | P1-5 | **Booking concurrency unproven.** `claim_public_slot` has 0% coverage; the unique constraint is the only defence and no concurrency test exists. | criterion 12 | Integration test firing N concurrent claims on one slot, asserting exactly one 201 and N-1 409s | 1 day |
 | P1-6 | **Storage lifecycle not wired**; `ClamAvScanner.scan` raises `NotImplementedError`. Policy helpers are tested but no file can complete the flow. | M13, criterion 13 | Implement presign → complete → scan → clean/quarantine → signed download; integration test with a real clamd | 4 days |
 | P1-7 | **No reproducible builds.** No lockfile on either side. | M01, M21 | Commit `pnpm-lock.yaml` and a Python lock (`uv.lock`/`requirements.lock`); pin in CI | 1 day |
@@ -172,7 +207,7 @@ signed-off copy and policy that the code enforces against.
 
 | Priority | Code gaps | External gates | Total |
 |---|---:|---:|---:|
-| P0 | 4 | 2 | 6 |
+| P0 | 3 (was 4) | 2 | 5 |
 | P1 | 9 | 2 | 11 |
 | P2 | 10 | 0 | 10 |
 

@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     database_pool_size: int = 10
     database_max_overflow: int = 10
     database_statement_timeout_ms: int = 15_000
+    # Partition creation and retention DDL need CREATE on the schemas. The runtime
+    # application role deliberately does not have it, so maintenance connects with
+    # a separate, elevated credential. Absent it, maintenance DDL is skipped and
+    # reported rather than silently failing.
+    maintenance_database_url: str | None = Field(default=None, repr=False)
     redis_url: str = "redis://localhost:6379/0"
 
     # --- identity ---------------------------------------------------------

@@ -11,9 +11,10 @@ WhatsApp. Internationalisation does not require a redesign.
 
 ```bash
 make bootstrap     # install every toolchain from a clean clone
-make up            # start Postgres, Redis, API, web, workers, beat, outbox
+make up            # Postgres, Redis, API, web, 4 worker pools, Beat
 make migrate seed  # schema plus reference data
 make verify        # lint, typecheck, module boundaries, full test suite
+make test-workers  # worker tier: real Postgres + real Redis + real Celery worker
 ```
 
 - API: <http://localhost:8000/v1/docs>
@@ -76,6 +77,7 @@ non-superuser role, so RLS is genuinely exercised rather than bypassed.
 | `docs/runbooks/incident-response.md` | Severity, mitigation order, cross-tenant procedure |
 | `docs/runbooks/disaster-recovery.md` | Backup, restore, regional recovery |
 | `docs/runbooks/database.md` | Migrations, partitions, append-only tables |
+| `docs/runbooks/workers.md` | Queues, pools, retries, dead letters, the three DB roles |
 | `docs/GA-ACTIVATION-CHECKLIST.md` | Every remaining external gate |
 | `docs/ACCEPTANCE-EVIDENCE.md` | The 30 global criteria mapped to evidence |
 | `docs/IMPLEMENTATION-LOG.md` | Milestone-by-milestone record |

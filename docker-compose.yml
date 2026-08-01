@@ -48,45 +48,85 @@ services:
       timeout: 5s
       retries: 10
 
+  # --- worker tier ---------------------------------------------------------
+  # Pools are isolated by workload so a slow AI call cannot starve payments.
   worker-comms:
     build: {context: ./backend, target: development}
-    environment:
-      DATABASE_URL: postgresql+asyncpg://airevenueos_app:local_development_only@postgres:5432/airevenueos
+    environment: &worker_env
+      ENVIRONMENT: local
+      DATABASE_URL: postgresql+asyncpg://airevenueos_app_login:local_development_only@postgres:5432/airevenueos
+      # Partition and retention DDL needs CREATE; the runtime role deliberately
+      # does not have it, so maintenance connects with its own credential.
+      MAINTENANCE_DATABASE_URL: postgresql+asyncpg://airevenueos_maintenance_login:local_development_only@postgres:5432/airevenueos
       REDIS_URL: redis://redis:6379/0
+      LOG_JSON: "false"
     volumes: ["./backend:/app"]
-    depends_on: {api: {condition: service_started}}
-    command: ["celery", "-A", "infrastructure.celery.app", "worker",
-              "-Q", "workflow-critical,workflow-notification,workflow-webhook",
-              "-c", "4", "--prefetch-multiplier", "1", "-l", "info"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    command: ["python", "src/scripts/run_worker.py", "--pool", "comms"]
+    healthcheck:
+      test: ["CMD", "python", "src/scripts/worker_health.py", "--pool", "comms"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  worker-ai:
+    build: {context: ./backend, target: development}
+    environment: *worker_env
+    volumes: ["./backend:/app"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    command: ["python", "src/scripts/run_worker.py", "--pool", "ai"]
+    healthcheck:
+      test: ["CMD", "python", "src/scripts/worker_health.py", "--pool", "ai"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   worker-general:
     build: {context: ./backend, target: development}
-    environment:
-      DATABASE_URL: postgresql+asyncpg://airevenueos_app:local_development_only@postgres:5432/airevenueos
-      REDIS_URL: redis://redis:6379/0
+    environment: *worker_env
     volumes: ["./backend:/app"]
-    depends_on: {api: {condition: service_started}}
-    command: ["celery", "-A", "infrastructure.celery.app", "worker",
-              "-Q", "workflow-standard,workflow-bulk,workflow-ai,workflow-maintenance",
-              "-c", "4", "--prefetch-multiplier", "1", "-l", "info"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    command: ["python", "src/scripts/run_worker.py", "--pool", "general"]
+    healthcheck:
+      test: ["CMD", "python", "src/scripts/worker_health.py", "--pool", "general"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
+  worker-bulk:
+    build: {context: ./backend, target: development}
+    environment: *worker_env
+    volumes: ["./backend:/app"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    command: ["python", "src/scripts/run_worker.py", "--pool", "bulk"]
+    healthcheck:
+      test: ["CMD", "python", "src/scripts/worker_health.py", "--pool", "bulk"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # Beat drives the outbox relay (500 ms), scheduler (10 s), webhook sweep (60 s),
+  # metrics rollup (15 m), reconciliation (30 m) and nightly maintenance (03:00 UTC).
   beat:
     build: {context: ./backend, target: development}
-    environment:
-      DATABASE_URL: postgresql+asyncpg://airevenueos_app:local_development_only@postgres:5432/airevenueos
-      REDIS_URL: redis://redis:6379/0
+    environment: *worker_env
     volumes: ["./backend:/app"]
-    depends_on: {api: {condition: service_started}}
-    command: ["celery", "-A", "infrastructure.celery.app", "beat", "-l", "info"]
-
-  outbox:
-    build: {context: ./backend, target: development}
-    environment:
-      DATABASE_URL: postgresql+asyncpg://airevenueos_app:local_development_only@postgres:5432/airevenueos
-      REDIS_URL: redis://redis:6379/0
-    volumes: ["./backend:/app"]
-    depends_on: {api: {condition: service_started}}
-    command: ["python", "src/scripts/run_outbox.py"]
+    depends_on:
+      worker-general: {condition: service_started}
+    command: ["celery", "-A", "infrastructure.celery.app", "beat", "-l", "info",
+              "--schedule", "/tmp/celerybeat-schedule"]
 
   web:
     build: {context: ., dockerfile: apps/web/Dockerfile, target: development}

@@ -4,6 +4,7 @@ Revision ID: 0001
 Revises:
 Create Date: 2026-08-01
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -12,12 +13,23 @@ from alembic import op
 from sqlalchemy import text
 
 from infrastructure.database.base import (
-    SCHEMA_ANALYTICS, SCHEMA_APP, SCHEMA_AUDIT, SCHEMA_PUBLIC, TENANT_OWNED_TABLES,
+    SCHEMA_ANALYTICS,
+    SCHEMA_APP,
+    SCHEMA_AUDIT,
+    SCHEMA_PUBLIC,
+    TENANT_OWNED_TABLES,
 )
 from infrastructure.database.ddl import (
-    APPEND_ONLY_FUNCTION, APPEND_ONLY_TABLES, PARTITIONED, RLS_NULLABLE_TEMPLATE,
-    RLS_POLICY_TEMPLATE, SCHEMAS, UPDATED_AT_FUNCTION, append_only_trigger,
-    partition_statements, updated_at_trigger,
+    APPEND_ONLY_FUNCTION,
+    APPEND_ONLY_TABLES,
+    PARTITIONED,
+    RLS_NULLABLE_TEMPLATE,
+    RLS_POLICY_TEMPLATE,
+    SCHEMAS,
+    UPDATED_AT_FUNCTION,
+    append_only_trigger,
+    partition_statements,
+    updated_at_trigger,
 )
 from infrastructure.database.models import Base
 
@@ -27,9 +39,13 @@ branch_labels = None
 depends_on = None
 
 # Tables whose tenant_id column is nullable (platform-scoped rows are permitted).
-NULLABLE_TENANT_TABLES = frozenset({
-    "reconciliation_runs", "provider_webhook_events", "dead_letters",
-})
+NULLABLE_TENANT_TABLES = frozenset(
+    {
+        "reconciliation_runs",
+        "provider_webhook_events",
+        "dead_letters",
+    }
+)
 
 
 def _schema_of(table_name: str) -> str:
@@ -109,44 +125,52 @@ def upgrade() -> None:
     # The application must never connect as a superuser or table owner: BYPASSRLS
     # and ownership both defeat FORCE ROW LEVEL SECURITY. This role is the only
     # identity the API, workers and scheduler are permitted to use.
-    conn.execute(text("""
+    conn.execute(
+        text("""
     DO $$
     BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'airevenueos_app') THEN
         CREATE ROLE airevenueos_app NOLOGIN NOBYPASSRLS;
       END IF;
     END $$;
-    """))
+    """)
+    )
     for schema in SCHEMAS:
         conn.execute(text(f"GRANT USAGE ON SCHEMA {schema} TO airevenueos_app"))
-        conn.execute(text(
-            f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema} "
-            "TO airevenueos_app"
-        ))
-        conn.execute(text(
-            f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA {schema} TO airevenueos_app"
-        ))
-        conn.execute(text(
-            f"ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} "
-            "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO airevenueos_app"
-        ))
+        conn.execute(
+            text(
+                f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema} "
+                "TO airevenueos_app"
+            )
+        )
+        conn.execute(
+            text(f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA {schema} TO airevenueos_app")
+        )
+        conn.execute(
+            text(
+                f"ALTER DEFAULT PRIVILEGES IN SCHEMA {schema} "
+                "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO airevenueos_app"
+            )
+        )
     # Reference data is read-only to the application at runtime.
     for ref in ("plans", "feature_flags", "industry_templates", "permissions"):
-        conn.execute(text(
-            f"REVOKE INSERT, UPDATE, DELETE ON public.{ref} FROM airevenueos_app"
-        ))
+        conn.execute(text(f"REVOKE INSERT, UPDATE, DELETE ON public.{ref} FROM airevenueos_app"))
 
     # Vector indexes: HNSW m=16, ef_construction=200 per the AI System specification.
-    conn.execute(text(
-        "CREATE INDEX IF NOT EXISTS ix_document_chunks_embedding_hnsw "
-        f"ON {SCHEMA_APP}.document_chunks USING hnsw (embedding vector_cosine_ops) "
-        "WITH (m = 16, ef_construction = 200)"
-    ))
-    conn.execute(text(
-        "CREATE INDEX IF NOT EXISTS ix_lead_embeddings_embedding_hnsw "
-        f"ON {SCHEMA_APP}.lead_embeddings USING hnsw (embedding vector_cosine_ops) "
-        "WITH (m = 16, ef_construction = 200)"
-    ))
+    conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_document_chunks_embedding_hnsw "
+            f"ON {SCHEMA_APP}.document_chunks USING hnsw (embedding vector_cosine_ops) "
+            "WITH (m = 16, ef_construction = 200)"
+        )
+    )
+    conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_lead_embeddings_embedding_hnsw "
+            f"ON {SCHEMA_APP}.lead_embeddings USING hnsw (embedding vector_cosine_ops) "
+            "WITH (m = 16, ef_construction = 200)"
+        )
+    )
 
 
 def downgrade() -> None:

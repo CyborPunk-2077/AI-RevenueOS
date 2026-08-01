@@ -1,6 +1,10 @@
 """Seed reference data: plans, permissions and the industry template catalogue.
 
 Idempotent. Safe to run on every deploy.
+
+Runs with an administrative credential: migration 0001 deliberately revokes write
+access to the reference tables from the runtime application role, so the API can
+never mutate plans, permissions or templates.
 """
 
 from __future__ import annotations
@@ -26,7 +30,7 @@ from infrastructure.database.models.reference import (
     Permission,
     Plan,
 )
-from infrastructure.database.session import unscoped_session
+from infrastructure.database.session import admin_session
 from infrastructure.logging.setup import configure_logging, get_logger
 from shared.utils.ids import uuid7
 
@@ -53,7 +57,7 @@ SAFE_FLAGS = {
 
 
 async def seed_plans() -> int:
-    async with unscoped_session() as session:
+    async with admin_session() as session:
         for entry in plan_catalog():
             await session.execute(
                 insert(Plan)
@@ -82,7 +86,7 @@ async def seed_plans() -> int:
 
 
 async def seed_permissions() -> int:
-    async with unscoped_session() as session:
+    async with admin_session() as session:
         for code in sorted(ALL_PERMISSIONS):
             resource, action = code.split(":", 1)
             await session.execute(
@@ -101,7 +105,7 @@ async def seed_permissions() -> int:
 
 
 async def seed_feature_flags() -> int:
-    async with unscoped_session() as session:
+    async with admin_session() as session:
         for code, prerequisite in {**GATED_FLAGS, **SAFE_FLAGS}.items():
             gated = code in GATED_FLAGS
             await session.execute(
@@ -131,7 +135,7 @@ async def seed_industry_templates() -> int:
         raise SystemExit(f"industry template catalogue is invalid: {problems}")
 
     catalog = load_catalog()
-    async with unscoped_session() as session:
+    async with admin_session() as session:
         for code, template in catalog.items():
             await session.execute(
                 insert(IndustryTemplate)

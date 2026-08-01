@@ -78,6 +78,7 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 20
     env:
       TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/airevenueos_test
+      MAINTENANCE_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/airevenueos_test
       ADMIN_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/airevenueos_test
       ALEMBIC_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/airevenueos_test
       REDIS_URL: redis://localhost:6379/0
@@ -90,6 +91,8 @@ jobs:
         run: cd backend && alembic upgrade head && alembic downgrade base && alembic upgrade head
       - name: Integration, contract and E2E suites
         run: cd backend && pytest tests/integration tests/contract tests/e2e -q
+      - name: Worker tier (real broker, real worker)
+        run: cd backend && pytest tests/integration/test_worker_runtime.py -q
 
   # 4. security -------------------------------------------------------------
   security:

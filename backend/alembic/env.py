@@ -1,4 +1,5 @@
 """Alembic environment. Migrations run with a synchronous driver on purpose."""
+
 from __future__ import annotations
 
 import os
@@ -11,8 +12,8 @@ from sqlalchemy import engine_from_config, pool
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from shared.settings import get_settings  # noqa: E402
-from infrastructure.database.models import Base  # noqa: E402
+from infrastructure.database.models import Base
+from shared.settings import get_settings
 
 config = context.config
 if config.config_file_name is not None:

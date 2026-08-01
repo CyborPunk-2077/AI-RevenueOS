@@ -58,7 +58,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S105","S106","S311","ARG001","PTH"]
+"tests/**" = ["S105","S106","S311","ARG001","PTH","S306","B017"]
 "alembic/**" = ["ARG001","T201"]
 # Route handlers must accept every path parameter FastAPI binds, even when the
 # handler itself does not read it (the router does).
@@ -68,6 +68,17 @@ ignore = [
 "src/infrastructure/database/session.py" = ["ARG001"]
 "src/application/ai/registry.py" = ["ARG001"]
 "src/domain/appointments/slots.py" = ["ARG001"]
+# Celery's task_routes callback and the workflow action-runner protocol both have
+# fixed signatures; unused parameters are part of the contract.
+"src/infrastructure/celery/queues.py" = ["ARG001"]
+"src/infrastructure/celery/tasks/workflow.py" = ["ARG001"]
+
+[[tool.mypy.overrides]]
+# Celery ships no type information, so its base class and signal decorators are
+# untyped. The rule is disabled for this package only, not globally.
+module = "infrastructure.celery.*"
+disallow_subclassing_any = false
+disallow_untyped_decorators = false
 
 [tool.mypy]
 python_version = "3.10"

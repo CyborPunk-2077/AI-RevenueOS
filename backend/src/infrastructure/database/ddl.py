@@ -60,6 +60,27 @@ CREATE POLICY tenant_isolation ON {schema}.{table}
   WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
 """
 
+# Operational tables that platform maintenance must scan across tenants (the dead
+# letter queue, for example). Tenant isolation still applies to ordinary sessions;
+# access widens only when `app.platform_context` is deliberately bound, which the
+# session helper logs.
+RLS_PLATFORM_MAINTENANCE_TEMPLATE = """
+ALTER TABLE {schema}.{table} ENABLE ROW LEVEL SECURITY;
+ALTER TABLE {schema}.{table} FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON {schema}.{table};
+CREATE POLICY tenant_isolation ON {schema}.{table}
+  USING (
+    tenant_id = current_setting('app.tenant_id', true)::uuid
+    OR (tenant_id IS NULL AND coalesce(current_setting('app.tenant_id', true), '') = '')
+    OR coalesce(current_setting('app.platform_context', true), '') <> ''
+  )
+  WITH CHECK (
+    tenant_id = current_setting('app.tenant_id', true)::uuid
+    OR (tenant_id IS NULL AND coalesce(current_setting('app.tenant_id', true), '') = '')
+    OR coalesce(current_setting('app.platform_context', true), '') <> ''
+  );
+"""
+
 # Tables whose tenant_id is nullable (platform-scoped rows) get a policy that
 # additionally permits NULL tenant rows only when no tenant context is bound.
 RLS_NULLABLE_TEMPLATE = """

@@ -34,22 +34,24 @@ depends_on = None
 
 # audit_logs permits a NULL tenant for platform-actor events (support tooling,
 # scheduled maintenance), which are only visible when no tenant is bound.
-NEWLY_PROTECTED: tuple[tuple[str, str, bool], ...] = (
-    ("audit", "audit_logs", True),
-)
+NEWLY_PROTECTED: tuple[tuple[str, str, bool], ...] = (("audit", "audit_logs", True),)
 
 
 def _children(conn: object, schema: str, table: str) -> list[str]:
-    rows = op.get_bind().execute(
-        text(
-            "SELECT c.relname FROM pg_inherits i "
-            "JOIN pg_class c ON c.oid = i.inhrelid "
-            "JOIN pg_class p ON p.oid = i.inhparent "
-            "JOIN pg_namespace n ON n.oid = p.relnamespace "
-            "WHERE n.nspname = :s AND p.relname = :t"
-        ),
-        {"s": schema, "t": table},
-    ).scalars()
+    rows = (
+        op.get_bind()
+        .execute(
+            text(
+                "SELECT c.relname FROM pg_inherits i "
+                "JOIN pg_class c ON c.oid = i.inhrelid "
+                "JOIN pg_class p ON p.oid = i.inhparent "
+                "JOIN pg_namespace n ON n.oid = p.relnamespace "
+                "WHERE n.nspname = :s AND p.relname = :t"
+            ),
+            {"s": schema, "t": table},
+        )
+        .scalars()
+    )
     return list(rows)
 
 
@@ -75,6 +77,30 @@ def upgrade() -> None:
             conn.execute(text(template.format(schema=schema, table=child)))
 
     conn.execute(text("GRANT SELECT, INSERT ON audit.audit_logs TO airevenueos_app"))
+
+    # Partition and retention DDL runs as a separate, elevated role. The runtime
+    # application role keeps DML only: it must never be able to create or drop a
+    # table, which is what keeps a compromised API task from reshaping the schema.
+    conn.execute(
+        text(
+            """
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'airevenueos_maintenance') THEN
+        CREATE ROLE airevenueos_maintenance NOLOGIN NOBYPASSRLS;
+      END IF;
+    END $$;
+    """
+        )
+    )
+    for schema in ("app", "audit", "analytics"):
+        conn.execute(text(f"GRANT USAGE, CREATE ON SCHEMA {schema} TO airevenueos_maintenance"))
+        conn.execute(
+            text(
+                f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema} "
+                "TO airevenueos_maintenance"
+            )
+        )
 
 
 def downgrade() -> None:

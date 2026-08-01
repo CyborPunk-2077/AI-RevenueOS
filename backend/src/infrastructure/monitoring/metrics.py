@@ -78,6 +78,33 @@ workflow_lag_seconds = Histogram(
     registry=REGISTRY,
 )
 
+# --- worker tier ---------------------------------------------------------
+worker_tasks_total = Counter(
+    "airev_worker_tasks_total",
+    "Worker tasks by outcome",
+    ["task", "queue", "outcome"],
+    registry=REGISTRY,
+)
+worker_task_duration = Histogram(
+    "airev_worker_task_seconds",
+    "Worker task duration",
+    ["task", "queue"],
+    buckets=LATENCY_BUCKETS,
+    registry=REGISTRY,
+)
+worker_retries_total = Counter(
+    "airev_worker_retries_total",
+    "Worker retries",
+    ["task", "queue", "retry_class"],
+    registry=REGISTRY,
+)
+worker_heartbeat_timestamp = Gauge(
+    "airev_worker_heartbeat_timestamp",
+    "Unix time of the last worker heartbeat",
+    ["pool"],
+    registry=REGISTRY,
+)
+
 tenant_isolation_violations = Counter(
     "airev_tenant_isolation_violations_total",
     "Queries rejected for missing or mismatched tenant context",

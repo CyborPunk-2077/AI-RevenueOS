@@ -2,10 +2,18 @@
 
 **Audit date:** 2026-08-01
 **Source of truth:** `AI-REVENUEOS-IMPLEMENTATION-SPECIFICATION.md`
-**Verdict: NOT GA-ready.** The backend domain, security and persistence core is
-substantially real and independently verified. The frontend cannot be built, the
-Celery worker tier does not exist, and every provider integration is unactivated.
-GA is blocked by 6 P0 items, of which 4 are code gaps and 2 are external gates.
+**Verdict: NOT GA-ready.** The backend domain, security, persistence and **worker**
+core is substantially real and independently verified. The frontend cannot be built,
+there are no authentication endpoints, six modules have no service layer, and every
+provider integration is unactivated. GA is blocked by 5 P0 items, of which 3 are
+code gaps and 2 are external gates.
+
+> **Update 2026-08-01 — P0-1 (worker tier) is RESOLVED.** `infrastructure/celery/`
+> now exists with all 8 queues, tenant-safe header context, retry classification,
+> three idempotency layers, durable dead lettering with replay, Beat schedules at
+> the specified cadences, and worker health checks. Verified by 34 integration
+> tests against real PostgreSQL 16, real Redis 6.2 and a real Celery worker.
+> Suite 692 → **726 passing**. Evidence: `docs/p0-1-gate-results.txt`.
 
 This audit deliberately contradicts several claims in the previously delivered
 `docs/ACCEPTANCE-EVIDENCE.md`. Where an earlier claim could not be substantiated it
@@ -155,7 +163,7 @@ Status: **IV** implemented and verified · **IU** implemented but unverified ·
 | M15 | Email channel | **P / XB** | Port + bounce/complaint normalisation across SES and SendGrid shapes; flag off | `send()` raises `NotImplementedError`. Blocked on provider decision + domain ownership |
 | M16 | WhatsApp channel | **P / XB** | Cloud API adapter, HMAC verification, replay window, challenge, template payloads, status mapping, opt-out keywords. 26 contract tests against `httpx.MockTransport` | No template sync job, no delivery reconciliation job (no worker tier). Blocked on BSP + template approval |
 | M17 | Payments and invoices | **P / XB** | Server-side amount authority, state machine, refund authorisation with MFA threshold, HMAC webhook + handback verification, card-data stripping. 40 tests | No invoice/payment-link service or endpoints; **no reconciliation job** (spec: every 30 min). Blocked on Razorpay commercial model |
-| M18 | Workflow engine and n8n isolation | **P** | Restricted DSL with expression sandbox, canonical hashing, executor with 3 idempotency layers, bounded retry, approval suspension, durable delay, kill switch, dry run, replay provenance. 80 tests | **`src/infrastructure/celery/` does not exist** although `docker-compose.yml` and the Makefile run `celery -A infrastructure.celery.app`. The 8 queues are a constant dict, not deployed workers. No scheduler, no DLQ table writer, no version/execution persistence service |
+| M18 | Workflow engine and n8n isolation | **P** (was P, materially advanced) | DSL + executor (80 tests). **Worker tier now real**: `infrastructure/celery/` with 8 queues, tenant-header context, retry classification, idempotency, DLQ + replay, Beat scheduler, health checks — 34 integration tests on real Postgres/Redis/Celery | Concrete workflow **action handlers** and the outbound webhook **HTTP transport** are still stubs reporting `pending_handler`/`pending_transport`. Version/execution persistence service still absent |
 | M19 | Voice | **IV (as disabled)** | 7 independent `VoiceControls`; flag alone cannot enable; `place_call` refuses and enumerates outstanding controls. 5 tests | Correctly disabled. Blocked on provider + legal |
 | M20 | Analytics and exports | **P** | 4 rollup tables; timezone-correct day bounds verified | **No analytics service, no endpoints, no rollup jobs, no export worker.** Schema only |
 | M21 | Security, quality, performance | **P** | 692 tests, 84% coverage, bandit clean, pip-audit clean, 6/6 architecture contracts, migration-safety gate | k6 profiles **never executed** (no environment); ZAP never run; no mutation testing despite a stated 75–85% target; `peak.js` missing |
@@ -269,17 +277,42 @@ are implemented they must use `scoped_query`/`get_scoped`. Recommendation: make 
 unscoped variants private and require an explicit `EffectivePermissions` argument so
 the safe path is the only path.
 
-### 7.3 Worker and cache scoping — **cannot be assessed; workers do not exist**
+### 7.3 Worker and cache scoping — **now verified** (was: workers did not exist)
 
-`src/infrastructure/celery/` is absent although compose and the Makefile invoke
-`celery -A infrastructure.celery.app`. No worker, beat, scheduler or queue runs.
-Every claim about queue isolation, per-tenant throttling and DLQ behaviour is
-therefore **unverified**.
+`src/infrastructure/celery/` exists and is exercised by 34 integration tests against
+a real broker and a real worker.
 
-The outbox poller runs deliberately unscoped (it must observe every tenant) and
-hands raw payloads to handlers. `handle_domain_event` currently only logs. When
-handlers do real work they must re-establish tenant context from
-`payload["tenant_id"]` — there is no guard enforcing that today.
+Tenant safety in the worker rests on three properties, each with a test:
+
+1. **Context travels in message headers, not the payload.** Task code cannot rewrite
+   its own provenance, and a dead-letter replay keeps the original tenant.
+2. **A tenant-scoped task refuses to run without a tenant header.** Platform work
+   must opt out explicitly with `tenant_scoped=False`, so an unscoped worker is
+   always a deliberate, reviewable decision
+   (`test_tenant_scoped_task_refuses_to_run_without_a_tenant`).
+3. **The bound tenant drives RLS inside the worker exactly as in the API** —
+   proven by running the same query under two tenants and asserting tenant B sees
+   zero of tenant A's rows (`test_a_worker_sees_only_its_bound_tenants_rows`).
+
+The outbox poller remains deliberately unscoped: it must observe every tenant. It
+now runs as a Beat-driven task every 500 ms rather than a bespoke process.
+
+Three privilege tiers are now distinct, and the database enforces the separation:
+
+| Role | May | May not |
+|---|---|---|
+| `airevenueos_app` | DML on tenant tables | create/drop tables; write reference data |
+| `airevenueos_maintenance` | partition DDL, retention sweeps | bypass RLS (`NOBYPASSRLS`) |
+| migration/admin | schema and reference data | — (deploy-time only) |
+
+Cross-tenant reads of the dead letter queue require `app.platform_context` to be
+bound, which `platform_session()` does while logging the reason — a narrow,
+attributable escape rather than a `BYPASSRLS` role that would silently disable
+policies everywhere.
+
+Cache keys remain correctly namespaced (`tenant_key()` → `t:<tenant>:...`). Kill
+switches still live in Redis only, so a flush disengages them and the action is
+unaudited (P2-3).
 
 Cache keys are correctly namespaced (`tenant_key()` → `t:<tenant>:...`) and
 `invalidate_tenant` scans by prefix. Kill switches live in Redis only, so a Redis
@@ -346,7 +379,7 @@ signed by a key that changes on every restart. Recommend failing closed outside
 | Area | State | Gap |
 |---|---|---|
 | **Backups / restore** | Terraform: RDS Multi-AZ, PITR, 30-day snapshots, S3 versioning + lifecycle to IA/Glacier | Never provisioned. **No restore drill.** `infra/scripts/verify-restore.sh` is referenced by the nightly workflow and does not exist. RPO/RTO unmeasured |
-| **Observability** | `structlog` JSON with correlation/tenant/user; 20 Prometheus metrics; `/health`, `/health/liveness`, `/health/readiness` (dependency-aware), IP-restricted `/health/metrics` | **No alert rules anywhere** — the spec requires warning/critical alerts with owner and runbook per signal. No dashboards. Sentry/Langfuse are config keys only. No tracing despite X-Ray in the stack table |
+| **Observability** | `structlog` JSON with correlation/tenant/user; **24** Prometheus metrics (worker task counts, durations, retries by class, heartbeat); `/health`, `/health/liveness`, `/health/readiness` (dependency-aware), IP-restricted `/health/metrics` | **No alert rules anywhere** — the spec requires warning/critical alerts with owner and runbook per signal. No dashboards. Sentry/Langfuse are config keys only. No tracing despite X-Ray in the stack table |
 | **CI/CD** | 6-job PR pipeline; deploy workflow with plan approval, migration-safety gate, 5-min observation, rollback; nightly DAST/k6/restore/AI-eval | **Pipeline would fail today**: `pnpm install --frozen-lockfile` (no lockfile), `pnpm lint`/`typecheck`/`a11y` (no config, no tests), and three referenced scripts are missing. Never executed |
 | **IaC** | 598 lines across network/data/edge + prod env | Never `terraform init`/`validate`/`plan`ed. Only `envs/prod`; `deploy.yml` targets dev/staging/prod. No ECS service/task definitions, no ALB target groups, no Route 53, no ECR, no Secrets Manager entries, no IAM task roles — the compute tier is undefined |
 | **Monitoring** | Metric definitions exist | Nothing scrapes them; no Grafana; no PagerDuty; no SLO burn alerts |
@@ -377,6 +410,10 @@ Genuinely proven by executable evidence against real infrastructure:
 
 1. Two-layer tenant isolation, including the non-obvious superuser/`BYPASSRLS` trap
    and partition inheritance.
+1a. Worker-tier tenant safety: header-borne context, fail-closed tenant-scoped
+   tasks, and RLS holding inside a real Celery worker across two tenants.
+1b. Retry classification, three idempotency layers, durable dead lettering with
+   single-use replay and 14-day retention, all against a real broker.
 2. Migration `0001`+`0002` reversibility on PostgreSQL 16, with append-only triggers
    and constraint enforcement.
 3. Transactional outbox: state and event commit together, roll back together,
