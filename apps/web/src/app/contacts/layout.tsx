@@ -9,18 +9,17 @@ interface MeResponse {
   readonly tenant_slug: string;
 }
 
-export default async function LeadsLayout({
+export default async function ContactsLayout({
   children,
 }: {
   children: React.ReactNode;
 }): Promise<JSX.Element> {
-  // The tenant guard is the server rejecting an unauthenticated call, not a
-  // client-side check that could be skipped.
+  // The guard is the server rejecting an unauthenticated call, not a client check.
   const me = await apiFetch<MeResponse>('/auth/me');
   if (!me.ok || !me.data) redirect('/login');
 
   return (
-    <WorkspaceShell tenantSlug={me.data.tenant_slug} email={me.data.email} active="leads">
+    <WorkspaceShell tenantSlug={me.data.tenant_slug} email={me.data.email} active="contacts">
       {children}
     </WorkspaceShell>
   );

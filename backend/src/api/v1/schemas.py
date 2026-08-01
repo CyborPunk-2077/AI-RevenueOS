@@ -110,6 +110,73 @@ class ContactIdentity(StrictModel):
             raise ValueError(str(exc)) from exc
 
 
+class ContactCreate(ContactIdentity):
+    """At least one of email/phone is required; the table enforces it too."""
+
+    first_name: Annotated[str, Field(min_length=1, max_length=120)]
+    last_name: Annotated[str | None, Field(max_length=120)] = None
+    company: Annotated[str | None, Field(max_length=200)] = None
+    title: Annotated[str | None, Field(max_length=150)] = None
+    source: Annotated[str, Field(max_length=80)] = "manual"
+    tags: Annotated[list[str], Field(max_length=50)] = []
+    address: dict[str, Any] = Field(default_factory=dict)
+    custom_fields: dict[str, Any] = Field(default_factory=dict)
+    account_id: UUID | None = None
+    assignee_id: UUID | None = None
+    branch_id: UUID | None = None
+    team_id: UUID | None = None
+
+
+class ContactUpdate(StrictModel):
+    first_name: Annotated[str | None, Field(min_length=1, max_length=120)] = None
+    last_name: Annotated[str | None, Field(max_length=120)] = None
+    email: str | None = None
+    phone: str | None = None
+    company: Annotated[str | None, Field(max_length=200)] = None
+    title: Annotated[str | None, Field(max_length=150)] = None
+    status: Literal["active", "inactive", "archived"] | None = None
+    tags: Annotated[list[str] | None, Field(max_length=50)] = None
+    # Explicitly nullable: sending null unlinks the account, which is different
+    # from omitting the field.
+    account_id: UUID | None = None
+    assignee_id: UUID | None = None
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str | None) -> str | None:
+        return normalize_email(v) if v else None
+
+    @field_validator("phone")
+    @classmethod
+    def _phone(cls, v: str | None) -> str | None:
+        if not v:
+            return None
+        try:
+            return normalize_phone(v)
+        except InvalidPhone as exc:
+            raise ValueError(str(exc)) from exc
+
+
+class AccountCreate(StrictModel):
+    name: Annotated[str, Field(min_length=1, max_length=200)]
+    industry: Annotated[str | None, Field(max_length=100)] = None
+    website: Annotated[str | None, Field(max_length=300)] = None
+    phone: Annotated[str | None, Field(max_length=20)] = None
+    employee_count: Annotated[int | None, Field(ge=0, le=10_000_000)] = None
+    address: dict[str, Any] = Field(default_factory=dict)
+    custom_fields: dict[str, Any] = Field(default_factory=dict)
+    owner_id: UUID | None = None
+
+
+class AccountUpdate(StrictModel):
+    name: Annotated[str | None, Field(min_length=1, max_length=200)] = None
+    industry: Annotated[str | None, Field(max_length=100)] = None
+    website: Annotated[str | None, Field(max_length=300)] = None
+    phone: Annotated[str | None, Field(max_length=20)] = None
+    employee_count: Annotated[int | None, Field(ge=0, le=10_000_000)] = None
+    owner_id: UUID | None = None
+
+
 class LeadCreate(ContactIdentity):
     first_name: Annotated[str, Field(min_length=1, max_length=120)]
     last_name: Annotated[str | None, Field(max_length=120)] = None

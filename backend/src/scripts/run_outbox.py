@@ -20,6 +20,10 @@ async def main() -> None:
     configure_logging()
     dispatcher = OutboxDispatcher(get_sessionmaker())
 
+    from application.crm.handlers import register_crm_handlers
+
+    register_crm_handlers(dispatcher)
+
     from application.workflows.triggers import register_workflow_handlers
 
     register_workflow_handlers(dispatcher)

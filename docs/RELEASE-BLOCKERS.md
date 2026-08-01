@@ -13,7 +13,7 @@ No release gate may be waived without recorded evidence.
 | P0-1 worker tier | **RESOLVED** — 34 integration tests on real Postgres + Redis + Celery |
 | P0-2 auth endpoints | **RESOLVED** — 21 operations, 37 e2e tests on real Postgres + Redis |
 | P0-3 frontend build | **RESOLVED** — reproducible install, lint, strict typecheck, production build, 14 unit tests |
-| P0-4 domain services | open — *unrelated to the "P0-4" local-runtime sprint below; see the naming note* |
+| P0-4 domain services | **partial** — contacts and accounts done; deals, conversations, documents, appointments, analytics open |
 | P0-5 AWS account | open (external) |
 | P0-6 legal sign-off | open (external) |
 
@@ -260,7 +260,40 @@ prepared in, so `docker compose up` and the browser run must be done on Windows.
 
 ---
 
-#### P0-4 · Domain services and endpoints missing for six modules
+#### P0-4 · Domain services and endpoints — **contacts and accounts delivered 2026-08-01**
+
+**Done:** `/v1/contacts` and `/v1/accounts` (list, search, create, read, update,
+plus `GET /accounts/{id}/contacts`), built on the existing schema and domain
+logic. Follows `application/leads/service.py`: `scoped_query`/`get_scoped` on
+every read, `SqlAlchemyUnitOfWork` for state plus outbox, Pydantic boundary
+schemas, ETag concurrency, and `AuditRecorder` writing inside the same
+transaction — the first caller of the recorder, which had been dead code since
+M04 (P1-2 is now partly discharged for these two resources).
+
+Contacts link to accounts through `Contact.account_id`. The `account_contacts`
+join table is left alone: it models a many-to-many with roles, which nothing in
+this scope needs, and populating both would mean two sources of truth.
+
+Contact and account outbox events reach **real handlers**, not `pending_handler`:
+`sync_contact_company` stamps the account name onto a contact that has none, and
+`propagate_account_rename` refreshes it when the account is renamed. Both are
+idempotent, because the relay is at-least-once by construction.
+
+**Verified:** 23 e2e tests on real PostgreSQL with RLS forced, covering the flow,
+search, ETag conflict, cross-tenant denial for contacts *and* accounts, linking a
+contact to another tenant's account (404), the outbox and audit rows committing
+with the change, and handler idempotency. Live-checked through the real Next BFF
+with the API receiving `Host: api:8000`: create account 201, create linked contact
+201, list, open, edit, refresh persists, stale edit 412, search, and globex
+getting 404 "Not found" for both of acme's records.
+
+**Still open under P0-4:** deals and pipelines, conversations and messages,
+documents and files, appointments (admin side), analytics. Five modules, and the
+pattern to copy is now established twice over.
+
+---
+
+#### (original entry) Domain services and endpoints missing for six modules
 Schema and pure domain logic exist and are well tested, but there is no service or
 endpoint layer for CRM (contacts, accounts, activities, tasks, notes), deals and
 pipelines, conversations and messages, documents and files, appointments (admin

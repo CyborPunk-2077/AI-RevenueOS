@@ -30,9 +30,11 @@ async def relay_outbox(_context: TaskContext) -> dict[str, Any]:
 
     dispatcher = OutboxDispatcher(get_sessionmaker())
 
+    from application.crm.handlers import register_crm_handlers
     from application.workflows.triggers import register_workflow_handlers
 
     register_workflow_handlers(dispatcher)
+    register_crm_handlers(dispatcher)
 
     stats = await dispatcher.run_once()
     if stats.claimed:
