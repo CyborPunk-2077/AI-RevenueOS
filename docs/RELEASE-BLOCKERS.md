@@ -106,10 +106,19 @@ a committed lockfile, and pointing the api at the login-capable database roles.
 `scripts/demo.ps1` starts the whole stack, migrates, seeds and prints the URL, so
 GNU make is no longer required. See audit A14.
 
+**Sign-in follow-up (2026-08-01).** The stack then started but the printed
+credentials were rejected. Cause was neither the password nor the hash: the API
+trusted only `localhost`/`127.0.0.1`, while the BFF calls it as `http://api:8000`,
+so `TrustedHostMiddleware` answered `400 Invalid host header` before authentication
+ran, and the BFF reported it as `Sign in failed.` The container looked healthy the
+whole time because its probe uses `localhost` — which is why the launcher now
+proves a real sign-in instead. See audit A16–A18.
+
 **Not yet confirmed on hardware:** no Docker daemon exists in the environment this
 was prepared in, so `docker compose build`, `docker compose up` and a live response
-from `http://localhost:3000` remain unverified. They must be run on the Windows
-host before this is treated as closed.
+from `http://localhost:3000` remain unverified. The login path itself *was*
+reproduced and fixed against a real API and the real Next.js BFF with the API
+receiving `Host: api:8000`.
 
 Authentication needs to read a user before a tenant is known, so migration 0004 adds
 a **SELECT-only** policy on `app.users` and `app.refresh_tokens` gated on

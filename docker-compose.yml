@@ -41,6 +41,15 @@ services:
       MAINTENANCE_DATABASE_URL: postgresql+asyncpg://airevenueos_maintenance_login:local_development_only@postgres:5432/airevenueos
       REDIS_URL: redis://redis:6379/0
       LOG_JSON: "false"
+      # The BFF reaches the API as http://api:8000, so requests arrive with
+      # `Host: api`. TrustedHostMiddleware defaults to localhost/127.0.0.1 only and
+      # answered 400 "Invalid host header" before ever checking the credential --
+      # which surfaced in the browser as "Sign in failed." The container still
+      # looked healthy because its own health check calls localhost.
+      # `web` is here for the same reason if the browser is ever pointed straight
+      # at the API from inside the compose network.
+      TRUSTED_HOSTS: localhost,127.0.0.1,api,web
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
     ports: ["8000:8000"]
     volumes: ["./backend:/app"]
     depends_on:

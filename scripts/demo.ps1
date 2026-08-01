@@ -40,6 +40,8 @@
 # plain text, so SecureString would buy nothing.
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'Password',
     Justification = 'Local demo credential that is displayed on purpose.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'DemoPassword',
+    Justification = 'Same local demo credential, handed to Test-DemoLogin.')]
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'TimeoutSeconds',
     Justification = 'Used as the default for the Timeout parameter of Wait-ForUrl.')]
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
@@ -122,6 +124,54 @@ function Wait-ForUrl {
     throw "$Name did not become ready within $Timeout seconds."
 }
 
+function Test-DemoLogin {
+    <#
+        Sign in as a demo user through the web app, the way the browser does.
+
+        This exists because a previous release printed credentials that could not
+        log in: the API answered 400 "Invalid host header" to every call from the
+        BFF, while its own health check -- which uses localhost -- kept reporting
+        the container healthy. A launcher that only waits for health is therefore
+        not evidence of anything. This is.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Email,
+        [Parameter(Mandatory)][string]$DemoPassword
+    )
+    $body = @{ email = $Email; password = $DemoPassword } | ConvertTo-Json -Compress
+    try {
+        $response = Invoke-WebRequest -Uri "$WebUrl/api/auth/login" -Method POST `
+            -ContentType 'application/json' -Body $body -UseBasicParsing -TimeoutSec 30
+    } catch {
+        # Invoke-WebRequest throws on any non-2xx, so read the real status out.
+        $status = 'no response'
+        $detail = $_.Exception.Message
+        # PowerShell 7 puts the response body here; Windows PowerShell 5.1 leaves it
+        # on the stream, so both are handled.
+        if ($_.ErrorDetails -and $_.ErrorDetails.Message) {
+            $detail = $_.ErrorDetails.Message
+        }
+        if ($_.Exception.Response) {
+            $status = [int]$_.Exception.Response.StatusCode
+            if (-not ($_.ErrorDetails -and $_.ErrorDetails.Message)) {
+                try {
+                    $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+                    $detail = $reader.ReadToEnd()
+                    $reader.Close()
+                } catch { $null = $_ }
+            }
+        }
+        Write-Err "$Email could not sign in (HTTP $status): $detail"
+        Write-Err 'The API rejected the request the web app made. Check the upstream status:'
+        & docker compose logs --tail=30 web 2>&1 | Out-Host
+        throw "demo login failed for $Email"
+    }
+    if ($response.StatusCode -ne 200) {
+        throw "demo login for $Email returned HTTP $($response.StatusCode)"
+    }
+    Write-Ok "$Email signs in"
+}
+
 function New-DemoPassword {
     # RandomNumberGenerator.Create().GetBytes works on both Windows PowerShell 5.1
     # and PowerShell 7; the newer static Fill() does not exist on 5.1.
@@ -195,6 +245,11 @@ try {
     # --- wait for the web app ---------------------------------------------
     Write-Step 'Waiting for the web app (first request compiles the route)'
     Wait-ForUrl -Url "$WebUrl/login" -Name 'web'
+
+    # --- prove the printed credentials actually work -----------------------
+    Write-Step 'Verifying both demo sign-ins through the web app'
+    Test-DemoLogin -Email 'asha@acme.test'   -DemoPassword $Password
+    Test-DemoLogin -Email 'ravi@globex.test' -DemoPassword $Password
 
     # --- done --------------------------------------------------------------
     $rule = ('=' * 68)

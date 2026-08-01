@@ -22,13 +22,37 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     cache: 'no-store',
   });
 
-  const payload = (await upstream.json().catch(() => null)) as {
-    success?: boolean;
-    data?: { refresh_token?: string; access_token?: string; expires_in?: number; user?: unknown };
-    error?: { message?: string };
-  } | null;
+  // Read the body once as text. A failing upstream may answer plain text rather
+  // than JSON -- `Invalid host header` is exactly that -- and the raw form is the
+  // only thing that identifies the cause.
+  const raw = await upstream.text().catch(() => '');
+  const payload = (() => {
+    try {
+      return JSON.parse(raw) as {
+        success?: boolean;
+        data?: {
+          refresh_token?: string;
+          access_token?: string;
+          expires_in?: number;
+          user?: unknown;
+        };
+        error?: { message?: string };
+      };
+    } catch {
+      return null;
+    }
+  })();
 
   if (!upstream.ok || !payload?.success || !payload.data?.refresh_token || !payload.data.access_token) {
+    // 401 is a wrong credential and needs no explanation. Anything else is a
+    // misconfiguration the operator has to be able to see: without this line every
+    // such cause collapsed into an indistinguishable "Sign in failed." in the
+    // browser. The request body is never logged, so no credential is written out.
+    if (upstream.status !== 401) {
+      console.error(
+        `[auth] upstream ${API_BASE}/v1/auth/login returned ${upstream.status}: ${raw.slice(0, 300)}`,
+      );
+    }
     return NextResponse.json(
       { error: payload?.error?.message ?? 'Sign in failed.' },
       { status: upstream.status === 401 ? 401 : 400 },
