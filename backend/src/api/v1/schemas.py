@@ -204,6 +204,28 @@ class DealStageMoveRequest(StrictModel):
     loss_reason: Annotated[str | None, Field(max_length=200)] = None
 
 
+class TaskCreate(StrictModel):
+    title: Annotated[str, Field(min_length=1, max_length=250)]
+    description: Annotated[str | None, Field(max_length=5000)] = None
+    priority: Literal["low", "normal", "high", "urgent"] = "normal"
+    due_at: datetime | None = None
+    assignee_id: UUID | None = None
+    entity_type: Literal["contact", "account", "deal"] | None = None
+    entity_id: UUID | None = None
+    is_next_action: bool = False
+
+
+class TaskUpdate(StrictModel):
+    title: Annotated[str | None, Field(min_length=1, max_length=250)] = None
+    description: Annotated[str | None, Field(max_length=5000)] = None
+    status: Literal["open", "in_progress", "completed", "cancelled"] | None = None
+    priority: Literal["low", "normal", "high", "urgent"] | None = None
+    # Explicitly nullable: sending null clears the date or the owner.
+    due_at: datetime | None = None
+    assignee_id: UUID | None = None
+    is_next_action: bool | None = None
+
+
 class ActivityLogRequest(StrictModel):
     """Only the types a human may log by hand; `system` is platform-written."""
 

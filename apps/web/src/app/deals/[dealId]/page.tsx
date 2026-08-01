@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { apiFetch } from '@/lib/session';
 import { money } from '@/lib/money';
+import { TaskPanel, type TaskEntry } from '@/features/crm/task-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,9 @@ export default async function DealDetailPage({
   const result = await apiFetch<Deal>(`/deals/${params.dealId}`);
   if (!result.ok || !result.data) notFound();
   const deal = result.data;
+
+  const taskResult = await apiFetch<{ tasks: TaskEntry[] }>(`/deals/${params.dealId}/tasks`);
+  const tasks = taskResult.data?.tasks ?? [];
 
   return (
     <div className="space-y-8">
@@ -83,6 +87,8 @@ export default async function DealDetailPage({
           ) : null}
         </dl>
       </section>
+
+      <TaskPanel parent="deals" parentId={deal.id} tasks={tasks} />
     </div>
   );
 }

@@ -30,6 +30,8 @@ from api.v1.schemas import (
     DealUpdate,
     NoteCreateRequest,
     NoteUpdateRequest,
+    TaskCreate,
+    TaskUpdate,
 )
 
 contacts_router = APIRouter(prefix="/contacts", tags=["crm"])
@@ -389,3 +391,85 @@ async def reopen_deal(
     deal = await _deals(principal).reopen(deal_id, expected_version=if_match)
     response.headers["ETag"] = f'W/"{deal["version"]}"'
     return success(deal, request_id=_request_id(request))
+
+
+# --- tasks -------------------------------------------------------------------
+
+tasks_router = APIRouter(prefix="/tasks", tags=["crm"])
+
+
+def _tasks(principal: Any) -> Any:
+    from application.crm.tasks import TaskService
+
+    return TaskService.for_principal(principal)
+
+
+@tasks_router.get("", summary="List tasks")
+async def list_tasks(
+    request: Request,
+    principal: CurrentPrincipal,
+    query: Annotated[ListQuery, Depends(list_query)],
+    task_status: Annotated[str | None, Query(alias="status", max_length=20)] = None,
+    mine: bool = False,
+    overdue: bool = False,
+) -> dict[str, Any]:
+    principal.require("task", "list")
+    page = await _tasks(principal).list_tasks(query, status=task_status, mine=mine, overdue=overdue)
+    return success({"tasks": page.items}, pagination=page.meta(), request_id=_request_id(request))
+
+
+@tasks_router.post("", status_code=status.HTTP_201_CREATED, summary="Create a task")
+async def create_task(
+    payload: TaskCreate, request: Request, response: Response, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("task", "create")
+    task = await _tasks(principal).create(payload.model_dump())
+    response.headers["ETag"] = f'W/"{task["version"]}"'
+    return success(task, request_id=_request_id(request))
+
+
+@tasks_router.get("/{task_id}", summary="Read a task")
+async def read_task(
+    task_id: UUID, request: Request, response: Response, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("task", "read")
+    task = await _tasks(principal).get(task_id)
+    response.headers["ETag"] = f'W/"{task["version"]}"'
+    return success(task, request_id=_request_id(request))
+
+
+@tasks_router.patch("/{task_id}", summary="Update or complete a task")
+async def update_task(
+    task_id: UUID,
+    payload: TaskUpdate,
+    request: Request,
+    response: Response,
+    principal: CurrentPrincipal,
+    if_match: Annotated[int | None, Depends(parse_if_match)] = None,
+) -> dict[str, Any]:
+    principal.require("task", "update")
+    task = await _tasks(principal).update(
+        task_id, payload.model_dump(exclude_unset=True), expected_version=if_match
+    )
+    response.headers["ETag"] = f'W/"{task["version"]}"'
+    return success(task, request_id=_request_id(request))
+
+
+@contacts_router.get("/{contact_id}/tasks", summary="Tasks on a contact")
+async def contact_tasks(
+    contact_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("contact", "read")
+    principal.require("task", "list")
+    tasks = await _tasks(principal).for_entity("contact", contact_id)
+    return success({"tasks": tasks}, request_id=_request_id(request))
+
+
+@deals_router.get("/{deal_id}/tasks", summary="Tasks on a deal")
+async def deal_tasks(
+    deal_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("deal", "read")
+    principal.require("task", "list")
+    tasks = await _tasks(principal).for_entity("deal", deal_id)
+    return success({"tasks": tasks}, request_id=_request_id(request))

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { apiFetch } from '@/lib/session';
 import { EditContactForm } from '@/features/crm/edit-contact-form';
 import { Timeline, type TimelineEntry } from '@/features/crm/timeline';
+import { TaskPanel, type TaskEntry } from '@/features/crm/task-panel';
 import type { AccountOption } from '@/features/crm/new-contact-form';
 
 export const dynamic = 'force-dynamic';
@@ -33,12 +34,14 @@ export default async function ContactDetailPage({
   if (!result.ok || !result.data) notFound();
   const contact = result.data;
 
-  const [accountResult, timelineResult] = await Promise.all([
+  const [accountResult, timelineResult, taskResult] = await Promise.all([
     apiFetch<{ accounts: AccountOption[] }>('/accounts?page_size=200'),
     apiFetch<{ timeline: TimelineEntry[] }>(`/contacts/${params.contactId}/timeline`),
+    apiFetch<{ tasks: TaskEntry[] }>(`/contacts/${params.contactId}/tasks`),
   ]);
   const accounts = accountResult.data?.accounts ?? [];
   const timeline = timelineResult.data?.timeline ?? [];
+  const tasks = taskResult.data?.tasks ?? [];
 
   return (
     <div className="space-y-8">
@@ -89,6 +92,8 @@ export default async function ContactDetailPage({
       </section>
 
       <EditContactForm contact={contact} accounts={accounts} />
+
+      <TaskPanel parent="contacts" parentId={contact.id} tasks={tasks} />
 
       <Timeline parent="contacts" parentId={contact.id} entries={timeline} />
     </div>

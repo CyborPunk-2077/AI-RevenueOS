@@ -122,6 +122,9 @@ ignore = [
 "tests/e2e/test_crm_deals.py" = [
     "F811",
 ]
+"tests/e2e/test_crm_tasks.py" = [
+    "F811",
+]
 
 [tool.mypy]
 python_version = "3.10"
