@@ -1,7 +1,7 @@
 # Release blockers — AI RevenueOS
 
 **Status: NOT GA-ready.**
-**Audit date:** 2026-08-01 · **P0-1 closed:** 2026-08-01 · **P0-2 closed:** 2026-08-01
+**Audit date:** 2026-08-01 · **P0-1 closed:** 2026-08-01 · **P0-2 closed:** 2026-08-01 · **P0-3 closed:** 2026-08-01
 Full findings: `docs/IMPLEMENTATION-AUDIT.md` · P0-1 evidence: `docs/p0-1-gate-results.txt`
 
 GA is blocked by **4 P0** items — 2 code gaps and 2 external gates — plus 11 P1.
@@ -12,8 +12,8 @@ No release gate may be waived without recorded evidence.
 | *(demo slice)* | one tenant-scoped CRM flow runs in a browser — see below |
 | P0-1 worker tier | **RESOLVED** — 34 integration tests on real Postgres + Redis + Celery |
 | P0-2 auth endpoints | **RESOLVED** — 21 operations, 37 e2e tests on real Postgres + Redis |
-| P0-3 frontend build | open |
-| P0-4 domain services | open |
+| P0-3 frontend build | **RESOLVED** — reproducible install, lint, strict typecheck, production build, 14 unit tests |
+| P0-4 domain services | open — *unrelated to the "P0-4" local-runtime sprint below; see the naming note* |
 | P0-5 AWS account | open (external) |
 | P0-6 legal sign-off | open (external) |
 
@@ -185,24 +185,78 @@ configured.
 authenticating *with* an API key. The key management surface the specification names
 is complete; using a key as a request credential is developer-platform work.
 
-#### P0-3 · Frontend cannot be built
-No `pnpm-lock.yaml`, no `next.config.*`, `tailwind.config.*`, `postcss.config.*` or
-`next-env.d.ts`, and **zero `page.tsx`** — no route renders. 9 TS/TSX files
-(~560 lines) exist; only 3 dependency-free modules were type-checkable.
-`pnpm install --frozen-lockfile`, `pnpm build`, `pnpm typecheck`, `pnpm test` and
-`pnpm a11y` all fail, so 4 of 6 CI jobs fail.
+#### ~~P0-3 · Frontend toolchain unusable~~ — **RESOLVED 2026-08-01**
 
-**Blocks:** M05 · criteria 19, 25, 28 (UI half), 2 (UI surface)
+The original entry claimed "zero `page.tsx` — no route renders". That was true when
+it was written; the demo slice added the route tree. What remained was that the
+toolchain around it could not be trusted, in four ways that were all silent:
 
-**Remediation**
-1. Add the missing configs; run `pnpm install` and commit the lockfile.
-2. Build the route tree from the spec's hierarchy: `(auth)`, `(onboarding)`,
-   `(dashboard)/[tenantSlug]`, `(fullscreen)`.
-3. Configure Vitest + React Testing Library and Playwright + axe.
-4. Get `pnpm build && pnpm typecheck && pnpm test && pnpm a11y` green in CI.
+| Was | Now |
+|---|---|
+| No `pnpm-lock.yaml`, despite `packageManager: pnpm@9.7.0`. Nothing reproducible, and the web Dockerfile had been switched to npm as a workaround. | Committed. `pnpm install --frozen-lockfile` resolves 619 packages in ~16s and fails loudly on drift. Dockerfile back on pnpm with a cache-mounted store. |
+| No ESLint config, so `next lint` asked an interactive question and **waited** — `turbo run lint` hung rather than failing. | `.eslintrc.js` committed; `next lint --max-warnings 0` is clean. |
+| `pnpm-workspace.yaml` globbed `packages/*`: six empty directories, nothing tracked in Git, a warning on every install. | Glob narrowed to `apps/*`. They were never code. |
+| `make verify` called itself "everything CI runs" while running no frontend test and no frontend build. | Runs both (`test-web`, `build-web`). |
 
-**Effort:** 15–25 days for the full route tree; **2 days** to make the toolchain
-build and CI honest.
+`tsconfig.json` also gained `allowJs`, `esModuleInterop` and
+`forceConsistentCasingInFileNames`, which Next silently rewrites into the file on
+first lint or build — a clean checkout came back dirty. `strict` stays on.
+
+**Verified:** frozen-lockfile install, lint clean, `tsc --noEmit` under strict,
+`next build` emitting 8 routes, and **14 vitest tests** over the BFF session
+helpers. Routes checked against a real API and a real production Next server:
+signed out, `/` and `/leads` redirect to `/login` and an unknown path is 404;
+signed in, every page is 200, the seeded lead is visible, and an unknown lead id
+renders "Not found".
+
+**Still open, and not P0-3:** the full route tree from the specification's
+hierarchy (`(auth)`, `(onboarding)`, `(dashboard)/[tenantSlug]`, `(fullscreen)`),
+the design system, and axe/a11y coverage. That is M05 product work — 15–25 days —
+and none of it is a toolchain problem any more.
+
+**Browser E2E:** Playwright config and the Acme-versus-Globex isolation spec are
+ready and `make e2e` installs the browser and runs them. The browsers could not be
+installed in the environment this was prepared in (`playwright install` needs root
+for system libraries and the download was blocked), so the browser run itself is
+**unverified here** and must be done on Windows.
+
+---
+
+### Local runtime hardening (2026-08-01)
+
+**Naming:** this was requested as "P0-4" in a sprint prompt, but the P0-4 in this
+document is *domain services*, which remains open and untouched. Recording it
+separately rather than letting the two collide.
+
+The launcher started four of the nine services. Postgres, Redis, the API and the
+web app came up; the four worker pools and the Beat scheduler did not, so the
+outbox relay never ran and anything queued simply sat there. The demo looked fine
+because nothing in the visible flow needed a worker yet.
+
+| Was | Now |
+|---|---|
+| Four services started; workers and Beat were never launched. | The full tier starts, and the launcher waits on Docker's own health state — workers expose no HTTP endpoint, so a URL probe could not have told you the tier was up. |
+| Beat waited on `service_started`, which only proves a process was launched. | Waits for `service_healthy`. Beat fires the outbox relay every 500 ms; aimed at a pool that cannot reach PostgreSQL yet, that is a retry burst at every start. |
+| `-Reset` sat one keystroke from the everyday command and dropped the volume. | Destruction moved to `RESET_DEMO.cmd` / `scripts/reset-demo.ps1`, which requires the word `reset` to be typed. Nothing on the ordinary path removes a volume. |
+| No `ENCRYPTION_MASTER_KEY` anywhere in compose. | Set for the API and pools. MFA fails closed without one, so browser enrolment would have returned 422 the first time anyone tried it. |
+
+**Verified end to end** against a real API, a real production Next server and the
+real BFF, with the API receiving `Host: api:8000`: acme sign-in 200, create lead
+201, appears in list, opens by id 200, edit 200, refresh shows the edit, globex's
+list does not contain it, and globex opening acme's URL is 404 "Not found".
+
+**Restart and idempotency:** re-running migrations, `seed.py` and `seed_demo.py` —
+exactly what a second launch does — then signing in again showed the previously
+created lead still present, its edit intact and the count unchanged. Nothing
+wiped, nothing duplicated.
+
+**Bounded waits, proved against a stub:** an unhealthy worker aborts in ~1s with
+that service's logs; a container stuck in `starting` stops at the timeout instead
+of spinning. `tests/e2e/test_local_stack_contract.py` pins all of this with 14
+static assertions that need no Docker daemon.
+
+**Still unverified here:** Docker itself is unavailable in the environment this was
+prepared in, so `docker compose up` and the browser run must be done on Windows.
 
 ---
 
