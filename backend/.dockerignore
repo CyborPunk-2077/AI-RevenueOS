@@ -1,0 +1,56 @@
+# Build context for the api, worker-* and beat services (context: ./backend).
+#
+# Docker reads the .dockerignore at the context root, so the repository-root
+# .dockerignore does NOT apply here. Without this file the image would carry the
+# host's __pycache__ trees and, more seriously, backend/.dev-keys -- the local JWT
+# signing key.
+
+# --- Python virtual environments and caches --------------------------------
+.venv
+venv
+env
+ENV
+**/__pycache__
+**/*.py[cod]
+**/*$py.class
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.tox
+.nox
+*.egg-info
+.eggs
+build
+dist
+
+# --- coverage ---------------------------------------------------------------
+.coverage
+.coverage.*
+coverage.xml
+htmlcov
+.benchmarks
+
+# --- local secrets ----------------------------------------------------------
+# The local JWT signing key is generated on first run and must never enter an image.
+.dev-keys
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- version control and editor state --------------------------------------
+.git
+.git-orphaned
+.vscode
+.idea
+*.swp
+.DS_Store
+
+# --- local data -------------------------------------------------------------
+*.log
+*.rdb
+pgdata
+
+# Kept: src/, tests/, alembic/, scripts/, pyproject.toml, alembic.ini,
+# .importlinter -- everything the image or its test run needs.

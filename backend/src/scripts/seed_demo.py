@@ -19,6 +19,7 @@ import os
 import secrets
 import sys
 from pathlib import Path
+from typing import TypedDict
 from uuid import UUID
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -134,13 +135,26 @@ async def reset() -> None:
     logger.info("demo_reset")
 
 
-async def seed(password: str) -> dict[str, object]:
+class SeedUser(TypedDict):
+    """One demo account, as printed by the launcher."""
+
+    tenant: str
+    email: str
+    user_id: str
+
+
+class SeedResult(TypedDict):
+    users: list[SeedUser]
+    leads_created: int
+
+
+async def seed(password: str) -> SeedResult:
     settings = get_settings()
     if settings.environment != "local":
         raise SystemExit(f"seed_demo refuses to run in the '{settings.environment}' environment")
 
     password_hash = hash_password(password)
-    created: list[dict[str, str]] = []
+    created: list[SeedUser] = []
 
     async with admin_session() as session:
         for tenant_id, name, slug, email, full_name, industry in TENANTS:
@@ -227,7 +241,7 @@ async def seed(password: str) -> dict[str, object]:
             )
             lead_count += 1
 
-    return {"users": created, "leads_created": lead_count}
+    return SeedResult(users=created, leads_created=lead_count)
 
 
 async def main() -> int:
@@ -245,7 +259,7 @@ async def main() -> int:
     print("\n" + "=" * 66)  # noqa: T201
     print("  Demo data ready")  # noqa: T201
     print("=" * 66)  # noqa: T201
-    for entry in result["users"]:  # type: ignore[index]
+    for entry in result["users"]:
         print(f"  tenant {entry['tenant']:8} sign in as  {entry['email']}")  # noqa: T201
     print(f"\n  password: {password}")  # noqa: T201
     if generated:

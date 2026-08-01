@@ -268,25 +268,41 @@ class TestTenantContextPropagation:
     def test_a_worker_sees_only_its_bound_tenants_rows(
         self, celery_app: Any, celery_worker: Any, seeded_tenants: Any, wired_engine: Any
     ) -> None:
-        """The bound tenant drives RLS inside the worker exactly as in the API."""
+        """The bound tenant drives RLS inside the worker exactly as in the API.
+
+        Measured as a delta rather than an absolute count. `migrated_database` is
+        session-scoped, so whether tenant B already owns rows depends on which
+        suites ran first -- `tests/e2e/test_lead_lifecycle.py` legitimately creates
+        one for tenant B. An earlier `assert b_count == 0` therefore passed when
+        this module ran alone and failed in a full-suite run, which says nothing
+        about isolation. What isolation actually means here is that tenant A's new
+        row does not appear in tenant B's count.
+        """
         from application.leads.service import LeadService
         from domain.auth.permissions import Role, permissions_for
 
         tenant_a, tenant_b = seeded_tenants
+
+        def count_for(tenant: Any) -> int:
+            """Count that tenant's leads from inside a real worker process."""
+            return int(
+                probe_count_leads.apply_async(headers=build_headers(tenant_id=tenant)).get(
+                    timeout=30
+                )
+            )
+
+        a_before = count_for(tenant_a)
+        b_before = count_for(tenant_b)
+
         service = LeadService(
             tenant_id=tenant_a, user_id=uuid4(), permissions=permissions_for([Role.ADMIN])
         )
         run_async(service.capture({"first_name": "WorkerScoped", "email": f"{uuid4()}@example.in"}))
 
-        a_count = probe_count_leads.apply_async(headers=build_headers(tenant_id=tenant_a)).get(
-            timeout=30
+        assert count_for(tenant_a) == a_before + 1, "the worker must see its own tenant's new row"
+        assert count_for(tenant_b) == b_before, (
+            "tenant B must not observe tenant A's row from a worker"
         )
-        b_count = probe_count_leads.apply_async(headers=build_headers(tenant_id=tenant_b)).get(
-            timeout=30
-        )
-
-        assert a_count >= 1
-        assert b_count == 0, "tenant B must not observe tenant A's rows from a worker"
 
 
 # --- retry classification and dead lettering -----------------------------

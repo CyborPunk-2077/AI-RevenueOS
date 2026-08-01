@@ -95,6 +95,22 @@ Five real defects were found and fixed:
 | D4 | **P1 correctness** | The BFF refreshed on every server render, rotating the refresh token while the browser still held the previous one. The second request looked like replay and the server correctly revoked the whole family. The BFF now holds a short-lived HttpOnly access token and refreshes only inside route handlers. |
 | D5 | P2 | Cookies were marked `Secure` based on `NODE_ENV`, so a local production build over http silently failed to sign in. The flag now follows the request scheme; HTTPS still gets the strict `__Host-` prefix. |
 
+**Windows packaging follow-up (2026-08-01).** The slice above could not actually be
+started on Windows: the `web` image failed to build with `cannot copy to
+non-directory: .../apps/web/node_modules/@playwright/test`. The repository had no
+root `.dockerignore`, so `COPY . .` merged the host's `node_modules` over the tree
+installed in the image. Fixed by adding a root `.dockerignore` **and**
+`backend/.dockerignore` (the api, worker and beat services build from `./backend`,
+which the root file does not govern), rewriting `apps/web/Dockerfile` onto npm with
+a committed lockfile, and pointing the api at the login-capable database roles.
+`scripts/demo.ps1` starts the whole stack, migrates, seeds and prints the URL, so
+GNU make is no longer required. See audit A14.
+
+**Not yet confirmed on hardware:** no Docker daemon exists in the environment this
+was prepared in, so `docker compose build`, `docker compose up` and a live response
+from `http://localhost:3000` remain unverified. They must be run on the Windows
+host before this is treated as closed.
+
 Authentication needs to read a user before a tenant is known, so migration 0004 adds
 a **SELECT-only** policy on `app.users` and `app.refresh_tokens` gated on
 `app.platform_context`. Writes stay governed by the tenant policy alone, so no

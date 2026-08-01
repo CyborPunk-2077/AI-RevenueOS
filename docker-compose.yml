@@ -33,7 +33,12 @@ services:
       target: development
     environment:
       ENVIRONMENT: local
-      DATABASE_URL: postgresql+asyncpg://airevenueos_app:local_development_only@postgres:5432/airevenueos
+      DATABASE_URL: postgresql+asyncpg://airevenueos_app_login:local_development_only@postgres:5432/airevenueos
+      # Migrations and reference-data seeding run as the owner: the runtime role
+      # above cannot create tables or write plans/permissions/templates.
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://airevenueos:local_development_only@postgres:5432/airevenueos
+      # Partition and retention DDL needs CREATE, which the runtime role lacks.
+      MAINTENANCE_DATABASE_URL: postgresql+asyncpg://airevenueos_maintenance_login:local_development_only@postgres:5432/airevenueos
       REDIS_URL: redis://redis:6379/0
       LOG_JSON: "false"
     ports: ["8000:8000"]
@@ -134,7 +139,11 @@ services:
       API_INTERNAL_URL: http://api:8000
       NEXT_PUBLIC_APP_URL: http://localhost:3000
     ports: ["3000:3000"]
-    depends_on: {api: {condition: service_started}}
+    # No bind mount: mounting the host directory would shadow the node_modules
+    # installed in the image with the host's, which is the failure this fix
+    # addresses. Rebuild (`docker compose build web`) to pick up source changes.
+    depends_on:
+      api: {condition: service_healthy}
 
   # Design-time authoring only. No production credentials, no database access,
   # no ability to execute customer automation.

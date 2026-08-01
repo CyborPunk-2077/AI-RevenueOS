@@ -1,0 +1,100 @@
+# Root build context (used by the `web` service, whose context is the repository root).
+#
+# Without this file, `COPY . .` copies the host's apps/web/node_modules over the
+# node_modules the image just installed. Where a host package is a directory and
+# the image's is a file (or vice versa) the daemon aborts with:
+#   cannot copy to non-directory: .../apps/web/node_modules/@playwright/test
+#
+# NOTE: Docker reads the .dockerignore at the *context root* only. The api, worker
+# and beat services build from ./backend, so they are governed by
+# backend/.dockerignore, not this file.
+
+# --- dependency trees (reinstalled inside the image) ------------------------
+**/node_modules
+**/.pnpm-store
+**/.yarn/cache
+**/.yarn/install-state.gz
+**/bower_components
+
+# --- JavaScript build output -----------------------------------------------
+**/.next
+**/out
+**/dist
+**/build
+**/.turbo
+**/.swc
+**/*.tsbuildinfo
+**/storybook-static
+**/playwright-report
+**/test-results
+**/.playwright
+
+# --- Python virtual environments and caches --------------------------------
+**/.venv
+**/venv
+**/env
+**/ENV
+**/virtualenv
+**/__pycache__
+**/*.py[cod]
+**/*$py.class
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.tox
+**/.nox
+**/*.egg-info
+**/.eggs
+
+# --- coverage and profiling ------------------------------------------------
+**/.coverage
+**/.coverage.*
+**/coverage
+**/coverage.xml
+**/htmlcov
+**/.benchmarks
+**/prof
+
+# --- local secrets and environment ------------------------------------------
+# .env.example is deliberately NOT excluded: it is documentation and carries no
+# real values.
+.env
+.env.*
+!.env.example
+**/.dev-keys
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+!**/testdata/*.pem
+!**/testdata/*.key
+
+# --- version control, CI and editor state ----------------------------------
+.git
+.gitignore
+.github
+**/.git-orphaned
+.vscode
+.idea
+**/*.swp
+**/.DS_Store
+**/Thumbs.db
+
+# --- infrastructure state (never belongs in an image) ----------------------
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
+**/.terraform.lock.hcl
+
+# --- local data and logs ----------------------------------------------------
+**/*.log
+**/*.rdb
+**/pgdata
+**/postgres-data
+docs
+*.md
+!README.md
+
+# What is deliberately kept: all application source, package.json,
+# package-lock.json, pnpm-lock.yaml, pnpm-workspace.yaml, turbo.json, tsconfig,
+# next.config.*, tailwind.config.*, postcss.config.* and next-env.d.ts.

@@ -7,7 +7,18 @@ automation, analytics and compliance.
 India defaults are `Asia/Kolkata`, INR, Indian phone validation, Razorpay and
 WhatsApp. Internationalisation does not require a redesign.
 
-## Quick start
+## Run the demo (Windows)
+
+Docker Desktop running, then one command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\demo.ps1
+```
+
+It builds the images, starts Postgres, Redis, the API and the web app, waits for
+them, applies migrations, seeds demo data, and prints the URL and sign-in details.
+
+## Quick start (Linux, macOS, WSL)
 
 ```bash
 make bootstrap     # install every toolchain from a clean clone
