@@ -1,0 +1,264 @@
+===============================================================================
+AI RevenueOS - what it is, how to run it, and what is actually finished
+Written 2026-08-01 | Commit 4f6b953
+===============================================================================
+
+Read this first. It is deliberately blunt about what works and what does not.
+
+
+-------------------------------------------------------------------------------
+1. HOW TO RUN IT
+-------------------------------------------------------------------------------
+
+You need Docker Desktop running. Nothing else - no Python, no Node, no make.
+
+  1. Start Docker Desktop and wait for the whale icon to settle.
+  2. Double-click  RUN_DEMO.cmd  in this folder.
+  3. Wait. The first run builds images and can take several minutes. Later runs
+     take under a minute.
+  4. When it finishes it prints a box with the URL and a password. Open
+     http://localhost:3000 in your browser and sign in.
+
+Sign in as either of:
+
+    asha@acme.test      organisation "acme"    - has sample leads
+    ravi@globex.test    organisation "globex"  - empty, on purpose
+
+The password is generated fresh each run and printed once. It is stored nowhere.
+If you want a fixed one (needed for the browser tests), run from a terminal:
+
+    powershell -ExecutionPolicy Bypass -File scripts\demo.ps1 -Password "pick-something-12-chars"
+
+The launcher does not just start containers and hope. It waits for every service
+to report healthy, applies migrations, seeds the demo data, and then actually
+signs both demo users in through the web app before printing anything. If it
+prints the ready banner, the credentials work. If a service fails it dumps that
+service's logs and exits - it never spins forever.
+
+STOPPING AND RESTARTING KEEPS YOUR DATA. The database lives in a named Docker
+volume and nothing on the normal path removes it. Close the window, run
+RUN_DEMO.cmd again tomorrow, and your contacts are still there.
+
+To wipe and start clean, double-click  RESET_DEMO.cmd . It makes you type the
+word "reset" first. It is a separate file on purpose: a flag that drops a volume
+should not sit one keystroke away from the everyday command.
+
+Other useful commands (from a terminal in this folder):
+
+    docker compose ps                 what is running
+    docker compose logs -f api web    live logs
+    docker compose down               stop everything, keep the data
+
+
+-------------------------------------------------------------------------------
+2. WHAT TO CLICK THROUGH
+-------------------------------------------------------------------------------
+
+After signing in you land on Leads. The header has three sections: Leads,
+Contacts, Accounts.
+
+ACCOUNTS (companies you deal with)
+  - "New account" -> name, industry, website.
+  - Click an account to open it. You see its details, the contacts linked to it,
+    and its timeline.
+  - Search by name or industry.
+  - Duplicate names are refused with a clear message, not a crash.
+
+CONTACTS (people)
+  - "New contact" -> name, email, phone, job title, and optionally an account
+    from the dropdown.
+  - Search by name, email, company or phone.
+  - Click a contact to open it. Edit the name, title, status or account. Choose
+    "No account" to unlink.
+  - Refresh the page: your edits are still there, because they are in PostgreSQL.
+  - If two people edit the same contact, the second one is refused rather than
+    silently overwriting the first.
+
+TIMELINE (on both contacts and accounts)
+  - "Log an activity" -> call, meeting, email, WhatsApp or task, with a subject
+    and details.
+  - "Add a note" -> free text, optionally pinned to the top.
+  - Entries appear newest first, pinned notes above everything, each showing who
+    did it and when.
+  - You can edit your own notes. You cannot edit anyone else's - the Edit button
+    does not appear, and the server refuses it even if you try by hand.
+  - Activities cannot be edited or deleted by anyone. A logged call that can be
+    rewritten later is not a record of what happened.
+
+LEADS
+  - The original slice: create, list, open, edit, refresh.
+
+THE ISOLATION CHECK - do this one, it is the important one
+  1. Signed in as asha@acme.test, create a contact called something memorable.
+  2. Copy the URL from the address bar.
+  3. Sign out. Sign in as ravi@globex.test.
+  4. Contacts and Accounts are empty - none of acme's records appear.
+  5. Paste acme's URL. You get "Not found", not the record.
+
+  That is not a UI trick. It is enforced three times over: the API filters by
+  tenant, the repository applies the caller's scope, and PostgreSQL row-level
+  security is FORCED on every tenant-owned table so even a raw SQL query with a
+  missing WHERE clause returns nothing.
+
+
+-------------------------------------------------------------------------------
+3. WHAT THIS ACTUALLY IS
+-------------------------------------------------------------------------------
+
+A multi-tenant B2B revenue platform for Indian SMEs. Many organisations share one
+database and one deployment; none of them can see each other's data.
+
+Defaults are Indian: Asia/Kolkata, INR, Indian phone validation.
+
+THE PARTS THAT EXIST AND WORK
+
+  Database and tenancy
+    PostgreSQL 16 with pgvector. Every tenant-owned table has row-level security
+    ENABLED and FORCED. The application deliberately connects as a role that is
+    neither superuser nor table owner, because either would silently switch RLS
+    off while every test still passed. Three separate database roles: the app
+    role (data only), a maintenance role (partition DDL), and the migration owner.
+
+  Authentication and access control - 21 endpoints
+    Sign-up with email verification, sign-in, sign-out, sign-out-everywhere,
+    token refresh, forgot/reset password, TOTP multi-factor with recovery codes,
+    session listing and revocation, Google sign-in (gated - see below), and
+    developer API keys shown exactly once.
+
+    Passwords are Argon2id. Access tokens are RS256 with a JWKS endpoint - never
+    a shared secret. Refresh tokens are opaque, rotate on every use, and reusing
+    a rotated one is treated as theft: the whole session family is revoked.
+    Ten sessions per user maximum, oldest evicted. Sensitive actions (billing,
+    exports, API key creation) demand a fresh MFA challenge.
+
+    The browser never holds a token. A server-side "backend for frontend" keeps
+    them and gives the browser only an HttpOnly cookie.
+
+  CRM
+    Leads: capture, dedupe, qualification, human review, conversion.
+    Contacts: list, search, create, open, edit, link to an account.
+    Accounts: list, search, create, open, contacts roll-up.
+    Timeline: activities and notes on both, with authorship rules.
+
+  Background workers
+    Four isolated Celery pools (comms, AI, general, bulk) plus a scheduler, so a
+    slow AI call cannot starve payment processing. Eight queues. Failed work is
+    retried with backoff, and work that can never succeed goes to a dead-letter
+    queue with single-use replay rather than being retried forever.
+
+    Every state change writes its event to a transactional outbox in the same
+    database transaction. Either both land or neither does - no "saved the record
+    but lost the notification".
+
+  Auditing
+    Every create and update on contacts, accounts and notes writes an immutable
+    audit row inside the same transaction as the change. The audit log is tenant
+    data too: one organisation cannot read another's trail.
+
+  Quality gates
+    Linting, strict type checking on 173 backend files, architecture rules
+    enforced by a tool rather than convention, and roughly 800 tests. The
+    integration and end-to-end tests run against a real PostgreSQL and a real
+    Redis - not mocks - so the isolation claims mean something.
+
+THE PARTS THAT ARE BUILT BUT SWITCHED OFF
+
+  WhatsApp, email, SMS, voice, payments (Razorpay), e-signatures and Google
+  sign-in all have complete adapters, signature verification, retry and
+  reconciliation logic - and they are OFF.
+
+  This is deliberate and is worth understanding: each one returns "not
+  configured" until somebody supplies a real credential AND turns the flag on.
+  A send with no credential returns "queued", never a fabricated success. You
+  cannot accidentally believe a message was delivered.
+
+  To switch one on you need something only a human can obtain: a WhatsApp
+  Business API account, an email provider with a verified sending domain, a
+  Razorpay commercial agreement, Google OAuth app verification, DLT registration
+  for Indian SMS, or legal sign-off on call recording consent. See
+  docs/GA-ACTIVATION-CHECKLIST.md.
+
+THE PARTS THAT DO NOT EXIST YET
+
+  Five CRM modules have database tables and domain logic but no service layer or
+  screens: deals and pipelines, conversations and messages, documents and files,
+  appointments (admin side), and analytics/reporting.
+
+  Nothing has ever been deployed. There is no AWS account, so the Terraform is
+  unapplied and unverified.
+
+  The full design system and the complete route tree from the specification are
+  not built. What exists is functional rather than polished.
+
+
+-------------------------------------------------------------------------------
+4. HOW TO CHECK IT YOURSELF
+-------------------------------------------------------------------------------
+
+Do not take the above on trust. From a terminal in this folder:
+
+  Backend tests (needs Python and the dev dependencies):
+      cd backend
+      pytest tests/unit tests/contract     fast, no database
+      pytest tests/e2e tests/integration   spins up a real PostgreSQL
+
+  Frontend:
+      pnpm install --frozen-lockfile
+      pnpm --filter @airevenueos/web lint
+      pnpm --filter @airevenueos/web typecheck
+      pnpm --filter @airevenueos/web test
+      pnpm --filter @airevenueos/web build
+
+  Everything at once:
+      make verify
+
+  Browser tests (needs the stack running with a known password):
+      powershell -ExecutionPolicy Bypass -File scripts\demo.ps1 -Password "your-passphrase"
+      $env:DEMO_PASSWORD="your-passphrase"
+      pnpm --filter @airevenueos/web exec playwright install chromium
+      pnpm --filter @airevenueos/web test:e2e
+
+  The API documents itself at  http://localhost:8000/v1/docs  while the stack is
+  running. Every endpoint, every field, every error shape.
+
+
+-------------------------------------------------------------------------------
+5. IF SOMETHING GOES WRONG
+-------------------------------------------------------------------------------
+
+  The window closes instantly
+      Docker Desktop is not running. Start it and try again.
+
+  "Sign in failed"
+      Run  docker compose logs web  - the reason is now printed there rather than
+      hidden. This exact failure happened once before and the cause was a
+      configuration mismatch, not the password.
+
+  A service will not start
+      The launcher already printed that service's logs before exiting. Read them.
+      If the database is in a bad state, RESET_DEMO.cmd starts clean.
+
+  The build fails on the web image
+      Delete apps/web/node_modules and try again. A stale local install can
+      confuse the image build.
+
+
+-------------------------------------------------------------------------------
+6. HONEST SUMMARY
+-------------------------------------------------------------------------------
+
+What you have is a genuinely working multi-tenant SaaS foundation with real
+security, real background processing, and a usable CRM covering leads, contacts,
+accounts and their activity history. It runs on your machine from a double-click
+and the tenant isolation is provable rather than asserted.
+
+What you do not have is a finished product. Five modules are missing, nothing is
+deployed, no external provider is switched on, and the interface is functional
+rather than designed. The remaining work is roughly 60-90 engineering-days plus
+external approvals that no amount of engineering can shorten.
+
+The full remaining list, with severity and effort, is in
+docs/RELEASE-BLOCKERS.md. Every claim in this file is backed by a test or a
+recorded command output in docs/IMPLEMENTATION-AUDIT.md - and where something
+could not be verified, that document says so rather than claiming success.
+===============================================================================
