@@ -9,7 +9,7 @@ WhatsApp. Internationalisation does not require a redesign.
 
 ## Run the demo (Windows)
 
-Docker Desktop running, then one command:
+Docker Desktop running, then double-click **`RUN_DEMO.cmd`** — or from a terminal:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\demo.ps1

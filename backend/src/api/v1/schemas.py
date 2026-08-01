@@ -32,6 +32,64 @@ class RefreshRequest(StrictModel):
     refresh_token: Annotated[str, Field(min_length=8, max_length=512)]
 
 
+class SignupRequest(StrictModel):
+    email: Annotated[str, Field(min_length=3, max_length=320)]
+    # The policy floor is 12; enforcing a minimum here too means an obviously
+    # short password is refused before it is ever hashed.
+    password: Annotated[str, Field(min_length=12, max_length=256)]
+    full_name: Annotated[str, Field(min_length=1, max_length=200)]
+    organisation: Annotated[str, Field(min_length=1, max_length=200)]
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return normalize_email(v)
+
+
+class ForgotPasswordRequest(StrictModel):
+    email: Annotated[str, Field(min_length=3, max_length=320)]
+
+
+class ResetPasswordRequest(StrictModel):
+    token: Annotated[str, Field(min_length=16, max_length=512)]
+    password: Annotated[str, Field(min_length=12, max_length=256)]
+
+
+class VerifyEmailRequest(StrictModel):
+    token: Annotated[str, Field(min_length=16, max_length=512)]
+
+
+class MfaVerifyRequest(StrictModel):
+    """Serves both roles: completing a login challenge, and stepping up in place.
+
+    With `mfa_token` it finishes a pending sign-in. Without it, the caller must
+    already hold a session and is re-proving the factor to unlock a sensitive
+    operation. `code` accepts a recovery code too, which is longer than 6 digits.
+    """
+
+    code: Annotated[str, Field(min_length=6, max_length=32)]
+    mfa_token: Annotated[str | None, Field(max_length=512)] = None
+
+
+class MfaSetupConfirmRequest(StrictModel):
+    pending: Annotated[str, Field(min_length=16, max_length=4096)]
+    code: Annotated[str, Field(min_length=6, max_length=8)]
+
+
+class MfaDisableRequest(StrictModel):
+    password: Annotated[str, Field(min_length=1, max_length=256)]
+    code: Annotated[str, Field(min_length=6, max_length=32)]
+
+
+class MfaRecoveryRequest(StrictModel):
+    code: Annotated[str, Field(min_length=6, max_length=8)]
+
+
+class ApiKeyCreateRequest(StrictModel):
+    name: Annotated[str, Field(min_length=1, max_length=120)]
+    scopes: Annotated[list[str], Field(max_length=200)] = []
+
+
 class ContactIdentity(StrictModel):
     email: str | None = None
     phone: str | None = None

@@ -195,6 +195,20 @@ class PasswordReset(IdMixin, TimestampMixin, Base):
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class EmailVerification(IdMixin, TimestampMixin, Base):
+    """Single-use email-confirmation token. Only the hash is stored."""
+
+    __tablename__ = "email_verifications"
+    __table_args__ = ({"schema": SCHEMA_APP},)
+
+    tenant_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
+    user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ApiKey(IdMixin, TimestampMixin, Base):
     """Developer-only credential. The plaintext value is revealed exactly once."""
 
@@ -239,6 +253,7 @@ for _t in (
     "google_identities",
     "invitations",
     "password_resets",
+    "email_verifications",
     "api_keys",
     "support_access_grants",
 ):

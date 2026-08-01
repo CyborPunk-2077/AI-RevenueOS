@@ -204,11 +204,18 @@ async def seed(password: str) -> SeedResult:
                 )
                 session.add(UserRole(tenant_id=tenant_id, user_id=user_id, role_id=role_id))
             else:
-                # Re-running the seed refreshes the password so the printed one works.
+                # Re-running the seed returns the account to a known-good state, so
+                # the credentials the launcher prints always work.
                 user.password_hash = password_hash
                 user.status = "active"
                 user.failed_login_count = 0
                 user.locked_until = None
+                # Including MFA. Enrolling an authenticator against a throwaway demo
+                # account and then losing the device would otherwise leave the demo
+                # permanently unusable, since login would demand a code nobody has.
+                user.mfa_enabled = False
+                user.mfa_secret_encrypted = None
+                user.mfa_recovery_codes = []
                 user_id = user.id
 
             created.append({"tenant": slug, "email": email, "user_id": str(user_id)})

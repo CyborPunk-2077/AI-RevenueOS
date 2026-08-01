@@ -1,17 +1,17 @@
 # Release blockers — AI RevenueOS
 
 **Status: NOT GA-ready.**
-**Audit date:** 2026-08-01 · **P0-1 closed:** 2026-08-01
+**Audit date:** 2026-08-01 · **P0-1 closed:** 2026-08-01 · **P0-2 closed:** 2026-08-01
 Full findings: `docs/IMPLEMENTATION-AUDIT.md` · P0-1 evidence: `docs/p0-1-gate-results.txt`
 
-GA is blocked by **5 P0** items — 3 code gaps and 2 external gates — plus 11 P1.
+GA is blocked by **4 P0** items — 2 code gaps and 2 external gates — plus 11 P1.
 No release gate may be waived without recorded evidence.
 
 | P0 | Status |
 |---|---|
 | *(demo slice)* | one tenant-scoped CRM flow runs in a browser — see below |
 | P0-1 worker tier | **RESOLVED** — 34 integration tests on real Postgres + Redis + Celery |
-| P0-2 auth endpoints | open |
+| P0-2 auth endpoints | **RESOLVED** — 21 operations, 37 e2e tests on real Postgres + Redis |
 | P0-3 frontend build | open |
 | P0-4 domain services | open |
 | P0-5 AWS account | open (external) |
@@ -132,29 +132,58 @@ correctly remain refused because the slice never sets `mfa_verified`.
 
 ---
 
-#### P0-2 · No authentication endpoints
-Every auth primitive is built and tested (Argon2id, RS256/JWKS, refresh rotation with
-family-reuse revocation, TOTP, step-up MFA) but `/v1/auth/*` does not exist. Nothing
-can log in. The BFF exchanges its session cookie at `/v1/auth/refresh`, which 404s.
+#### ~~P0-2 · No authentication endpoints~~ — **RESOLVED 2026-08-01**
 
-**Blocks:** M04, M05 · criteria 21, and every criterion needing an authenticated UI
+The full `/v1/auth` surface from specification line 304 now exists: **21 operations**,
+every one of them wiring the primitives that were already built and tested rather
+than reimplementing them.
 
-**Remediation**
-1. `login`, `refresh`, `logout` and `GET /auth/me` now exist (demo slice).
-   Implement the rest: `POST /auth/{signup,logout-all,forgot-password,
-   reset-password,verify-email}`; `POST /auth/mfa/{setup,verify,disable,recovery}`;
-   `GET /auth/{me,sessions}`; `DELETE /auth/sessions/{id}`;
-   `GET /auth/google/{authorize,callback}`; `POST|GET|DELETE /auth/api-keys`.
-2. Wire the existing `TokenService`, `RefreshToken` model and rate-limit policies
-   (`login_ip` 5/15m, `login_account` 20/h, `refresh_user` 10/min, `mfa_user` 5/5m).
-3. Make `get_token_service` fail closed outside `local` rather than generating an
-   ephemeral keypair.
-4. Contract tests for lockout, family-reuse revocation, session cap eviction and
-   step-up enforcement.
+- `signup` creates a tenant and its owner and issues **no session** — the address is
+  unconfirmed, so an unverified sign-up cannot sign in. `verify-email` activates it.
+- `forgot-password` / `reset-password` are non-enumerating and single use, and a
+  reset revokes every live refresh token for the account.
+- `mfa/{setup,setup/confirm,verify,recovery,disable}` — the secret is committed only
+  after a code generated from it is proved, recovery codes are shown exactly once,
+  and disabling demands the password *and* a live code.
+- Login now returns an **MFA challenge** rather than a session when the account is
+  enrolled; the challenge is opaque, single use (`GETDEL`) and carries no permissions.
+- `mfa_verified` became a property of the *session*, set only by a completed
+  challenge, which is what finally makes the step-up dependency meaningful.
+- `sessions` / `DELETE sessions/{id}` / `logout-all` operate on refresh-token
+  families and blacklist the access-token jti, so revocation is immediate rather
+  than "within 15 minutes".
+- `google/{authorize,callback}` is gated (`FEATURE_NOT_AVAILABLE` without
+  credentials), consumes its state atomically, and **never auto-provisions** a user.
+- `api-keys` reveals the value once, masks it on every subsequent read, refuses to
+  grant scopes the creator does not hold, and requires step-up to create.
 
-**Effort:** 4–6 days
+**Defects found and fixed while building it**
 
----
+| # | Severity | Defect |
+|---|---|---|
+| S1 | **P1 security** | `sessions_to_evict` had been unit-tested since M04 but was called from nowhere, so `MAX_SESSIONS_PER_USER` was documented and unenforced — a user could hold unlimited concurrent sessions. Now enforced in `issue_session` before each new family. |
+| S2 | **P1 security** | Session revocation dropped refresh tokens but left the access token valid for its full TTL. Revocation now blacklists the jti, which `get_principal` already consulted. |
+| S3 | P2 | The demo seed reset password, status and lockout on re-run but not MFA, so enrolling an authenticator against a throwaway demo account and losing the device made the demo permanently unusable. |
+
+**Verified** — 37 e2e tests over HTTP against real PostgreSQL 16 (RLS forced) and
+real Redis 6.2 via `redislite`; `fakeredis` was deliberately rejected because it
+cannot run the limiter's Lua script, which would have made every rate-limit
+assertion pass for the wrong reason. Covers login, refresh-token reuse revoking the
+family, lockout, session-cap eviction, MFA step-up, API-key safety, cross-tenant
+denial and single-use OAuth state. Live-checked against a running API with
+`Host: api:8000`: signup 201, verify-email 200, step-up refusal 403, logout-all
+revoking 10 sessions, and the subsequent refresh 401.
+
+**Fail-closed, confirmed by execution:** `get_token_service` refuses to boot in
+`dev`/`staging`/`sandbox`/`prod` without configured signing material; MFA refuses to
+store a secret without an encryption master key; Google OAuth reports the capability
+unavailable without credentials; and the local-only echo of emailed tokens is false
+in every environment except `local`, and false even there once an email provider is
+configured.
+
+**Not included** (deliberately, and not P0-2): invitation acceptance, and
+authenticating *with* an API key. The key management surface the specification names
+is complete; using a key as a request credential is developer-platform work.
 
 #### P0-3 · Frontend cannot be built
 No `pnpm-lock.yaml`, no `next.config.*`, `tailwind.config.*`, `postcss.config.*` or

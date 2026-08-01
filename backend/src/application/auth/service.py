@@ -1,11 +1,13 @@
-"""Minimal authentication service for the demo vertical slice.
+"""Password login, refresh rotation, logout and session issuance.
 
-Scope is deliberately narrow: password login, refresh rotation, current user and
-logout. It reuses the already-tested primitives (Argon2id, RS256, opaque rotating
-refresh tokens with family-reuse revocation) rather than reimplementing them.
+Reuses the already-tested primitives (Argon2id, RS256, opaque rotating refresh
+tokens with family-reuse revocation) rather than reimplementing them. The rest of
+the surface lives beside this module: `registration`, `mfa`, `sessions`,
+`api_keys` and `oauth`.
 
-The full surface -- signup, MFA, Google OAuth, password reset, API keys, session
-listing -- is P0-2 and is intentionally NOT here.
+`issue_session` is the single place a session is created. Password login, a
+completed MFA challenge and a Google callback all funnel through it, so the
+session cap, the claim set and the audit line cannot drift between them.
 """
 
 from __future__ import annotations
@@ -43,6 +45,69 @@ from shared.utils.timeutil import utcnow
 logger = get_logger("application.auth")
 
 REFRESH_TTL_SECONDS = 604_800  # 7 days, sliding
+MFA_CHALLENGE_TTL_SECONDS = 300
+
+
+class MfaRequired(Exception):
+    """The password was right; a second factor is still outstanding.
+
+    Raised rather than returned so no caller can mistake a half-finished sign-in
+    for a session. There is no `AuthResult` here to accidentally hand out.
+    """
+
+    def __init__(self, challenge_token: str) -> None:
+        super().__init__("Multi-factor authentication is required.")
+        self.challenge_token = challenge_token
+
+
+async def create_mfa_challenge(*, tenant_id: UUID, user_id: UUID) -> str:
+    """Park a pending sign-in in Redis for a few minutes."""
+    import json
+    import secrets as _secrets
+
+    from infrastructure.caching.redis import get_redis, global_key
+
+    token = _secrets.token_urlsafe(32)
+    await get_redis().set(
+        global_key("mfa_challenge", token),
+        json.dumps({"user_id": str(user_id), "tenant_id": str(tenant_id)}),
+        ex=MFA_CHALLENGE_TTL_SECONDS,
+    )
+    return token
+
+
+async def consume_mfa_challenge(token: str) -> tuple[UUID, UUID]:
+    """Redeem a challenge exactly once. Returns (tenant_id, user_id).
+
+    `GETDEL` is atomic, so two racing submissions cannot both succeed -- a brute
+    force gets one attempt per challenge, not unlimited attempts against one.
+    """
+    import json
+
+    from infrastructure.caching.redis import get_redis, global_key
+
+    expired = "This sign-in attempt has expired. Please start again."
+    if not token:
+        raise Unauthenticated(expired)
+    raw = await get_redis().getdel(global_key("mfa_challenge", token))
+    if not raw:
+        raise Unauthenticated(expired)
+    try:
+        payload = json.loads(raw)
+        return UUID(payload["tenant_id"]), UUID(payload["user_id"])
+    except (TypeError, ValueError, KeyError) as exc:
+        raise Unauthenticated(expired) from exc
+
+
+async def load_principal(tenant_id: UUID, user_id: UUID) -> tuple[Tenant, list[Role], str, str]:
+    """Re-read the account behind a challenge or an OAuth callback."""
+    async with platform_session("authentication: reload principal") as session:
+        user = (await session.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+        if user is None or user.status != "active" or user.tenant_id != tenant_id:
+            raise Unauthenticated("This account can no longer sign in.")
+        tenant = (await session.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
+        roles = await _load_roles(session, user)
+        return tenant, roles, user.email, user.full_name
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +153,7 @@ def _claims_for_values(
     name: str,
     roles: list[Role],
     session_id: str,
+    mfa_verified: bool = False,
 ) -> AccessClaims:
     return AccessClaims(
         sub=str(user_id),
@@ -102,10 +168,11 @@ def _claims_for_values(
         permissions=[],
         scope=widest_scope(roles).value,
         session_id=session_id,
-        # The demo slice does not enrol MFA. Step-up protected operations
-        # (billing, export, tenant deletion) therefore remain refused, which is
-        # the correct behaviour rather than a bypass.
-        mfa_verified=False,
+        # A property of this session, not of the account: it is true only when
+        # this sign-in actually completed an MFA challenge. Step-up protected
+        # operations (billing, export, API-key creation, tenant deletion) consult
+        # it, so setting it from `user.mfa_enabled` would defeat the purpose.
+        mfa_verified=mfa_verified,
         authenticated_at=int(utcnow().timestamp()),
     )
 
@@ -166,13 +233,58 @@ async def login(email: str, password: str, tokens: TokenService) -> AuthResult:
     if not account_ok:
         raise Unauthenticated(generic)
 
-    plaintext, token_hash, jti = generate_refresh_token()
-    family_id = uuid7()
     async with tenant_session(tenant_id) as session:
         row = (await session.execute(select(User).where(User.id == user_id))).scalar_one()
         row.failed_login_count = 0
         row.locked_until = None
         row.last_login_at = utcnow()
+        mfa_enabled = row.mfa_enabled
+
+    assert tenant is not None  # narrowed by account_ok
+
+    if mfa_enabled:
+        # The password was correct but it is only the first factor, so no session
+        # exists yet. The challenge is opaque, single use and short lived; it
+        # carries no permissions and cannot be presented as a bearer token.
+        challenge = await create_mfa_challenge(tenant_id=tenant_id, user_id=user_id)
+        logger.info("auth_login_mfa_required", user_id=str(user_id))
+        raise MfaRequired(challenge)
+
+    logger.info("auth_login", user_id=str(user_id), tenant_id=str(tenant_id))
+    return await issue_session(
+        user_id=user_id,
+        tenant=tenant,
+        roles=roles,
+        email=profile_email,
+        name=profile_name,
+        tokens=tokens,
+        mfa_verified=False,
+    )
+
+
+async def issue_session(
+    *,
+    user_id: UUID,
+    tenant: Tenant,
+    roles: list[Role],
+    email: str,
+    name: str,
+    tokens: TokenService,
+    mfa_verified: bool = False,
+) -> AuthResult:
+    """Open a new refresh-token family and mint the matching access token.
+
+    Enforces the per-user session cap first. `sessions_to_evict` returns what must
+    go to make room for one more, so it runs before the insert rather than after.
+    """
+    from application.auth.sessions import enforce_session_cap
+
+    tenant_id = tenant.id
+    await enforce_session_cap(tenant_id=tenant_id, user_id=user_id)
+
+    plaintext, token_hash, jti = generate_refresh_token()
+    family_id = uuid7()
+    async with tenant_session(tenant_id) as session:
         session.add(
             RefreshToken(
                 tenant_id=tenant_id,
@@ -184,25 +296,31 @@ async def login(email: str, password: str, tokens: TokenService) -> AuthResult:
             )
         )
 
-    assert tenant is not None  # narrowed by account_ok
     access_token, expires_at = tokens.issue_access_token(
         _claims_for_values(
-            user_id, tenant_id, tenant.slug, profile_email, profile_name, roles, str(family_id)
+            user_id,
+            tenant_id,
+            tenant.slug,
+            email,
+            name,
+            roles,
+            str(family_id),
+            mfa_verified=mfa_verified,
         )
     )
-    logger.info("auth_login", user_id=str(user_id), tenant_id=str(tenant_id))
     return AuthResult(
         access_token=access_token,
         refresh_token=plaintext,
         expires_in=int((expires_at - utcnow()).total_seconds()),
         user={
             "id": str(user_id),
-            "email": profile_email,
-            "name": profile_name,
+            "email": email,
+            "name": name,
             "tenant_id": str(tenant_id),
             "tenant_slug": tenant.slug,
             "tenant_name": tenant.name,
             "roles": [r.value for r in roles],
+            "mfa_verified": mfa_verified,
         },
     )
 
