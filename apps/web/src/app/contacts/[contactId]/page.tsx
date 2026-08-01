@@ -4,6 +4,7 @@ import { apiFetch } from '@/lib/session';
 import { EditContactForm } from '@/features/crm/edit-contact-form';
 import { Timeline, type TimelineEntry } from '@/features/crm/timeline';
 import { TaskPanel, type TaskEntry } from '@/features/crm/task-panel';
+import { AppointmentPanel, type AppointmentEntry } from '@/features/crm/appointment-panel';
 import type { AccountOption } from '@/features/crm/new-contact-form';
 
 export const dynamic = 'force-dynamic';
@@ -34,14 +35,16 @@ export default async function ContactDetailPage({
   if (!result.ok || !result.data) notFound();
   const contact = result.data;
 
-  const [accountResult, timelineResult, taskResult] = await Promise.all([
+  const [accountResult, timelineResult, taskResult, appointmentResult] = await Promise.all([
     apiFetch<{ accounts: AccountOption[] }>('/accounts?page_size=200'),
     apiFetch<{ timeline: TimelineEntry[] }>(`/contacts/${params.contactId}/timeline`),
     apiFetch<{ tasks: TaskEntry[] }>(`/contacts/${params.contactId}/tasks`),
+    apiFetch<{ appointments: AppointmentEntry[] }>(`/contacts/${params.contactId}/appointments`),
   ]);
   const accounts = accountResult.data?.accounts ?? [];
   const timeline = timelineResult.data?.timeline ?? [];
   const tasks = taskResult.data?.tasks ?? [];
+  const appointments = appointmentResult.data?.appointments ?? [];
 
   return (
     <div className="space-y-8">
@@ -94,6 +97,8 @@ export default async function ContactDetailPage({
       <EditContactForm contact={contact} accounts={accounts} />
 
       <TaskPanel parent="contacts" parentId={contact.id} tasks={tasks} />
+
+      <AppointmentPanel appointments={appointments} contactId={contact.id} />
 
       <Timeline parent="contacts" parentId={contact.id} entries={timeline} />
     </div>

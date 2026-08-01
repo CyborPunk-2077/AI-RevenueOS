@@ -23,6 +23,10 @@ from api.v1.schemas import (
     AccountCreate,
     AccountUpdate,
     ActivityLogRequest,
+    AppointmentBook,
+    AppointmentCancel,
+    AppointmentOutcome,
+    AppointmentReschedule,
     ContactCreate,
     ContactUpdate,
     ConversationCreate,
@@ -613,3 +617,119 @@ async def receive_message(
     principal.require("message", "create")
     message = await _inbox(principal).receive(conversation_id, payload.model_dump())
     return success(message, request_id=_request_id(request))
+
+
+# --- appointments -------------------------------------------------------------
+
+appointments_router = APIRouter(prefix="/appointments", tags=["crm"])
+
+
+def _appointments(principal: Any) -> Any:
+    from application.crm.appointments import AppointmentService
+
+    return AppointmentService.for_principal(principal)
+
+
+@appointments_router.get("", summary="List appointments")
+async def list_appointments(
+    request: Request,
+    principal: CurrentPrincipal,
+    query: Annotated[ListQuery, Depends(list_query)],
+    appointment_status: Annotated[str | None, Query(alias="status", max_length=20)] = None,
+    upcoming: bool = False,
+) -> dict[str, Any]:
+    principal.require("appointment", "list")
+    page = await _appointments(principal).list_appointments(
+        query, status=appointment_status, upcoming=upcoming
+    )
+    return success(
+        {"appointments": page.items}, pagination=page.meta(), request_id=_request_id(request)
+    )
+
+
+@appointments_router.get("/calendar-sync", summary="Whether calendar sync is active")
+async def calendar_sync_status(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    """Gated on Google OAuth verification; reported honestly rather than assumed."""
+    principal.require("appointment", "list")
+    return success(_appointments(principal).calendar_sync_status(), request_id=_request_id(request))
+
+
+@appointments_router.post("", status_code=status.HTTP_201_CREATED, summary="Book an appointment")
+async def book_appointment(
+    payload: AppointmentBook, request: Request, response: Response, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    """409 if the slot is taken -- decided by a unique constraint, not a check."""
+    principal.require("appointment", "create")
+    appointment = await _appointments(principal).book(payload.model_dump())
+    response.headers["ETag"] = f'W/"{appointment["version"]}"'
+    return success(appointment, request_id=_request_id(request))
+
+
+@appointments_router.get("/{appointment_id}", summary="Read an appointment")
+async def read_appointment(
+    appointment_id: UUID, request: Request, response: Response, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("appointment", "read")
+    appointment = await _appointments(principal).get(appointment_id)
+    response.headers["ETag"] = f'W/"{appointment["version"]}"'
+    return success(appointment, request_id=_request_id(request))
+
+
+@appointments_router.post("/{appointment_id}/reschedule", summary="Move an appointment")
+async def reschedule_appointment(
+    appointment_id: UUID,
+    payload: AppointmentReschedule,
+    request: Request,
+    response: Response,
+    principal: CurrentPrincipal,
+    if_match: Annotated[int | None, Depends(parse_if_match)] = None,
+) -> dict[str, Any]:
+    principal.require("appointment", "update")
+    appointment = await _appointments(principal).reschedule(
+        appointment_id,
+        payload.start_at,
+        duration_minutes=payload.duration_minutes,
+        expected_version=if_match,
+    )
+    response.headers["ETag"] = f'W/"{appointment["version"]}"'
+    return success(appointment, request_id=_request_id(request))
+
+
+@appointments_router.post("/{appointment_id}/cancel", summary="Cancel and release the slot")
+async def cancel_appointment(
+    appointment_id: UUID,
+    payload: AppointmentCancel,
+    request: Request,
+    principal: CurrentPrincipal,
+    if_match: Annotated[int | None, Depends(parse_if_match)] = None,
+) -> dict[str, Any]:
+    principal.require("appointment", "update")
+    appointment = await _appointments(principal).cancel(
+        appointment_id, payload.reason, expected_version=if_match
+    )
+    return success(appointment, request_id=_request_id(request))
+
+
+@appointments_router.post("/{appointment_id}/outcome", summary="Record the outcome")
+async def record_appointment_outcome(
+    appointment_id: UUID,
+    payload: AppointmentOutcome,
+    request: Request,
+    principal: CurrentPrincipal,
+    if_match: Annotated[int | None, Depends(parse_if_match)] = None,
+) -> dict[str, Any]:
+    principal.require("appointment", "update")
+    appointment = await _appointments(principal).record_outcome(
+        appointment_id, payload.model_dump(), expected_version=if_match
+    )
+    return success(appointment, request_id=_request_id(request))
+
+
+@contacts_router.get("/{contact_id}/appointments", summary="Appointments for a contact")
+async def contact_appointments(
+    contact_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("contact", "read")
+    principal.require("appointment", "list")
+    appointments = await _appointments(principal).for_contact(contact_id)
+    return success({"appointments": appointments}, request_id=_request_id(request))

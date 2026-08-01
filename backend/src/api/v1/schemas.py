@@ -204,6 +204,33 @@ class DealStageMoveRequest(StrictModel):
     loss_reason: Annotated[str | None, Field(max_length=200)] = None
 
 
+class AppointmentBook(StrictModel):
+    title: Annotated[str, Field(min_length=1, max_length=250)]
+    start_at: datetime
+    duration_minutes: Annotated[int, Field(ge=5, le=24 * 60)] = 30
+    location_type: Literal["physical", "virtual", "phone"] = "physical"
+    location_detail: Annotated[str | None, Field(max_length=500)] = None
+    timezone: Annotated[str, Field(max_length=64)] = "Asia/Kolkata"
+    contact_id: UUID | None = None
+    deal_id: UUID | None = None
+    organizer_id: UUID | None = None
+
+
+class AppointmentReschedule(StrictModel):
+    start_at: datetime
+    duration_minutes: Annotated[int | None, Field(ge=5, le=24 * 60)] = None
+
+
+class AppointmentCancel(StrictModel):
+    reason: Annotated[str | None, Field(max_length=300)] = None
+
+
+class AppointmentOutcome(StrictModel):
+    status: Literal["completed", "no_show"]
+    outcome: Annotated[str | None, Field(max_length=80)] = None
+    outcome_note: Annotated[str | None, Field(max_length=5000)] = None
+
+
 class ConversationCreate(StrictModel):
     primary_channel: Literal["whatsapp", "email", "web_chat", "voice", "sms"] = "web_chat"
     subject: Annotated[str | None, Field(max_length=300)] = None
