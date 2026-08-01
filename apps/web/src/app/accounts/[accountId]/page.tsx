@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { apiFetch } from '@/lib/session';
+import { Timeline, type TimelineEntry } from '@/features/crm/timeline';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,10 +33,12 @@ export default async function AccountDetailPage({
   if (!result.ok || !result.data) notFound();
   const account = result.data;
 
-  const linked = await apiFetch<{ contacts: LinkedContact[] }>(
-    `/accounts/${params.accountId}/contacts`,
-  );
+  const [linked, timelineResult] = await Promise.all([
+    apiFetch<{ contacts: LinkedContact[] }>(`/accounts/${params.accountId}/contacts`),
+    apiFetch<{ timeline: TimelineEntry[] }>(`/accounts/${params.accountId}/timeline`),
+  ]);
   const contacts = linked.data?.contacts ?? [];
+  const timeline = timelineResult.data?.timeline ?? [];
 
   return (
     <div className="space-y-8">
@@ -96,6 +99,7 @@ export default async function AccountDetailPage({
           </ul>
         )}
       </section>
+    <Timeline parent="accounts" parentId={account.id} entries={timeline} />
     </div>
   );
 }

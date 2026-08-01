@@ -177,6 +177,24 @@ class AccountUpdate(StrictModel):
     owner_id: UUID | None = None
 
 
+class ActivityLogRequest(StrictModel):
+    """Only the types a human may log by hand; `system` is platform-written."""
+
+    activity_type: Literal["call", "email", "meeting", "note", "task", "whatsapp"]
+    subject: Annotated[str, Field(min_length=1, max_length=300)]
+    body: Annotated[str | None, Field(max_length=10_000)] = None
+
+
+class NoteCreateRequest(StrictModel):
+    body: Annotated[str, Field(min_length=1, max_length=10_000)]
+    is_pinned: bool = False
+
+
+class NoteUpdateRequest(StrictModel):
+    body: Annotated[str | None, Field(min_length=1, max_length=10_000)] = None
+    is_pinned: bool | None = None
+
+
 class LeadCreate(ContactIdentity):
     first_name: Annotated[str, Field(min_length=1, max_length=120)]
     last_name: Annotated[str | None, Field(max_length=120)] = None

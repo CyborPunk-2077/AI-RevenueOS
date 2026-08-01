@@ -47,11 +47,17 @@ APPROVAL_APPROVED: Final = "approval.approved"
 APPROVAL_REJECTED: Final = "approval.rejected"
 SYSTEM_QUOTA_WARNING: Final = "system.quota_warning"
 SYSTEM_INTEGRATION_DISCONNECTED: Final = "system.integration_disconnected"
+ACTIVITY_LOGGED: Final = "activity.logged"
+NOTE_ADDED: Final = "note.added"
+NOTE_UPDATED: Final = "note.updated"
 CONSENT_GRANTED: Final = "consent.granted"
 CONSENT_REVOKED: Final = "consent.revoked"
 
 PUBLIC_EVENT_TYPES: Final[frozenset[str]] = frozenset(
     {
+        ACTIVITY_LOGGED,
+        NOTE_ADDED,
+        NOTE_UPDATED,
         CONTACT_CREATED,
         CONTACT_UPDATED,
         CONTACT_DELETED,

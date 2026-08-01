@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { apiFetch } from '@/lib/session';
 import { EditContactForm } from '@/features/crm/edit-contact-form';
+import { Timeline, type TimelineEntry } from '@/features/crm/timeline';
 import type { AccountOption } from '@/features/crm/new-contact-form';
 
 export const dynamic = 'force-dynamic';
@@ -32,8 +33,12 @@ export default async function ContactDetailPage({
   if (!result.ok || !result.data) notFound();
   const contact = result.data;
 
-  const accountResult = await apiFetch<{ accounts: AccountOption[] }>('/accounts?page_size=200');
+  const [accountResult, timelineResult] = await Promise.all([
+    apiFetch<{ accounts: AccountOption[] }>('/accounts?page_size=200'),
+    apiFetch<{ timeline: TimelineEntry[] }>(`/contacts/${params.contactId}/timeline`),
+  ]);
   const accounts = accountResult.data?.accounts ?? [];
+  const timeline = timelineResult.data?.timeline ?? [];
 
   return (
     <div className="space-y-8">
@@ -84,6 +89,8 @@ export default async function ContactDetailPage({
       </section>
 
       <EditContactForm contact={contact} accounts={accounts} />
+
+      <Timeline parent="contacts" parentId={contact.id} entries={timeline} />
     </div>
   );
 }

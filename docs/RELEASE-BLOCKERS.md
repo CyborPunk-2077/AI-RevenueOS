@@ -287,9 +287,19 @@ with the API receiving `Host: api:8000`: create account 201, create linked conta
 201, list, open, edit, refresh persists, stale edit 412, search, and globex
 getting 404 "Not found" for both of acme's records.
 
+**Also done (2026-08-01): activities and notes.** Every contact and account now has
+a timeline. Activities are append-only -- the model says so and no update or delete
+route exists, because a logged call that can be rewritten later is not a record of
+what happened. Notes are editable by their author only: `note:update` is not a
+licence to rewrite a colleague's note under their name. `system` and
+`status_change` cannot be logged by a client, so a system record cannot be forged.
+A new handler stamps `last_contact_at` when a call, email, meeting or WhatsApp is
+logged -- notes deliberately do not count, and the stamp only moves forward.
+Verified by 16 further e2e tests and through the browser path.
+
 **Still open under P0-4:** deals and pipelines, conversations and messages,
 documents and files, appointments (admin side), analytics. Five modules, and the
-pattern to copy is now established twice over.
+pattern to copy is now established three times over.
 
 ---
 

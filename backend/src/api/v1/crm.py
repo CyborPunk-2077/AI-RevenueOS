@@ -19,7 +19,15 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from api.app.envelope import success
 from api.deps.idempotency import parse_if_match
 from api.deps.principal import CurrentPrincipal, ListQuery, list_query
-from api.v1.schemas import AccountCreate, AccountUpdate, ContactCreate, ContactUpdate
+from api.v1.schemas import (
+    AccountCreate,
+    AccountUpdate,
+    ActivityLogRequest,
+    ContactCreate,
+    ContactUpdate,
+    NoteCreateRequest,
+    NoteUpdateRequest,
+)
 
 contacts_router = APIRouter(prefix="/contacts", tags=["crm"])
 accounts_router = APIRouter(prefix="/accounts", tags=["crm"])
@@ -177,3 +185,101 @@ async def account_contacts(
 
     contacts = await AccountService.for_principal(principal).contacts_for(account_id)
     return success({"contacts": contacts}, request_id=_request_id(request))
+
+
+# --- timeline: activities and notes ------------------------------------------
+#
+# Mounted under both parents. The service resolves the parent through the scoped
+# repository first, so a timeline on another tenant's record is a 404 rather than
+# an empty list -- an empty list would confirm the id exists.
+
+notes_router = APIRouter(prefix="/notes", tags=["crm"])
+
+
+def _timeline(principal: Any) -> Any:
+    from application.crm.timeline import TimelineService
+
+    return TimelineService.for_principal(principal)
+
+
+@contacts_router.get("/{contact_id}/timeline", summary="Activities and notes for a contact")
+async def contact_timeline(
+    contact_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("contact", "read")
+    principal.require("activity", "list")
+    entries = await _timeline(principal).timeline("contact", contact_id)
+    return success({"timeline": entries}, request_id=_request_id(request))
+
+
+@contacts_router.post(
+    "/{contact_id}/activities", status_code=status.HTTP_201_CREATED, summary="Log an activity"
+)
+async def log_contact_activity(
+    contact_id: UUID, payload: ActivityLogRequest, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("activity", "create")
+    entry = await _timeline(principal).log_activity("contact", contact_id, payload.model_dump())
+    return success(entry, request_id=_request_id(request))
+
+
+@contacts_router.post(
+    "/{contact_id}/notes", status_code=status.HTTP_201_CREATED, summary="Add a note"
+)
+async def add_contact_note(
+    contact_id: UUID, payload: NoteCreateRequest, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("note", "create")
+    entry = await _timeline(principal).add_note("contact", contact_id, payload.model_dump())
+    return success(entry, request_id=_request_id(request))
+
+
+@accounts_router.get("/{account_id}/timeline", summary="Activities and notes for an account")
+async def account_timeline(
+    account_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("account", "read")
+    principal.require("activity", "list")
+    entries = await _timeline(principal).timeline("account", account_id)
+    return success({"timeline": entries}, request_id=_request_id(request))
+
+
+@accounts_router.post(
+    "/{account_id}/activities", status_code=status.HTTP_201_CREATED, summary="Log an activity"
+)
+async def log_account_activity(
+    account_id: UUID, payload: ActivityLogRequest, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("activity", "create")
+    entry = await _timeline(principal).log_activity("account", account_id, payload.model_dump())
+    return success(entry, request_id=_request_id(request))
+
+
+@accounts_router.post(
+    "/{account_id}/notes", status_code=status.HTTP_201_CREATED, summary="Add a note"
+)
+async def add_account_note(
+    account_id: UUID, payload: NoteCreateRequest, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("note", "create")
+    entry = await _timeline(principal).add_note("account", account_id, payload.model_dump())
+    return success(entry, request_id=_request_id(request))
+
+
+@notes_router.patch("/{note_id}", summary="Edit your own note")
+async def update_note(
+    note_id: UUID,
+    payload: NoteUpdateRequest,
+    request: Request,
+    response: Response,
+    principal: CurrentPrincipal,
+    if_match: Annotated[int | None, Depends(parse_if_match)] = None,
+) -> dict[str, Any]:
+    principal.require("note", "update")
+    # Authorship is enforced in the service: `note:update` is not a licence to
+    # rewrite a colleague's note under their name.
+    note = await _timeline(principal).update_note(
+        note_id, payload.model_dump(exclude_unset=True), expected_version=if_match
+    )
+    response.headers["ETag"] = f'W/"{note["version"]}"'
+    return success(note, request_id=_request_id(request))

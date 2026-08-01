@@ -13,6 +13,7 @@ def build_v1_router(settings: Settings) -> APIRouter:
     router.include_router(auth.router)
     router.include_router(crm.contacts_router)
     router.include_router(crm.accounts_router)
+    router.include_router(crm.notes_router)
     router.include_router(meta.router)
     router.include_router(tenant.router)
     router.include_router(leads.router)

@@ -129,8 +129,55 @@ async def propagate_account_rename(event: dict[str, Any]) -> None:
         )
 
 
+async def stamp_last_contact_at(event: dict[str, Any]) -> None:
+    """Record when a contact was last actually spoken to.
+
+    Runs on activity.logged. Only outward interactions count -- a note to
+    yourself is not contact -- and the stamp only moves forward, so a redelivery
+    or an out-of-order event cannot drag it backwards.
+    """
+    if event.get("event_type") != "activity.logged":
+        return
+    payload = event.get("payload") or {}
+    if payload.get("entity_type") != "contact":
+        return
+    if payload.get("activity_type") not in {"call", "email", "meeting", "whatsapp"}:
+        return
+
+    tenant_id = _tenant_of(event)
+    contact_id = payload.get("entity_id")
+    if tenant_id is None or not contact_id:
+        return
+
+    from sqlalchemy import select
+
+    from infrastructure.database.models.crm import Activity, Contact
+    from infrastructure.database.session import tenant_session
+
+    async with tenant_session(tenant_id) as session:
+        activity = (
+            await session.execute(
+                select(Activity).where(Activity.id == UUID(str(event["resource_id"])))
+            )
+        ).scalar_one_or_none()
+        if activity is None or activity.created_at is None:
+            return
+
+        contact = (
+            await session.execute(select(Contact).where(Contact.id == UUID(str(contact_id))))
+        ).scalar_one_or_none()
+        if contact is None:
+            return
+        if contact.last_contact_at is not None and contact.last_contact_at >= activity.created_at:
+            return
+        contact.last_contact_at = activity.created_at
+
+    logger.info("crm_last_contact_stamped", tenant_id=str(tenant_id), contact_id=str(contact_id))
+
+
 def register_crm_handlers(dispatcher: Any) -> None:
     """Subscribe on the relay. Called wherever the outbox is drained."""
     dispatcher.subscribe("contact.created", sync_contact_company)
     dispatcher.subscribe("contact.updated", sync_contact_company)
     dispatcher.subscribe("account.updated", propagate_account_rename)
+    dispatcher.subscribe("activity.logged", stamp_last_contact_at)

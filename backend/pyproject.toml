@@ -4,110 +4,175 @@ version = "0.24.0"
 description = "AI RevenueOS - multi-tenant B2B RevenueOS for Indian SMEs"
 requires-python = ">=3.10"
 dependencies = [
-  "fastapi>=0.115",
-  "pydantic>=2.7",
-  "pydantic-settings>=2.3",
-  "sqlalchemy[asyncio]>=2.0.30",
-  "alembic>=1.13",
-  "asyncpg>=0.29",
-  # Alembic runs migrations synchronously; asyncpg cannot serve that driver.
-  "psycopg[binary]>=3.1",
-  "uvicorn[standard]>=0.30",
-  "gunicorn>=22.0",
-  "structlog>=24.1",
-  "redis>=5.0",
-  "celery>=5.4",
-  "argon2-cffi>=23.1",
-  "pyjwt[crypto]>=2.8",
-  "cryptography>=42.0",
-  "httpx>=0.27",
-  "jinja2>=3.1",
-  "python-multipart>=0.0.9",
-  "email-validator>=2.1",
-  "prometheus-client>=0.20",
-  "pgvector>=0.2.5",
-  "boto3>=1.34",
-  "pyotp>=2.9",
+    "fastapi>=0.115",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "alembic>=1.13",
+    "asyncpg>=0.29",
+    "psycopg[binary]>=3.1",
+    "uvicorn[standard]>=0.30",
+    "gunicorn>=22.0",
+    "structlog>=24.1",
+    "redis>=5.0",
+    "celery>=5.4",
+    "argon2-cffi>=23.1",
+    "pyjwt[crypto]>=2.8",
+    "cryptography>=42.0",
+    "httpx>=0.27",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+    "email-validator>=2.1",
+    "prometheus-client>=0.20",
+    "pgvector>=0.2.5",
+    "boto3>=1.34",
+    "pyotp>=2.9",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.2", "pytest-asyncio>=0.23", "pytest-cov>=5.0",
-  "ruff>=0.4", "mypy>=1.10", "import-linter>=2.0",
-  "aiosqlite>=0.20", "fakeredis>=2.23", "respx>=0.21", "freezegun>=1.5",
-  "pgserver>=0.1.4",
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "import-linter>=2.0",
+    "aiosqlite>=0.20",
+    "fakeredis>=2.23",
+    "respx>=0.21",
+    "freezegun>=1.5",
+    "pgserver>=0.1.4",
 ]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-src = ["src"]
+src = [
+    "src",
+]
 
 [tool.ruff.lint]
-select = ["E","F","I","N","UP","B","A","C4","T20","SIM","RUF","ASYNC","S","PTH","RET","ARG"]
+select = [
+    "E",
+    "F",
+    "I",
+    "N",
+    "UP",
+    "B",
+    "A",
+    "C4",
+    "T20",
+    "SIM",
+    "RUF",
+    "ASYNC",
+    "S",
+    "PTH",
+    "RET",
+    "ARG",
+]
 ignore = [
-  "S101",     # asserts are the assertion mechanism in tests
-  "RUF012",   # ClassVar annotations on Pydantic/SQLAlchemy declarative attributes
-  "B008",     # FastAPI Depends()/Header() in defaults is the framework idiom
-  "A003",     # `id`, `type` etc. are the domain's own vocabulary
-  "ARG002",   # interface conformance: overridden methods keep the base signature
-  "ARG003",
-  "RET504",   # a named result before return documents intent
-  # Exception names mirror the public API error codes exactly (UNAUTHENTICATED ->
-  # Unauthenticated, NOT_FOUND -> NotFound). An `Error` suffix would break that
-  # one-to-one mapping, which is what makes the envelope contract auditable.
-  "N818",
+    "S101",
+    "RUF012",
+    "B008",
+    "A003",
+    "ARG002",
+    "ARG003",
+    "RET504",
+    "N818",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S105","S106","S311","ARG001","PTH","S306","B017"]
-"alembic/**" = ["ARG001","T201"]
-# Route handlers must accept every path parameter FastAPI binds, even when the
-# handler itself does not read it (the router does).
-"src/api/v1/*.py" = ["ARG001"]
-# SQLAlchemy and FastAPI callbacks have fixed signatures.
-"src/api/deps/principal.py" = ["ARG001"]
-"src/infrastructure/database/session.py" = ["ARG001"]
-"src/application/ai/registry.py" = ["ARG001"]
-"src/domain/appointments/slots.py" = ["ARG001"]
-# Celery's task_routes callback and the workflow action-runner protocol both have
-# fixed signatures; unused parameters are part of the contract.
-"src/infrastructure/celery/queues.py" = ["ARG001"]
-"src/infrastructure/celery/tasks/workflow.py" = ["ARG001"]
-
-[[tool.mypy.overrides]]
-# Celery ships no type information, so its base class and signal decorators are
-# untyped. The rule is disabled for this package only, not globally.
-module = "infrastructure.celery.*"
-disallow_subclassing_any = false
-disallow_untyped_decorators = false
+"tests/**" = [
+    "S105",
+    "S106",
+    "S311",
+    "ARG001",
+    "PTH",
+    "S306",
+    "B017",
+]
+"alembic/**" = [
+    "ARG001",
+    "T201",
+]
+"src/api/v1/*.py" = [
+    "ARG001",
+]
+"src/api/deps/principal.py" = [
+    "ARG001",
+]
+"src/infrastructure/database/session.py" = [
+    "ARG001",
+]
+"src/application/ai/registry.py" = [
+    "ARG001",
+]
+"src/domain/appointments/slots.py" = [
+    "ARG001",
+]
+"src/infrastructure/celery/queues.py" = [
+    "ARG001",
+]
+"src/infrastructure/celery/tasks/workflow.py" = [
+    "ARG001",
+]
+"tests/e2e/test_crm_timeline.py" = [
+    "F811",
+]
 
 [tool.mypy]
 python_version = "3.10"
 strict = true
 mypy_path = "src"
-packages = ["domain","application","infrastructure","api","shared"]
-plugins = ["pydantic.mypy"]
+packages = [
+    "domain",
+    "application",
+    "infrastructure",
+    "api",
+    "shared",
+]
+plugins = [
+    "pydantic.mypy",
+]
 disallow_any_explicit = false
 warn_unused_ignores = false
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "infrastructure.celery.*"
+disallow_subclassing_any = false
+disallow_untyped_decorators = false
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-pythonpath = ["src"]
-testpaths = ["tests"]
+pythonpath = [
+    "src",
+]
+testpaths = [
+    "tests",
+]
 addopts = "-q --strict-markers"
 markers = [
-  "postgres: requires a real PostgreSQL instance",
-  "slow: long running",
-  "contract: provider/API contract test",
-  "security: security control test",
+    "postgres: requires a real PostgreSQL instance",
+    "slow: long running",
+    "contract: provider/API contract test",
+    "security: security control test",
 ]
 
 [tool.coverage.run]
-source = ["src"]
+source = [
+    "src",
+]
 branch = true
-omit = ["*/alembic/*", "*/__main__.py"]
+omit = [
+    "*/alembic/*",
+    "*/__main__.py",
+]
 
 [tool.coverage.report]
-exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError", "@overload"]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+]
