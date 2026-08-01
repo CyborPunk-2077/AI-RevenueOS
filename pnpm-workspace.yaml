@@ -1,3 +1,9 @@
+# The workspace is `apps/*` only.
+#
+# `packages/*` was six empty directories with no package.json, no source and
+# nothing tracked in Git. Including them in the glob made every `pnpm install`
+# emit warnings about workspace members that do not exist, and `turbo run build`
+# resolve a dependency graph with phantom nodes. They are local artefacts, not
+# code. When a shared package is actually written, add `packages/*` back.
 packages:
   - "apps/*"
-  - "packages/*"

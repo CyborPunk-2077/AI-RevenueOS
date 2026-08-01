@@ -105,6 +105,10 @@ arch: ## Enforce module boundaries
 test: ## Run the full backend suite
 	$(BACKEND) pytest
 
+.PHONY: test-web
+test-web: ## Frontend unit tests (vitest, jsdom)
+	pnpm --filter @airevenueos/web test
+
 .PHONY: test-unit
 test-unit: ## Unit tests only
 	$(BACKEND) pytest tests/unit -q
@@ -127,9 +131,14 @@ security: ## SAST, dependency and secret scanning
 	$(BACKEND) bandit -r src -ll || true
 	gitleaks detect --no-banner || true
 
+.PHONY: build-web
+build-web: ## Production Next build (catches what lint and tsc do not)
+	pnpm --filter @airevenueos/web build
+
 .PHONY: e2e
-e2e: ## Playwright browser journeys
-	pnpm test:e2e
+e2e: ## Playwright browser journeys (needs a running stack + DEMO_PASSWORD)
+	pnpm --filter @airevenueos/web exec playwright install chromium
+	pnpm --filter @airevenueos/web test:e2e
 
 .PHONY: a11y
 a11y: ## Automated accessibility checks
@@ -140,7 +149,7 @@ load: ## k6 load profiles
 	k6 run infra/k6/normal.js
 
 .PHONY: verify
-verify: lint typecheck arch test ## Everything CI runs on a pull request
+verify: lint typecheck arch test test-web build-web ## Everything CI runs on a pull request
 
 .PHONY: evidence
 evidence: ## Regenerate the acceptance evidence matrix

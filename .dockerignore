@@ -95,6 +95,13 @@ docs
 *.md
 !README.md
 
+# --- superseded lockfile ----------------------------------------------------
+# The project is pnpm (see `packageManager` in package.json). An npm lockfile left
+# in the context would be dead weight and an invitation to build with the wrong
+# tool; the Dockerfile now runs `pnpm install --frozen-lockfile`.
+apps/web/package-lock.json
+
 # What is deliberately kept: all application source, package.json,
-# package-lock.json, pnpm-lock.yaml, pnpm-workspace.yaml, turbo.json, tsconfig,
-# next.config.*, tailwind.config.*, postcss.config.* and next-env.d.ts.
+# pnpm-lock.yaml, pnpm-workspace.yaml, turbo.json, tsconfig, .eslintrc.*,
+# vitest.config.ts, next.config.*, tailwind.config.*, postcss.config.* and
+# next-env.d.ts.

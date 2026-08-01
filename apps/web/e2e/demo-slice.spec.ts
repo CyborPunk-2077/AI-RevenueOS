@@ -5,8 +5,9 @@ import { expect, test } from '@playwright/test';
  * a second tenant cannot see the first tenant's record.
  *
  * Requires the demo stack to be running and seeded:
- *   make demo            (terminal 1)
- *   DEMO_PASSWORD=... npx playwright test   (terminal 2)
+ *   .\scripts\demo.ps1 -Password 'your-local-passphrase'      (terminal 1)
+ *   $env:DEMO_PASSWORD='your-local-passphrase'
+ *   pnpm --filter @airevenueos/web test:e2e                    (terminal 2)
  */
 const PASSWORD = process.env.DEMO_PASSWORD ?? 'demo-local-passphrase-2026';
 const ACME = 'asha@acme.test';
@@ -54,7 +55,7 @@ test('sign in, create, open, edit and persist across a refresh', async ({ page }
   await expect(page.getByTestId('lead-name')).toContainText(`${surname}Edited`);
 });
 
-test('a second tenant cannot see the first tenant a record', async ({ page, context }) => {
+test('a second tenant cannot see the first tenant\'s record', async ({ page, context }) => {
   await signIn(page, ACME);
   await page.getByTestId('new-lead').click();
   await page.getByLabel('First name').fill('AcmePrivate');

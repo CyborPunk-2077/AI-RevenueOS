@@ -36,3 +36,11 @@ test-results/
 .dev-keys/
 
 apps/web/node_modules/
+# Superseded by pnpm-lock.yaml. The project's packageManager is pnpm; an npm
+# lockfile alongside it drifts silently and builds a different dependency tree.
+apps/web/package-lock.json
+
+# An early revision of the ESLint config. `.eslintrc.js` supersedes it (JSON
+# cannot carry the comments explaining why the file has to exist at all) and
+# takes precedence anyway. Left on disk only because it cannot be removed here.
+apps/web/.eslintrc.json
