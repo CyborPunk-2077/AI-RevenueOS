@@ -7,9 +7,14 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const API_BASE = process.env.API_INTERNAL_URL ?? 'http://localhost:8000';
-const SESSION_COOKIE = '__Host-airev-session';
-const CSRF_COOKIE = '__Host-airev-csrf';
+import {
+  API_BASE,
+  cookieNames,
+  readAccessCookie,
+  readSessionCookie,
+  rotateSession,
+} from '@/lib/session';
+
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 const HOP_BY_HOP = new Set([
@@ -17,10 +22,20 @@ const HOP_BY_HOP = new Set([
 ]);
 
 async function handler(request: NextRequest): Promise<NextResponse> {
+  // /api/auth/* is handled by dedicated routes that manage cookies.
+  if (request.nextUrl.pathname.startsWith('/api/auth/')) {
+    return NextResponse.json(
+      { error: { code: 'NOT_FOUND', message: 'Not found.' } },
+      { status: 404 },
+    );
+  }
+
   // Double-submit CSRF plus a strict Origin check for every unsafe request.
   if (UNSAFE.has(request.method)) {
     const headerToken = request.headers.get('x-csrf-token');
-    const cookieToken = request.cookies.get(CSRF_COOKIE)?.value;
+    const cookieToken =
+      request.cookies.get(cookieNames(true).csrf)?.value ??
+      request.cookies.get(cookieNames(false).csrf)?.value;
     if (!headerToken || !cookieToken || headerToken !== cookieToken) {
       return NextResponse.json(
         {
@@ -33,7 +48,17 @@ async function handler(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  const accessToken = await exchangeSessionForAccessToken(request.cookies.get(SESSION_COOKIE)?.value);
+  const secure = request.nextUrl.protocol === 'https:';
+  const names = cookieNames(secure);
+
+  let accessToken = readAccessCookie(request.cookies) ?? null;
+  let rotated: Awaited<ReturnType<typeof rotateSession>> = null;
+
+  if (!accessToken) {
+    const session = readSessionCookie(request.cookies);
+    rotated = session ? await rotateSession(session) : null;
+    accessToken = rotated?.accessToken ?? null;
+  }
 
   const upstream = new URL(request.nextUrl.pathname.replace(/^\/api/, '/v1') + request.nextUrl.search, API_BASE);
   const headers = new Headers();
@@ -56,21 +81,26 @@ async function handler(request: NextRequest): Promise<NextResponse> {
     const value = response.headers.get(key);
     if (value) out.headers.set(key, value);
   }
+  // If the session was rotated during this request, persist both new values.
+  if (rotated) {
+    const options = {
+      httpOnly: true,
+      secure,
+      sameSite: 'lax' as const,
+      path: '/',
+    };
+    out.cookies.set(names.session, rotated.refreshToken, {
+      ...options,
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    out.cookies.set(names.access, rotated.accessToken, {
+      ...options,
+      maxAge: rotated.expiresIn,
+    });
+  }
+
   // A token is never written into a response body or a readable cookie.
   return out;
-}
-
-async function exchangeSessionForAccessToken(session: string | undefined): Promise<string | null> {
-  if (!session) return null;
-  const response = await fetch(new URL('/v1/auth/refresh', API_BASE), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ refresh_token: session }),
-    cache: 'no-store',
-  });
-  if (!response.ok) return null;
-  const payload = (await response.json()) as { data?: { access_token?: string } };
-  return payload.data?.access_token ?? null;
 }
 
 export const GET = handler;

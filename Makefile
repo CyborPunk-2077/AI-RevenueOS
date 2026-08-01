@@ -67,6 +67,20 @@ migration: ## Create a migration: make migration m="add table"
 seed: ## Seed plans, permissions and industry templates
 	$(BACKEND) python src/scripts/seed.py
 
+.PHONY: seed-demo
+seed-demo: ## Seed two demo tenants, users and sample leads (LOCAL ONLY)
+	$(BACKEND) python src/scripts/seed_demo.py
+
+.PHONY: demo
+demo: ## One command: start the stack, migrate, seed, print the sign-in details
+	$(COMPOSE) up -d --build postgres redis api web
+	@echo "waiting for the API..."
+	@until curl -sf http://localhost:8000/health/liveness >/dev/null; do sleep 1; done
+	$(MAKE) migrate seed seed-demo
+	@echo ""
+	@echo "  Open http://localhost:3000"
+	@echo ""
+
 .PHONY: lint
 lint: ## Lint backend and frontend
 	$(BACKEND) ruff check src tests

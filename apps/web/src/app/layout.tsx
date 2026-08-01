@@ -15,7 +15,11 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-export function RootLayout({ children }: { children: React.ReactNode }): JSX.Element {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element {
   return (
     <html lang="en-IN" suppressHydrationWarning>
       <body className="min-h-screen bg-background text-foreground antialiased">
@@ -35,5 +39,3 @@ export function RootLayout({ children }: { children: React.ReactNode }): JSX.Ele
     </html>
   );
 }
-
-export default RootLayout;

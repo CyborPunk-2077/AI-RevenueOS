@@ -1,0 +1,49 @@
+AI RevenueOS - demo vertical slice evidence
+date: 2026-08-01
+
+GATES
+  ruff check                All checks passed!
+  ruff format --check       202 files already formatted
+  mypy (strict)             Success: no issues found in 154 source files
+  import-linter             Contracts: 6 kept, 0 broken
+  release gates             8/8 passed
+  tests                     739 passed (unit 503, integration 53, contract 146, e2e 37)
+                            was 726 before this milestone
+
+FRONTEND BUILD  (npm; run off the mounted volume - see limitation below)
+  tsc --noEmit              clean
+  next build                Compiled successfully - 8 routes
+                            /  /login  /leads  /leads/[leadId]
+                            /api/auth/login  /api/auth/logout  /api/[...proxy]  /_not-found
+
+LIVE STACK  (real uvicorn + real `next start` + real PostgreSQL 16 + real Redis)
+  API  : True | WEB : True
+  GET  /login           -> 200 | form: True
+  POST /api/auth/login  -> 200 | cookie: True
+  GET  /leads           -> 200 | seeded 'Meera': True
+  POST /api/leads       -> 201
+  GET  /leads (new row) : True
+  GET  /leads/{id}      -> 200 | name shown: True
+  PATCH /api/leads/{id} -> 200
+  page refresh shows edit: True
+  tenant B opens A's URL -> 404 | 'Not found': True
+  tenant B list leaks A : False
+
+TENANT ISOLATION  (tests/e2e/test_demo_vertical_slice.py, 13 tests, real PostgreSQL)
+  second tenant cannot read the first tenant's lead        404 NOT_FOUND
+  second tenant cannot edit it, and the record is untouched
+  each tenant's list contains only its own records
+  a forged HS256 token is rejected
+  a rotated refresh token cannot be replayed
+  a stale edit is refused                                  412 PRECONDITION_FAILED
+
+ENVIRONMENT LIMITATION
+  Playwright's browser could not be installed: `npx playwright install chromium`
+  requires system packages that need root, which this sandbox does not have.
+  The same flow was therefore verified over real HTTP against the real servers
+  (above) rather than through a real browser DOM.
+  The Playwright spec is committed at apps/web/e2e/demo-slice.spec.ts.
+  To run it locally:  cd apps/web && npx playwright install chromium && npx playwright test
+
+  `npm install` also cannot complete inside the mounted volume (it cannot rename
+  directories). It works normally on an ordinary filesystem.

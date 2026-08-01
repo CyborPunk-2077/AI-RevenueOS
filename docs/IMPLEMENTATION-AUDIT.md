@@ -8,6 +8,17 @@ there are no authentication endpoints, six modules have no service layer, and ev
 provider integration is unactivated. GA is blocked by 5 P0 items, of which 3 are
 code gaps and 2 are external gates.
 
+> **Update 2026-08-01 — demo vertical slice.** One tenant-scoped CRM flow now runs
+> end to end in a browser: sign in (Argon2id + RS256, no bypass) → list → create →
+> open → edit → refresh, with a second tenant provably unable to reach the first
+> tenant's record. This is a narrow slice between P0-1 and P0-2, not P0-2 itself:
+> only `/v1/auth/{login,refresh,logout,me}` exist; signup, MFA, Google OAuth,
+> password reset, API keys and session management remain open.
+> Evidence: `docs/demo-slice-evidence.txt`. Suite 726 → **739 passing**.
+>
+> Five real defects were found and fixed while making it work, listed in
+> `docs/RELEASE-BLOCKERS.md` under "Demo slice".
+>
 > **Update 2026-08-01 — P0-1 (worker tier) is RESOLVED.** `infrastructure/celery/`
 > now exists with all 8 queues, tenant-safe header context, retry classification,
 > three idempotency layers, durable dead lettering with replay, Beat schedules at
@@ -150,7 +161,8 @@ Status: **IV** implemented and verified · **IU** implemented but unverified ·
 | M02 | Environments, IaC, CI/CD, observability | **P / XB** | `infra/terraform/modules/{network,data,edge}` (598 lines HCL), `envs/prod`, 3 workflows | Terraform **never `init`/`validate`d** (no AWS account, no provider download). Only `envs/prod` exists — dev/staging/sandbox are referenced by `deploy.yml` but absent. `infra/scripts/verify-restore.sh`, `infra/zap/rules.tsv`, `infra/k6/peak.js` referenced by CI but **missing** |
 | M03 | Database, migrations, outbox, tenancy | **IV** | 104 tables / 4 schemas; migrations `0001`+`0002` verified up→down→up on PostgreSQL 16; RLS enforced+forced on 95 tables incl. partitions; `SqlAlchemyUnitOfWork` commits state+outbox in one transaction; `OutboxDispatcher` with `SKIP LOCKED`, backoff, DLQ. 19 integration tests | — |
 | M04 | Auth, sessions, RBAC, security | **P** | Argon2id `m=65536,t=3,p=4`; RS256+JWKS with `alg=none`/HS-confusion rejection; refresh rotation with family-reuse revocation; TOTP + bcrypt recovery codes; envelope encryption KMS→KEK→DEK; role matrix; sliding-window limiter. 90 tests | **No auth endpoints exist.** `/v1/auth/*` (signup, login, refresh, logout, MFA, Google OAuth, sessions, API keys) is entirely absent — the primitives are built and tested, the surface is not. The BFF proxy calls `/v1/auth/refresh`, which 404s |
-| M05 | Design system and app shell | **M** | 9 TS/TSX files (~560 lines): layout, BFF proxy, query-key scoping, tenant switch, 2 feature components | **Zero `page.tsx`** — no route renders. No Next/Tailwind/PostCSS config, no `next-env.d.ts`, no lockfile, no Storybook, no component tests. `next build` cannot run |
+| M05 | Design system and app shell | **P** (was M) | Now builds and runs: `next build` succeeds, 8 routes, login + leads list + lead detail/edit render against the live API. Still missing the full route tree, component library, Storybook and a11y automation | see P0-3 |
+| ~~M05 (old row)~~ | Design system and app shell | ~~M~~ | 9 TS/TSX files (~560 lines): layout, BFF proxy, query-key scoping, tenant switch, 2 feature components | **Zero `page.tsx`** — no route renders. No Next/Tailwind/PostCSS config, no `next-env.d.ts`, no lockfile, no Storybook, no component tests. `next build` cannot run |
 | M06 | Onboarding, templates, plans | **IV** | 8 mandatory + 1 generic template as versioned JSON; `apply_template` preserves customisation and rejects guardrail weakening; 3 plans with documented limits. 105 tests | Onboarding **state machine** (`GET/PATCH /onboarding/state`, `POST complete`) not implemented; only `POST /onboarding/apply-template` exists |
 | M07 | CRM foundation | **P** | Schema complete: contacts, accounts, activities, tasks, notes, tags, custom fields, saved views, SLA. Constraints and partial unique indexes verified | **No CRM service or endpoints.** No contact/account CRUD, merge, timeline, import/export. Schema only |
 | M08 | Leads, forms, dedupe, assignment | **P** | `LeadService` (capture, get, update, duplicates, qualify, review, convert) now role-scoped; dedupe with confidence banding; source events always preserved. 24 E2E tests | Form builder/publish, CSV import, webhook capture, assignment-rule execution not implemented. `POST /leads/bulk`, `/deduplicate`, `/merge`, `/assign`, `/disqualify`, `/restore` absent |

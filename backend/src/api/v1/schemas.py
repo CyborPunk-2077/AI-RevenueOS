@@ -18,6 +18,20 @@ class StrictModel(BaseModel):
     model_config = STRICT
 
 
+class LoginRequest(StrictModel):
+    email: Annotated[str, Field(min_length=3, max_length=320)]
+    password: Annotated[str, Field(min_length=1, max_length=256)]
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return normalize_email(v)
+
+
+class RefreshRequest(StrictModel):
+    refresh_token: Annotated[str, Field(min_length=8, max_length=512)]
+
+
 class ContactIdentity(StrictModel):
     email: str | None = None
     phone: str | None = None

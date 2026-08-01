@@ -9,6 +9,7 @@ No release gate may be waived without recorded evidence.
 
 | P0 | Status |
 |---|---|
+| *(demo slice)* | one tenant-scoped CRM flow runs in a browser — see below |
 | P0-1 worker tier | **RESOLVED** — 34 integration tests on real Postgres + Redis + Celery |
 | P0-2 auth endpoints | open |
 | P0-3 frontend build | open |
@@ -77,6 +78,35 @@ workflow action handlers and the outbound webhook HTTP transport are stubs that
 report `pending_handler` / `pending_transport` rather than claiming success. The
 queues, retry, idempotency, DLQ and scheduling around them are complete.
 
+### Demo slice (2026-08-01) — narrow, between P0-1 and P0-2
+
+A single vertical slice was delivered so the product is visible locally: sign in →
+list → create → open → edit → refresh, plus proven tenant isolation. It added
+`/v1/auth/{login,refresh,logout,me}`, a two-tenant demo seed, and 8 Next.js routes.
+It did **not** start P0-2, P0-3 or P0-4 proper.
+
+Five real defects were found and fixed:
+
+| # | Severity | Defect |
+|---|---|---|
+| D1 | **P1 correctness** | The tenant RLS policy cast `''::uuid` when no tenant was bound. A transaction-local GUC resets to the empty string, not NULL, so the next pooled use raised 22P02 — a 500 instead of a clean denial. Migration 0005 wraps every clause in `NULLIF`, so it fails closed. |
+| D2 | **P1 usability** | `Settings` crashed on boot with the comma-separated `TRUSTED_HOSTS` / `CORS_ALLOWED_ORIGINS` that `.env.example` documents: pydantic-settings JSON-decodes complex types before validators run. Fixed with `NoDecode`. |
+| D3 | **P1 correctness** | The access token embedded all ~720 owner permissions, making the session cookie exceed the header limit (HTTP 431). Permissions are now derived from roles at the request boundary; an explicit claim still wins, so custom roles remain possible. |
+| D4 | **P1 correctness** | The BFF refreshed on every server render, rotating the refresh token while the browser still held the previous one. The second request looked like replay and the server correctly revoked the whole family. The BFF now holds a short-lived HttpOnly access token and refreshes only inside route handlers. |
+| D5 | P2 | Cookies were marked `Secure` based on `NODE_ENV`, so a local production build over http silently failed to sign in. The flag now follows the request scheme; HTTPS still gets the strict `__Host-` prefix. |
+
+Authentication needs to read a user before a tenant is known, so migration 0004 adds
+a **SELECT-only** policy on `app.users` and `app.refresh_tokens` gated on
+`app.platform_context`. Writes stay governed by the tenant policy alone, so no
+caller can write across tenants. Every auth write runs bound to the resolved tenant.
+
+**Not delivered by the slice** (still P0-2): signup, MFA enrolment and verification,
+Google OAuth, password reset, email verification, API keys, session listing and
+revocation, and rate limiting on the auth routes. Step-up-protected operations
+correctly remain refused because the slice never sets `mfa_verified`.
+
+---
+
 #### P0-2 · No authentication endpoints
 Every auth primitive is built and tested (Argon2id, RS256/JWKS, refresh rotation with
 family-reuse revocation, TOTP, step-up MFA) but `/v1/auth/*` does not exist. Nothing
@@ -85,7 +115,8 @@ can log in. The BFF exchanges its session cookie at `/v1/auth/refresh`, which 40
 **Blocks:** M04, M05 · criteria 21, and every criterion needing an authenticated UI
 
 **Remediation**
-1. Implement `POST /auth/{signup,login,logout,logout-all,refresh,forgot-password,
+1. `login`, `refresh`, `logout` and `GET /auth/me` now exist (demo slice).
+   Implement the rest: `POST /auth/{signup,logout-all,forgot-password,
    reset-password,verify-email}`; `POST /auth/mfa/{setup,verify,disable,recovery}`;
    `GET /auth/{me,sessions}`; `DELETE /auth/sessions/{id}`;
    `GET /auth/google/{authorize,callback}`; `POST|GET|DELETE /auth/api-keys`.

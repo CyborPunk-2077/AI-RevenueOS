@@ -7,13 +7,14 @@ client-supplied tenant id is never trusted on its own.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends, Header, Request
 
 from api.app.settings import Settings, get_settings
-from domain.auth.permissions import EffectivePermissions, Scope
+from domain.auth.permissions import EffectivePermissions, Scope, permissions_for
 from infrastructure.auth.tokens import TokenService
 from infrastructure.caching.rate_limit import RateLimiter
 from infrastructure.logging.context import bind_context
@@ -57,6 +58,35 @@ class Principal:
             )
 
 
+_DEV_KEY_PATH = Path(__file__).resolve().parents[3] / ".dev-keys" / "jwt.pem"
+
+
+def _local_dev_keypair() -> tuple[str, str]:
+    """A stable RS256 keypair for local development, persisted outside Git."""
+    from cryptography.hazmat.primitives import serialization
+
+    from infrastructure.auth.tokens import generate_keypair
+
+    if _DEV_KEY_PATH.exists():
+        private_key = _DEV_KEY_PATH.read_text()
+        public_key = (
+            serialization.load_pem_private_key(private_key.encode(), password=None)
+            .public_key()
+            .public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
+        return private_key, public_key
+
+    private_key, public_key = generate_keypair()
+    _DEV_KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _DEV_KEY_PATH.write_text(private_key)
+    _DEV_KEY_PATH.chmod(0o600)
+    return private_key, public_key
+
+
 def get_app_settings(request: Request) -> Settings:
     """Always resolve the settings the application was built with, not a cached global."""
     return getattr(request.app.state, "settings", None) or get_settings()
@@ -65,11 +95,16 @@ def get_app_settings(request: Request) -> Settings:
 def get_token_service(settings: Annotated[Settings, Depends(get_app_settings)]) -> TokenService:
     private_key, public_key = settings.jwt_private_key, settings.jwt_public_key
     if not private_key or not public_key:
-        # Development convenience only; production boot fails earlier in
-        # `assert_production_safe`, which refuses to start without signing material.
-        from infrastructure.auth.tokens import generate_keypair
-
-        private_key, public_key = generate_keypair()
+        # Local development only. Production boot fails earlier in
+        # `assert_production_safe`, which refuses to start without signing
+        # material. The key is persisted (gitignored) so restarting the API does
+        # not silently invalidate every open session.
+        if settings.environment != "local":
+            raise RuntimeError(
+                "JWT signing material is not configured; refusing to generate an "
+                f"ephemeral key in the '{settings.environment}' environment"
+            )
+        private_key, public_key = _local_dev_keypair()
         object.__setattr__(settings, "jwt_private_key", private_key)
         object.__setattr__(settings, "jwt_public_key", public_key)
     return TokenService(
@@ -93,14 +128,20 @@ async def get_principal(
     if await _is_revoked(request, claims.get("jti", "")):
         raise Unauthenticated("This session has been revoked.")
 
+    # A token may carry an explicit permission list (custom roles, service
+    # principals). When it does not, the built-in role matrix is authoritative.
+    claimed = claims.get("permissions") or []
+    roles = tuple(claims.get("roles", []))
+    permissions = frozenset(claimed) if claimed else permissions_for(list(roles))
+
     principal = Principal(
         user_id=UUID(claims["sub"]),
         tenant_id=UUID(claims["tenant_id"]),
         tenant_slug=str(claims.get("tenant_slug", "")),
         email=str(claims.get("email", "")),
         name=str(claims.get("name", "")),
-        roles=tuple(claims.get("roles", [])),
-        permissions=frozenset(claims.get("permissions", [])),
+        roles=roles,
+        permissions=permissions,
         scope=Scope(claims.get("scope", "self")),
         branch_ids=frozenset(claims.get("branch_ids", [])),
         team_ids=frozenset(claims.get("team_ids", [])),

@@ -56,8 +56,8 @@ ALTER TABLE {schema}.{table} ENABLE ROW LEVEL SECURITY;
 ALTER TABLE {schema}.{table} FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_isolation ON {schema}.{table};
 CREATE POLICY tenant_isolation ON {schema}.{table}
-  USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+  USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+  WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
 """
 
 # Operational tables that platform maintenance must scan across tenants (the dead
@@ -70,12 +70,12 @@ ALTER TABLE {schema}.{table} FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_isolation ON {schema}.{table};
 CREATE POLICY tenant_isolation ON {schema}.{table}
   USING (
-    tenant_id = current_setting('app.tenant_id', true)::uuid
+    tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
     OR (tenant_id IS NULL AND coalesce(current_setting('app.tenant_id', true), '') = '')
     OR coalesce(current_setting('app.platform_context', true), '') <> ''
   )
   WITH CHECK (
-    tenant_id = current_setting('app.tenant_id', true)::uuid
+    tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
     OR (tenant_id IS NULL AND coalesce(current_setting('app.tenant_id', true), '') = '')
     OR coalesce(current_setting('app.platform_context', true), '') <> ''
   );
@@ -89,11 +89,11 @@ ALTER TABLE {schema}.{table} FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_isolation ON {schema}.{table};
 CREATE POLICY tenant_isolation ON {schema}.{table}
   USING (
-    tenant_id = current_setting('app.tenant_id', true)::uuid
+    tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
     OR (tenant_id IS NULL AND coalesce(current_setting('app.tenant_id', true), '') = '')
   )
   WITH CHECK (
-    tenant_id = current_setting('app.tenant_id', true)::uuid
+    tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
     OR (tenant_id IS NULL AND coalesce(current_setting('app.tenant_id', true), '') = '')
   );
 """

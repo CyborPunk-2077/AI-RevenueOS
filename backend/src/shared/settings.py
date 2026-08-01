@@ -8,10 +8,10 @@ concern. No secret ever ships in an image.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 Environment = Literal["local", "dev", "staging", "sandbox", "prod"]
 
@@ -77,8 +77,10 @@ class Settings(BaseSettings):
     encryption_master_key: str | None = Field(default=None, repr=False)
 
     # --- edge -------------------------------------------------------------
-    cors_allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
-    trusted_hosts: list[str] = Field(
+    cors_allowed_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:3000"]
+    )
+    trusted_hosts: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["localhost", "127.0.0.1", "testserver"]
     )
     api_host_template: str = "api.{tenant_slug}.airevenueos.io"
@@ -126,7 +128,9 @@ class Settings(BaseSettings):
     sentry_dsn: str | None = Field(default=None, repr=False)
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = Field(default=None, repr=False)
-    metrics_allowed_cidrs: list[str] = Field(default_factory=lambda: ["127.0.0.1/32", "10.0.0.0/8"])
+    metrics_allowed_cidrs: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["127.0.0.1/32", "10.0.0.0/8"]
+    )
 
     features: FeatureFlagDefaults = Field(default_factory=FeatureFlagDefaults)
 

@@ -31,3 +31,8 @@ coverage.xml
 .terraform.lock.hcl
 playwright-report/
 test-results/
+
+# Local-only JWT signing key, generated on first run. Never commit.
+.dev-keys/
+
+apps/web/node_modules/
