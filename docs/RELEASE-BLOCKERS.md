@@ -13,7 +13,7 @@ No release gate may be waived without recorded evidence.
 | P0-1 worker tier | **RESOLVED** — 34 integration tests on real Postgres + Redis + Celery |
 | P0-2 auth endpoints | **RESOLVED** — 21 operations, 37 e2e tests on real Postgres + Redis |
 | P0-3 frontend build | **RESOLVED** — reproducible install, lint, strict typecheck, production build, 14 unit tests |
-| P0-4 domain services | **partial** — contacts, accounts, timeline, deals/pipelines and tasks done; conversations, documents, appointments, analytics open |
+| P0-4 domain services | **partial** — contacts, accounts, timeline, deals, tasks, inbox and appointments done; documents and analytics open |
 | P0-5 AWS account | open (external) |
 | P0-6 legal sign-off | open (external) |
 
@@ -312,9 +312,27 @@ Fixed while building it: `DomainError` had no exception handler, so a broken
 business rule became a 500 instead of a 422 -- it would have paged somebody for a
 user error. See audit A30.
 
-**Still open under P0-4:** conversations and messages, documents and files,
-appointments (admin side), analytics. Four modules, and the pattern to copy is
-now established five times over.
+**Also done (2026-08-02): the shared inbox and appointments.**
+
+*Inbox.* `app.messages` is partitioned by month with a composite key, so
+`created_at` is supplied explicitly and the current month's partition is ensured
+before any write — a test asserts the row landed in `app.messages_pYYYYMM`, not
+just the parent. Outbound replies are persisted `queued` and stay there: nothing
+marks them sent, nothing stamps a delivery time, and the response carries an
+explicit note that the channel has no provider credential. `GET
+/conversations/channels` reports readiness honestly. Inbound needs no credential
+and lands on the same path real provider webhooks use after signature
+verification.
+
+*Appointments.* Double booking is refused by the `slot_locks` unique constraint
+rather than a read-then-write check, and the appointment rolls back with its lock
+so a refused booking leaves nothing behind. Cancelling deletes the lock (a
+cancelled slot that stays locked can never be rebooked); rescheduling moves it.
+Calendar sync stays gated on Google OAuth verification and `calendar_event_id`
+stays null.
+
+**Still open under P0-4:** documents and files, analytics. Two modules, and the
+pattern to copy is now established six times over.
 
 ---
 

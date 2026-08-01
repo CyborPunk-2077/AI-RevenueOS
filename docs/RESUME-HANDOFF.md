@@ -4,7 +4,7 @@ Read this first when picking the project back up. Do not re-plan the project.
 
 ## Where things stand
 
-**Commit:** `a502695` — "P0-4: tasks with due dates and overdue tracking"
+**Commit:** `c648207` — "P0-4: appointments (admin side)"
 **Branch:** `master` · **Working tree:** clean
 
 **Verified working** (by test or recorded execution, not assertion):
@@ -16,42 +16,47 @@ Read this first when picking the project back up. Do not re-plan the project.
 - Local runtime — nine-service stack through `RUN_DEMO.cmd`, bounded health
   waits, idempotent migrate/seed, data preserved across restarts, destructive
   reset behind `RESET_DEMO.cmd`.
-- CRM: contacts, accounts, activity/note timeline, **deals and pipelines**,
-  **tasks**. 79 CRM e2e tests in total.
+- CRM: contacts, accounts, activity/note timeline, deals and pipelines, tasks,
+  **conversations and messages (shared inbox)**, **appointments**. 125 CRM e2e
+  tests in total.
 
-**Gates at that commit:** ruff, ruff-format, mypy (175 files), import-linter 6/6,
+**Gates at that commit:** ruff, ruff-format, mypy (177 files), import-linter 6/6,
 unit + contract + integration + CRM e2e green, web lint/typecheck/build clean.
 
 **Browser path re-verified** through the real Next BFF with the API receiving
-`Host: api:8000`: deals board renders, create/move/won/lost-refusal, deal detail,
-overdue task created and shown, task completed with `completed_at` set, and
-globex getting 404 on acme's deal and task.
+`Host: api:8000`: inbox renders with the gated-channel warning, conversation
+opened, inbound recorded (partitioned write), reply shown as QUEUED with the
+"no provider credential" note, automation-paused notice, conversation resolved,
+appointment booked, double booking refused 409, cancel freeing the slot for
+rebooking, and globex getting 404 on acme's thread and appointment.
 
 ## Exact next task
 
-Conversations and messages (`P0-4`, module five of six).
+Documents and files (`P0-4`, the last unbuilt CRM module).
 
-Copy `application/crm/deals.py` and `application/crm/tasks.py` — the pattern is
-established five times and should not be re-derived:
+Copy `application/crm/appointments.py` — the pattern is established six times and
+should not be re-derived:
 
 - `scoped_query` / `get_scoped` for every read; never a bare tenant filter.
 - `SqlAlchemyUnitOfWork` for state + outbox + audit in one transaction.
 - Pydantic boundary schemas in `api/v1/schemas.py`, routes in `api/v1/crm.py`.
 - ETag concurrency on anything editable.
-- Real outbox handlers registered in `application/crm/handlers.py`.
 - Tests in `tests/e2e/`, including a cross-tenant 404 case. Reuse the fixtures
   imported from `tests/e2e/test_crm_contacts_accounts.py` and add the module to
   the `F811` per-file-ignore list in `pyproject.toml`.
 
-`Conversation` and `Message` exist in `infrastructure/database/models/communications.py`.
-`app.messages` is **partitioned**, so check `docs/runbooks/database.md` before
-writing to it. Message sending is gated (WhatsApp/email are off), so build the
-inbox around *reading* threads and internal notes; an outbound send must return
-`queued`, never a fabricated delivery.
+`Document` and related models are in
+`infrastructure/database/models/documents.py`, and
+`infrastructure/integrations/storage.py` already has an S3 adapter with
+`is_configured()`. **Object storage is gated** (no AWS account), so build metadata
+management — upload intent, listing, linking to a CRM record, soft delete — and
+have the upload path return a clearly-unavailable response rather than a fake
+presigned URL. Same discipline as the inbox: never claim a capability that has no
+credential behind it.
 
-After that: documents/files, appointments (admin side), analytics. Then P1-2
-(audit wiring for the remaining modules — contacts, accounts, notes, deals and
-tasks are already done).
+After that, P0-4's six modules are done and the remaining code work is analytics
+and reporting (M20), plus P1-2 (audit wiring for the modules that predate the
+recorder — leads still writes no audit row).
 
 ## Blockers that engineering cannot clear
 
