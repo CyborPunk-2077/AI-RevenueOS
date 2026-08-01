@@ -1,0 +1,27 @@
+{
+  "name": "ai-revenueos",
+  "private": true,
+  "packageManager": "pnpm@9.7.0",
+  "engines": {
+    "node": ">=20.11",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:e2e": "playwright test",
+    "a11y": "turbo run a11y",
+    "storybook": "turbo run storybook"
+  },
+  "devDependencies": {
+    "turbo": "2.0.14",
+    "typescript": "5.5.4",
+    "@playwright/test": "1.46.0",
+    "@axe-core/playwright": "4.9.1",
+    "vitest": "2.0.5",
+    "prettier": "3.3.3"
+  }
+}

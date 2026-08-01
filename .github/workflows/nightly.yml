@@ -1,0 +1,52 @@
+name: Nightly quality gates
+
+on:
+  schedule:
+    - cron: "30 18 * * *"   # 00:00 IST
+  workflow_dispatch:
+
+jobs:
+  dast:
+    name: OWASP ZAP against staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: ${{ vars.STAGING_URL }}
+          rules_file_name: infra/zap/rules.tsv
+          fail_action: true
+
+  load:
+    name: k6 performance profiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/setup-k6-action@v1
+      - run: k6 run infra/k6/normal.js
+      - run: k6 run infra/k6/peak.js
+      - run: k6 run infra/k6/noisy-tenant.js
+
+  restore:
+    name: Backup restore verification
+    runs-on: ubuntu-latest
+    permissions: {id-token: write, contents: read}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DR_ROLE_ARN }}
+          aws-region: ap-south-1
+      - name: Restore the latest snapshot and verify RPO/RTO
+        run: bash infra/scripts/verify-restore.sh
+
+  ai-eval:
+    name: AI gold-set evaluation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -e "backend[dev]"
+      - name: Evaluate against the versioned gold sets
+        run: cd backend && python src/scripts/run_ai_evals.py --fail-under 0.85

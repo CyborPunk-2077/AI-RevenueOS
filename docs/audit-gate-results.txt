@@ -1,0 +1,25 @@
+AI RevenueOS - release-readiness gate run
+date:   2026-08-01T11:22:27Z
+python: Python 3.10.12 | ruff 0.16.1 | mypy 1.20.2
+
+ruff check                   All checks passed!
+ruff format --check          174 files already formatted
+mypy (strict)                Success: no issues found in 139 source files
+import-linter                Contracts: 6 kept, 0 broken.
+bandit (SAST)                No issues identified (High 0 / Medium 0 / Low 0), 12425 LOC
+pip-audit (project)          No known vulnerabilities found
+migration safety             migration safety: 2 migration(s) verified
+release gates                8/8 release gates passed
+migration up/down/up         OK (0001..0002 reversible, verified on PostgreSQL 16)
+tests: unit                  503 passed
+tests: integration           19 passed
+tests: contract              146 passed
+tests: e2e                   24 passed
+tests: TOTAL                 692 passed, 0 failed (2 consecutive clean runs)
+coverage                     TOTAL                                                   6949    938   1248    170    84%
+
+FRONTEND
+pnpm install                 BLOCKED - no pnpm-lock.yaml
+next build                   BLOCKED - no next.config, tailwind.config, postcss.config, next-env.d.ts
+pnpm typecheck               NOT RUN - no node_modules; 3 dependency-free modules pass tsc --strict
+pnpm test / a11y             NOT RUN - no vitest/playwright config, zero test files

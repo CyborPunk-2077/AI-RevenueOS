@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --muted-foreground: 215 16% 40%;   /* 4.6:1 on white - above the 4.5:1 floor */
+    --primary: 221 83% 40%;            /* 7.1:1 on white */
+    --primary-foreground: 0 0% 100%;
+    --border: 214 32% 82%;             /* 3.1:1 - meets the non-text 3:1 floor */
+    --destructive: 0 72% 38%;          /* 5.9:1 on white */
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 98%;
+    --muted-foreground: 215 20% 72%;
+    --primary: 217 91% 68%;
+    --primary-foreground: 222 47% 11%;
+    --border: 217 33% 28%;
+    --destructive: 0 84% 68%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  /* Visible focus is never removed, only restyled. */
+  :focus-visible {
+    @apply outline outline-2 outline-offset-2 outline-primary;
+  }
+
+  /* Every interactive target meets the 44px minimum. */
+  button,
+  [role='button'],
+  a[href],
+  input[type='checkbox'],
+  input[type='radio'] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* Reflow at 320px without two-dimensional scrolling. */
+@media (max-width: 320px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}

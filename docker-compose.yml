@@ -1,0 +1,115 @@
+name: airevenueos
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: airevenueos
+      POSTGRES_USER: airevenueos
+      POSTGRES_PASSWORD: local_development_only
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/scripts/init-db.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airevenueos -d airevenueos"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ./backend
+      target: development
+    environment:
+      ENVIRONMENT: local
+      DATABASE_URL: postgresql+asyncpg://airevenueos_app:local_development_only@postgres:5432/airevenueos
+      REDIS_URL: redis://redis:6379/0
+      LOG_JSON: "false"
+    ports: ["8000:8000"]
+    volumes: ["./backend:/app"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--app-dir", "src"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/health/liveness')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  worker-comms:
+    build: {context: ./backend, target: development}
+    environment:
+      DATABASE_URL: postgresql+asyncpg://airevenueos_app:local_development_only@postgres:5432/airevenueos
+      REDIS_URL: redis://redis:6379/0
+    volumes: ["./backend:/app"]
+    depends_on: {api: {condition: service_started}}
+    command: ["celery", "-A", "infrastructure.celery.app", "worker",
+              "-Q", "workflow-critical,workflow-notification,workflow-webhook",
+              "-c", "4", "--prefetch-multiplier", "1", "-l", "info"]
+
+  worker-general:
+    build: {context: ./backend, target: development}
+    environment:
+      DATABASE_URL: postgresql+asyncpg://airevenueos_app:local_development_only@postgres:5432/airevenueos
+      REDIS_URL: redis://redis:6379/0
+    volumes: ["./backend:/app"]
+    depends_on: {api: {condition: service_started}}
+    command: ["celery", "-A", "infrastructure.celery.app", "worker",
+              "-Q", "workflow-standard,workflow-bulk,workflow-ai,workflow-maintenance",
+              "-c", "4", "--prefetch-multiplier", "1", "-l", "info"]
+
+  beat:
+    build: {context: ./backend, target: development}
+    environment:
+      DATABASE_URL: postgresql+asyncpg://airevenueos_app:local_development_only@postgres:5432/airevenueos
+      REDIS_URL: redis://redis:6379/0
+    volumes: ["./backend:/app"]
+    depends_on: {api: {condition: service_started}}
+    command: ["celery", "-A", "infrastructure.celery.app", "beat", "-l", "info"]
+
+  outbox:
+    build: {context: ./backend, target: development}
+    environment:
+      DATABASE_URL: postgresql+asyncpg://airevenueos_app:local_development_only@postgres:5432/airevenueos
+      REDIS_URL: redis://redis:6379/0
+    volumes: ["./backend:/app"]
+    depends_on: {api: {condition: service_started}}
+    command: ["python", "src/scripts/run_outbox.py"]
+
+  web:
+    build: {context: ., dockerfile: apps/web/Dockerfile, target: development}
+    environment:
+      API_INTERNAL_URL: http://api:8000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    ports: ["3000:3000"]
+    depends_on: {api: {condition: service_started}}
+
+  # Design-time authoring only. No production credentials, no database access,
+  # no ability to execute customer automation.
+  n8n:
+    image: n8nio/n8n:1.55.3
+    profiles: ["authoring"]
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: authoring
+      N8N_BASIC_AUTH_PASSWORD: local_development_only
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      NODES_EXCLUDE: '["n8n-nodes-base.executeCommand","n8n-nodes-base.readWriteFile","n8n-nodes-base.postgres","n8n-nodes-base.mySql","n8n-nodes-base.ssh","n8n-nodes-base.httpRequest"]'
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "true"
+    ports: ["5678:5678"]
+
+volumes:
+  pgdata:

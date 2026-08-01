@@ -1,0 +1,88 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options: [dev, staging, prod]
+      image_digest:
+        description: Image digest to promote (sha256:...)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  plan:
+    name: Terraform plan
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}-plan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+      - uses: hashicorp/setup-terraform@v3
+      - run: |
+          cd infra/terraform/envs/${{ inputs.environment }}
+          terraform init -input=false
+          terraform plan -input=false -var="image_digest=${{ inputs.image_digest }}" -out=plan.tfplan
+      - uses: actions/upload-artifact@v4
+        with: {name: tfplan-${{ inputs.environment }}, path: infra/terraform/envs/${{ inputs.environment }}/plan.tfplan}
+
+  migrate:
+    name: Backward-compatible pre-deploy migration
+    runs-on: ubuntu-latest
+    needs: [plan]
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+      - name: Verify the migration is expand-only
+        run: python backend/src/scripts/check_migration_safety.py
+      - name: Apply migrations
+        run: cd backend && alembic upgrade head
+
+  deploy:
+    name: Rolling ECS deployment
+    runs-on: ubuntu-latest
+    needs: [migrate]
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+      - name: Promote the already-built image
+        run: |
+          aws ecs update-service \
+            --cluster airevenueos-${{ inputs.environment }} \
+            --service api \
+            --force-new-deployment
+      - name: Wait for the deployment to stabilise
+        run: |
+          aws ecs wait services-stable \
+            --cluster airevenueos-${{ inputs.environment }} --services api
+      - name: Five-minute health and circuit observation
+        run: sleep 300 && curl -fsS "$SMOKE_URL/health/readiness"
+        env: {SMOKE_URL: "${{ vars.SMOKE_URL }}"}
+      - name: Production smoke suite
+        run: cd backend && pytest tests/e2e -m smoke -q
+      - name: Automatic rollback on failure
+        if: failure()
+        run: |
+          aws ecs update-service \
+            --cluster airevenueos-${{ inputs.environment }} \
+            --service api --task-definition "$(aws ecs describe-services \
+              --cluster airevenueos-${{ inputs.environment }} --services api \
+              --query 'services[0].deployments[1].taskDefinition' --output text)"

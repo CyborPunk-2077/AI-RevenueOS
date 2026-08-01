@@ -1,0 +1,2312 @@
+{
+  "real_estate": {
+    "code": "real_estate",
+    "version": 1,
+    "name": "Real Estate",
+    "terminology": {
+      "lead": "Buyer",
+      "leads": "Buyers",
+      "contact": "Client",
+      "deal": "Booking",
+      "deals": "Bookings",
+      "lead_types": [
+        "buyer",
+        "tenant",
+        "investor"
+      ]
+    },
+    "lead_schema": {
+      "fields": [
+        {
+          "key": "location",
+          "label": "Preferred location",
+          "type": "text",
+          "required": true,
+          "classification": "P1"
+        },
+        {
+          "key": "budget_minor",
+          "label": "Budget (INR)",
+          "type": "money",
+          "required": true,
+          "classification": "P2"
+        },
+        {
+          "key": "property_type",
+          "label": "Property type",
+          "type": "select",
+          "options": [
+            "apartment",
+            "villa",
+            "plot",
+            "commercial"
+          ],
+          "classification": "P1"
+        },
+        {
+          "key": "configuration",
+          "label": "Configuration",
+          "type": "select",
+          "options": [
+            "1BHK",
+            "2BHK",
+            "3BHK",
+            "4BHK+"
+          ],
+          "classification": "P1"
+        },
+        {
+          "key": "timeline",
+          "label": "Purchase timeline",
+          "type": "select",
+          "options": [
+            "immediate",
+            "3_months",
+            "6_months",
+            "exploring"
+          ],
+          "classification": "P1"
+        },
+        {
+          "key": "finance_required",
+          "label": "Home loan required",
+          "type": "boolean",
+          "classification": "P1"
+        }
+      ]
+    },
+    "qualification_rubric": {
+      "criteria": [
+        {
+          "key": "location",
+          "label": "Preferred location",
+          "weight": 20,
+          "required": true
+        },
+        {
+          "key": "budget_minor",
+          "label": "Budget",
+          "weight": 30,
+          "required": true
+        },
+        {
+          "key": "property_type",
+          "label": "Property type",
+          "weight": 15,
+          "required": false
+        },
+        {
+          "key": "timeline",
+          "label": "Timeline",
+          "weight": 25,
+          "required": false
+        },
+        {
+          "key": "finance_required",
+          "label": "Finance clarity",
+          "weight": 10,
+          "required": false
+        }
+      ],
+      "hot_threshold": 80,
+      "warm_threshold": 40
+    },
+    "pipeline_stages": [
+      {
+        "name": "New",
+        "position": 0,
+        "probability": 11,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Contacted",
+        "position": 1,
+        "probability": 23,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Qualified",
+        "position": 2,
+        "probability": 34,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Site Visit",
+        "position": 3,
+        "probability": 46,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Negotiation",
+        "position": 4,
+        "probability": 57,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Booked",
+        "position": 5,
+        "probability": 100,
+        "required_fields": [],
+        "is_won": true,
+        "is_lost": false
+      },
+      {
+        "name": "Lost",
+        "position": 6,
+        "probability": 0,
+        "required_fields": [
+          "loss_reason"
+        ],
+        "is_won": false,
+        "is_lost": true
+      }
+    ],
+    "message_templates": [
+      {
+        "name": "site_visit_invite",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "Hello {{contact.first_name}}, would you like to schedule a site visit at {{project_name}}? Reply with a preferred day."
+      },
+      {
+        "name": "brochure_share",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "Sharing the brochure for {{project_name}}. All figures are indicative and subject to written confirmation."
+      }
+    ],
+    "document_templates": [
+      {
+        "name": "brochure",
+        "type": "brochure"
+      },
+      {
+        "name": "quotation",
+        "type": "quotation"
+      },
+      {
+        "name": "allotment_letter",
+        "type": "allotment_letter"
+      },
+      {
+        "name": "agreement",
+        "type": "agreement"
+      }
+    ],
+    "workflow_recipes": [
+      {
+        "key": "new_lead_acknowledge"
+      },
+      {
+        "key": "site_visit_reminder"
+      },
+      {
+        "key": "post_visit_followup"
+      }
+    ],
+    "business_hours": {
+      "monday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "tuesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "wednesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "thursday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "friday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "saturday": {
+        "start": "10:00",
+        "end": "14:00"
+      },
+      "sunday": null
+    },
+    "dashboard_presets": [
+      {
+        "key": "lead_funnel"
+      },
+      {
+        "key": "site_visit_conversion"
+      },
+      {
+        "key": "source_attribution"
+      },
+      {
+        "key": "pipeline_value"
+      }
+    ],
+    "prohibited_ai_rules": [
+      {
+        "rule": "no_binding_price",
+        "detail": "Never state a final or binding price without written confirmation."
+      },
+      {
+        "rule": "no_availability_guarantee",
+        "detail": "Never confirm inventory or unit availability."
+      },
+      {
+        "rule": "no_title_claim",
+        "detail": "Never make claims about title, approvals or legal clearance."
+      },
+      {
+        "rule": "no_return_projection",
+        "detail": "Never project investment returns or appreciation."
+      }
+    ],
+    "consent_copy": {
+      "whatsapp_optin": "I agree to receive updates about my enquiry on WhatsApp. Reply STOP at any time to opt out.",
+      "marketing": "I agree to receive occasional offers and updates. I can withdraw consent at any time.",
+      "data_processing": "I consent to {{tenant_name}} processing my personal data for the purpose of handling this enquiry, in line with their privacy notice."
+    },
+    "active": true
+  },
+  "clinics": {
+    "code": "clinics",
+    "version": 1,
+    "name": "Clinics and Healthcare",
+    "terminology": {
+      "lead": "Patient enquiry",
+      "leads": "Patient enquiries",
+      "contact": "Patient",
+      "deal": "Treatment plan",
+      "deals": "Treatment plans",
+      "lead_types": [
+        "patient",
+        "prospect"
+      ]
+    },
+    "lead_schema": {
+      "fields": [
+        {
+          "key": "requested_service",
+          "label": "Service requested",
+          "type": "text",
+          "required": true,
+          "classification": "P3"
+        },
+        {
+          "key": "preferred_location",
+          "label": "Preferred clinic",
+          "type": "text",
+          "classification": "P1"
+        },
+        {
+          "key": "preferred_practitioner",
+          "label": "Preferred practitioner",
+          "type": "text",
+          "classification": "P1"
+        },
+        {
+          "key": "preferred_time",
+          "label": "Preferred time",
+          "type": "select",
+          "options": [
+            "morning",
+            "afternoon",
+            "evening",
+            "any"
+          ],
+          "classification": "P1"
+        },
+        {
+          "key": "is_existing_patient",
+          "label": "Existing patient",
+          "type": "boolean",
+          "classification": "P3"
+        }
+      ]
+    },
+    "qualification_rubric": {
+      "criteria": [
+        {
+          "key": "requested_service",
+          "label": "Requested service",
+          "weight": 35,
+          "required": true
+        },
+        {
+          "key": "preferred_location",
+          "label": "Location",
+          "weight": 20,
+          "required": false
+        },
+        {
+          "key": "preferred_time",
+          "label": "Preferred time",
+          "weight": 25,
+          "required": false
+        },
+        {
+          "key": "preferred_practitioner",
+          "label": "Practitioner",
+          "weight": 20,
+          "required": false
+        }
+      ],
+      "hot_threshold": 80,
+      "warm_threshold": 40
+    },
+    "pipeline_stages": [
+      {
+        "name": "Inquiry",
+        "position": 0,
+        "probability": 11,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Contacted",
+        "position": 1,
+        "probability": 23,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Appointment Booked",
+        "position": 2,
+        "probability": 34,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Attended",
+        "position": 3,
+        "probability": 100,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Follow-up",
+        "position": 4,
+        "probability": 57,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Converted",
+        "position": 5,
+        "probability": 100,
+        "required_fields": [],
+        "is_won": true,
+        "is_lost": false
+      },
+      {
+        "name": "Lost",
+        "position": 6,
+        "probability": 0,
+        "required_fields": [
+          "loss_reason"
+        ],
+        "is_won": false,
+        "is_lost": true
+      }
+    ],
+    "message_templates": [
+      {
+        "name": "appointment_confirmation",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "Your appointment at {{clinic_name}} is confirmed for {{appointment_time}}. Reply RESCHEDULE to change it."
+      },
+      {
+        "name": "intake_request",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "Please complete your intake form before your visit: {{intake_url}}"
+      }
+    ],
+    "document_templates": [
+      {
+        "name": "intake_form",
+        "type": "intake_form"
+      },
+      {
+        "name": "consent_form",
+        "type": "consent_form"
+      },
+      {
+        "name": "receipt",
+        "type": "receipt"
+      }
+    ],
+    "workflow_recipes": [
+      {
+        "key": "appointment_reminder"
+      },
+      {
+        "key": "no_show_followup"
+      },
+      {
+        "key": "intake_collection"
+      }
+    ],
+    "business_hours": {
+      "monday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "tuesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "wednesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "thursday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "friday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "saturday": {
+        "start": "10:00",
+        "end": "14:00"
+      },
+      "sunday": null
+    },
+    "dashboard_presets": [
+      {
+        "key": "appointment_funnel"
+      },
+      {
+        "key": "no_show_rate"
+      },
+      {
+        "key": "service_mix"
+      },
+      {
+        "key": "practitioner_load"
+      }
+    ],
+    "prohibited_ai_rules": [
+      {
+        "rule": "no_diagnosis",
+        "detail": "Never suggest, confirm or imply a diagnosis."
+      },
+      {
+        "rule": "no_medical_advice",
+        "detail": "Never provide treatment, dosage or medication advice."
+      },
+      {
+        "rule": "no_emergency_triage",
+        "detail": "Never triage. Emergency language must route to the approved human escalation script immediately."
+      },
+      {
+        "rule": "restrict_health_data",
+        "detail": "Health data is P3; never include it in AI prompts, logs or exports without an approved minimal policy."
+      }
+    ],
+    "consent_copy": {
+      "whatsapp_optin": "I agree to receive updates about my enquiry on WhatsApp. Reply STOP at any time to opt out.",
+      "marketing": "I agree to receive occasional offers and updates. I can withdraw consent at any time.",
+      "data_processing": "I consent to {{tenant_name}} processing my personal data for the purpose of handling this enquiry, in line with their privacy notice."
+    },
+    "active": true,
+    "emergency_routing": {
+      "enabled": true,
+      "keywords": [
+        "chest pain",
+        "bleeding",
+        "unconscious",
+        "suicide",
+        "breathless",
+        "stroke"
+      ],
+      "action": "immediate_human_handoff",
+      "script": "If this is a medical emergency please call your local emergency number immediately. A member of our team is being alerted now."
+    }
+  },
+  "coaching_institutes": {
+    "code": "coaching_institutes",
+    "version": 1,
+    "name": "Coaching Institutes",
+    "terminology": {
+      "lead": "Student enquiry",
+      "leads": "Student enquiries",
+      "contact": "Student",
+      "deal": "Enrolment",
+      "deals": "Enrolments",
+      "lead_types": [
+        "student",
+        "guardian"
+      ]
+    },
+    "lead_schema": {
+      "fields": [
+        {
+          "key": "course",
+          "label": "Course of interest",
+          "type": "text",
+          "required": true,
+          "classification": "P1"
+        },
+        {
+          "key": "education_level",
+          "label": "Current education level",
+          "type": "select",
+          "options": [
+            "class_9",
+            "class_10",
+            "class_11",
+            "class_12",
+            "graduate",
+            "other"
+          ],
+          "classification": "P2"
+        },
+        {
+          "key": "mode",
+          "label": "Preferred mode",
+          "type": "select",
+          "options": [
+            "online",
+            "offline",
+            "hybrid"
+          ],
+          "classification": "P1"
+        },
+        {
+          "key": "target_year",
+          "label": "Target exam year",
+          "type": "text",
+          "classification": "P1"
+        },
+        {
+          "key": "fee_budget_minor",
+          "label": "Fee budget (INR)",
+          "type": "money",
+          "classification": "P2"
+        },
+        {
+          "key": "is_minor",
+          "label": "Student is under 18",
+          "type": "boolean",
+          "classification": "P3"
+        },
+        {
+          "key": "guardian_name",
+          "label": "Guardian name",
+          "type": "text",
+          "classification": "P3"
+        }
+      ]
+    },
+    "qualification_rubric": {
+      "criteria": [
+        {
+          "key": "course",
+          "label": "Course",
+          "weight": 30,
+          "required": true
+        },
+        {
+          "key": "education_level",
+          "label": "Education level",
+          "weight": 20,
+          "required": false
+        },
+        {
+          "key": "mode",
+          "label": "Mode",
+          "weight": 15,
+          "required": false
+        },
+        {
+          "key": "target_year",
+          "label": "Timeline",
+          "weight": 20,
+          "required": false
+        },
+        {
+          "key": "fee_budget_minor",
+          "label": "Fee budget",
+          "weight": 15,
+          "required": false
+        }
+      ],
+      "hot_threshold": 80,
+      "warm_threshold": 40
+    },
+    "pipeline_stages": [
+      {
+        "name": "Inquiry",
+        "position": 0,
+        "probability": 16,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Counselled",
+        "position": 1,
+        "probability": 32,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Demo/Assessment",
+        "position": 2,
+        "probability": 48,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Enrolled",
+        "position": 3,
+        "probability": 100,
+        "required_fields": [],
+        "is_won": true,
+        "is_lost": false
+      },
+      {
+        "name": "Lost",
+        "position": 4,
+        "probability": 0,
+        "required_fields": [
+          "loss_reason"
+        ],
+        "is_won": false,
+        "is_lost": true
+      }
+    ],
+    "message_templates": [
+      {
+        "name": "demo_invite",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "Hello {{contact.first_name}}, a free demo class for {{course}} is available on {{demo_date}}. Would you like a seat?"
+      },
+      {
+        "name": "counselling_reminder",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "Reminder: your counselling session is on {{session_time}}."
+      }
+    ],
+    "document_templates": [
+      {
+        "name": "course_brochure",
+        "type": "course_brochure"
+      },
+      {
+        "name": "fee_structure",
+        "type": "fee_structure"
+      },
+      {
+        "name": "enrolment_form",
+        "type": "enrolment_form"
+      }
+    ],
+    "workflow_recipes": [
+      {
+        "key": "demo_reminder"
+      },
+      {
+        "key": "counselling_followup"
+      },
+      {
+        "key": "fee_reminder"
+      }
+    ],
+    "business_hours": {
+      "monday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "tuesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "wednesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "thursday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "friday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "saturday": {
+        "start": "10:00",
+        "end": "14:00"
+      },
+      "sunday": null
+    },
+    "dashboard_presets": [
+      {
+        "key": "enquiry_funnel"
+      },
+      {
+        "key": "demo_to_enrolment"
+      },
+      {
+        "key": "course_mix"
+      },
+      {
+        "key": "counsellor_performance"
+      }
+    ],
+    "prohibited_ai_rules": [
+      {
+        "rule": "no_result_guarantee",
+        "detail": "Never guarantee results, ranks, selection or placement."
+      },
+      {
+        "rule": "no_rank_claim",
+        "detail": "Never claim a specific rank or score outcome for a student."
+      },
+      {
+        "rule": "minor_data_handling",
+        "detail": "Where the student is a minor, guardian consent is mandatory and student contact must route through the guardian."
+      }
+    ],
+    "consent_copy": {
+      "whatsapp_optin": "I agree to receive updates about my enquiry on WhatsApp. Reply STOP at any time to opt out.",
+      "marketing": "I agree to receive occasional offers and updates. I can withdraw consent at any time.",
+      "data_processing": "I consent to {{tenant_name}} processing my personal data for the purpose of handling this enquiry, in line with their privacy notice."
+    },
+    "active": true,
+    "minor_policy": {
+      "require_guardian_consent": true,
+      "contact_via_guardian_only": true,
+      "min_age_direct_contact": 18
+    }
+  },
+  "recruitment": {
+    "code": "recruitment",
+    "version": 1,
+    "name": "Recruitment",
+    "terminology": {
+      "lead": "Candidate",
+      "leads": "Candidates",
+      "contact": "Candidate",
+      "deal": "Placement",
+      "deals": "Placements",
+      "lead_types": [
+        "candidate",
+        "client",
+        "role"
+      ]
+    },
+    "lead_schema": {
+      "fields": [
+        {
+          "key": "skills",
+          "label": "Key skills",
+          "type": "multiselect",
+          "required": true,
+          "classification": "P2"
+        },
+        {
+          "key": "experience_years",
+          "label": "Years of experience",
+          "type": "number",
+          "required": true,
+          "classification": "P2"
+        },
+        {
+          "key": "location_preference",
+          "label": "Location preference",
+          "type": "text",
+          "classification": "P2"
+        },
+        {
+          "key": "notice_period_days",
+          "label": "Notice period (days)",
+          "type": "number",
+          "classification": "P2"
+        },
+        {
+          "key": "current_ctc_minor",
+          "label": "Current CTC",
+          "type": "money",
+          "classification": "P3"
+        },
+        {
+          "key": "expected_ctc_minor",
+          "label": "Expected CTC",
+          "type": "money",
+          "classification": "P3"
+        },
+        {
+          "key": "consent_to_share_profile",
+          "label": "Consent to share profile",
+          "type": "boolean",
+          "required": true,
+          "classification": "P3"
+        }
+      ]
+    },
+    "qualification_rubric": {
+      "criteria": [
+        {
+          "key": "skills",
+          "label": "Skills",
+          "weight": 30,
+          "required": true
+        },
+        {
+          "key": "experience_years",
+          "label": "Experience",
+          "weight": 25,
+          "required": true
+        },
+        {
+          "key": "location_preference",
+          "label": "Location",
+          "weight": 15,
+          "required": false
+        },
+        {
+          "key": "notice_period_days",
+          "label": "Notice period",
+          "weight": 15,
+          "required": false
+        },
+        {
+          "key": "expected_ctc_minor",
+          "label": "Compensation expectation",
+          "weight": 15,
+          "required": false
+        }
+      ],
+      "hot_threshold": 80,
+      "warm_threshold": 40
+    },
+    "pipeline_stages": [
+      {
+        "name": "Sourced",
+        "position": 0,
+        "probability": 11,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Screened",
+        "position": 1,
+        "probability": 23,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Submitted",
+        "position": 2,
+        "probability": 34,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Interview",
+        "position": 3,
+        "probability": 46,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Offered",
+        "position": 4,
+        "probability": 57,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Placed",
+        "position": 5,
+        "probability": 100,
+        "required_fields": [],
+        "is_won": true,
+        "is_lost": false
+      },
+      {
+        "name": "Lost",
+        "position": 6,
+        "probability": 0,
+        "required_fields": [
+          "loss_reason"
+        ],
+        "is_won": false,
+        "is_lost": true
+      }
+    ],
+    "message_templates": [
+      {
+        "name": "interview_invite",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "Hello {{contact.first_name}}, an interview for {{role_title}} is proposed on {{interview_time}}. Please confirm."
+      },
+      {
+        "name": "profile_share_consent",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "May we share your profile with {{client_name}} for {{role_title}}? Reply YES to consent."
+      }
+    ],
+    "document_templates": [
+      {
+        "name": "cv",
+        "type": "cv"
+      },
+      {
+        "name": "offer_letter",
+        "type": "offer_letter"
+      },
+      {
+        "name": "engagement_agreement",
+        "type": "engagement_agreement"
+      }
+    ],
+    "workflow_recipes": [
+      {
+        "key": "interview_reminder"
+      },
+      {
+        "key": "consent_collection"
+      },
+      {
+        "key": "post_interview_followup"
+      }
+    ],
+    "business_hours": {
+      "monday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "tuesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "wednesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "thursday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "friday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "saturday": {
+        "start": "10:00",
+        "end": "14:00"
+      },
+      "sunday": null
+    },
+    "dashboard_presets": [
+      {
+        "key": "pipeline_by_role"
+      },
+      {
+        "key": "submission_to_interview"
+      },
+      {
+        "key": "offer_acceptance"
+      },
+      {
+        "key": "recruiter_load"
+      }
+    ],
+    "prohibited_ai_rules": [
+      {
+        "rule": "no_protected_trait_inference",
+        "detail": "Never infer or use age, gender, religion, caste, marital status, pregnancy, disability or ethnicity."
+      },
+      {
+        "rule": "no_autonomous_rejection",
+        "detail": "AI may produce advisory evidence only; a human must make every rejection decision."
+      },
+      {
+        "rule": "no_outcome_guarantee",
+        "detail": "Never guarantee placement, selection or salary."
+      },
+      {
+        "rule": "consent_before_share",
+        "detail": "Candidate profiles may not be shared with a client without recorded consent."
+      }
+    ],
+    "consent_copy": {
+      "whatsapp_optin": "I agree to receive updates about my enquiry on WhatsApp. Reply STOP at any time to opt out.",
+      "marketing": "I agree to receive occasional offers and updates. I can withdraw consent at any time.",
+      "data_processing": "I consent to {{tenant_name}} processing my personal data for the purpose of handling this enquiry, in line with their privacy notice."
+    },
+    "active": true
+  },
+  "marketing_agencies": {
+    "code": "marketing_agencies",
+    "version": 1,
+    "name": "Marketing Agencies",
+    "terminology": {
+      "lead": "Prospect",
+      "leads": "Prospects",
+      "contact": "Client contact",
+      "deal": "Engagement",
+      "deals": "Engagements",
+      "lead_types": [
+        "prospect",
+        "company",
+        "service"
+      ]
+    },
+    "lead_schema": {
+      "fields": [
+        {
+          "key": "objectives",
+          "label": "Business objectives",
+          "type": "multiselect",
+          "required": true,
+          "classification": "P1"
+        },
+        {
+          "key": "channels",
+          "label": "Channels of interest",
+          "type": "multiselect",
+          "options": [
+            "seo",
+            "paid_search",
+            "paid_social",
+            "content",
+            "email",
+            "influencer"
+          ],
+          "classification": "P1"
+        },
+        {
+          "key": "monthly_budget_minor",
+          "label": "Monthly budget",
+          "type": "money",
+          "required": true,
+          "classification": "P2"
+        },
+        {
+          "key": "timeline",
+          "label": "Start timeline",
+          "type": "select",
+          "options": [
+            "immediate",
+            "1_month",
+            "quarter",
+            "exploring"
+          ],
+          "classification": "P1"
+        },
+        {
+          "key": "current_agency",
+          "label": "Current agency",
+          "type": "text",
+          "classification": "P2"
+        }
+      ]
+    },
+    "qualification_rubric": {
+      "criteria": [
+        {
+          "key": "objectives",
+          "label": "Objectives",
+          "weight": 25,
+          "required": true
+        },
+        {
+          "key": "monthly_budget_minor",
+          "label": "Budget",
+          "weight": 30,
+          "required": true
+        },
+        {
+          "key": "channels",
+          "label": "Channels",
+          "weight": 20,
+          "required": false
+        },
+        {
+          "key": "timeline",
+          "label": "Timeline",
+          "weight": 25,
+          "required": false
+        }
+      ],
+      "hot_threshold": 80,
+      "warm_threshold": 40
+    },
+    "pipeline_stages": [
+      {
+        "name": "Inquiry",
+        "position": 0,
+        "probability": 11,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Discovery",
+        "position": 1,
+        "probability": 23,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Qualified",
+        "position": 2,
+        "probability": 34,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Proposal",
+        "position": 3,
+        "probability": 46,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Negotiation",
+        "position": 4,
+        "probability": 57,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Won",
+        "position": 5,
+        "probability": 100,
+        "required_fields": [],
+        "is_won": true,
+        "is_lost": false
+      },
+      {
+        "name": "Lost",
+        "position": 6,
+        "probability": 0,
+        "required_fields": [
+          "loss_reason"
+        ],
+        "is_won": false,
+        "is_lost": true
+      }
+    ],
+    "message_templates": [
+      {
+        "name": "discovery_invite",
+        "channel": "email",
+        "category": "utility",
+        "body": "Hi {{contact.first_name}}, shall we set up a 30 minute discovery call to scope {{service}}?"
+      },
+      {
+        "name": "proposal_followup",
+        "channel": "email",
+        "category": "utility",
+        "body": "Following up on the proposal shared on {{proposal_date}}. Happy to walk through it."
+      }
+    ],
+    "document_templates": [
+      {
+        "name": "proposal",
+        "type": "proposal"
+      },
+      {
+        "name": "sow",
+        "type": "sow"
+      },
+      {
+        "name": "nda",
+        "type": "nda"
+      },
+      {
+        "name": "invoice",
+        "type": "invoice"
+      }
+    ],
+    "workflow_recipes": [
+      {
+        "key": "discovery_scheduling"
+      },
+      {
+        "key": "proposal_followup"
+      },
+      {
+        "key": "deposit_reminder"
+      }
+    ],
+    "business_hours": {
+      "monday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "tuesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "wednesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "thursday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "friday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "saturday": {
+        "start": "10:00",
+        "end": "14:00"
+      },
+      "sunday": null
+    },
+    "dashboard_presets": [
+      {
+        "key": "proposal_win_rate"
+      },
+      {
+        "key": "pipeline_by_service"
+      },
+      {
+        "key": "source_attribution"
+      },
+      {
+        "key": "average_engagement_value"
+      }
+    ],
+    "prohibited_ai_rules": [
+      {
+        "rule": "no_performance_guarantee",
+        "detail": "Never guarantee rankings, leads, ROAS or revenue outcomes."
+      },
+      {
+        "rule": "no_unsupported_benchmark",
+        "detail": "Never quote industry benchmarks without a cited, verifiable source."
+      }
+    ],
+    "consent_copy": {
+      "whatsapp_optin": "I agree to receive updates about my enquiry on WhatsApp. Reply STOP at any time to opt out.",
+      "marketing": "I agree to receive occasional offers and updates. I can withdraw consent at any time.",
+      "data_processing": "I consent to {{tenant_name}} processing my personal data for the purpose of handling this enquiry, in line with their privacy notice."
+    },
+    "active": true
+  },
+  "ca_firms": {
+    "code": "ca_firms",
+    "version": 1,
+    "name": "CA and Accounting Firms",
+    "terminology": {
+      "lead": "Client enquiry",
+      "leads": "Client enquiries",
+      "contact": "Client",
+      "deal": "Engagement",
+      "deals": "Engagements",
+      "lead_types": [
+        "client",
+        "service",
+        "filing"
+      ]
+    },
+    "lead_schema": {
+      "fields": [
+        {
+          "key": "entity_type",
+          "label": "Entity type",
+          "type": "select",
+          "options": [
+            "individual",
+            "proprietorship",
+            "partnership",
+            "llp",
+            "pvt_ltd",
+            "trust"
+          ],
+          "required": true,
+          "classification": "P2"
+        },
+        {
+          "key": "service_required",
+          "label": "Service required",
+          "type": "multiselect",
+          "options": [
+            "itr",
+            "gst",
+            "tds",
+            "audit",
+            "roc",
+            "advisory",
+            "incorporation"
+          ],
+          "required": true,
+          "classification": "P2"
+        },
+        {
+          "key": "period",
+          "label": "Financial period",
+          "type": "text",
+          "classification": "P2"
+        },
+        {
+          "key": "deadline",
+          "label": "Statutory deadline",
+          "type": "date",
+          "classification": "P2"
+        },
+        {
+          "key": "document_readiness",
+          "label": "Document readiness",
+          "type": "select",
+          "options": [
+            "not_started",
+            "partial",
+            "ready"
+          ],
+          "classification": "P2"
+        }
+      ]
+    },
+    "qualification_rubric": {
+      "criteria": [
+        {
+          "key": "service_required",
+          "label": "Service",
+          "weight": 30,
+          "required": true
+        },
+        {
+          "key": "entity_type",
+          "label": "Entity type",
+          "weight": 20,
+          "required": true
+        },
+        {
+          "key": "deadline",
+          "label": "Deadline",
+          "weight": 25,
+          "required": false
+        },
+        {
+          "key": "document_readiness",
+          "label": "Document readiness",
+          "weight": 25,
+          "required": false
+        }
+      ],
+      "hot_threshold": 80,
+      "warm_threshold": 40
+    },
+    "pipeline_stages": [
+      {
+        "name": "Inquiry",
+        "position": 0,
+        "probability": 13,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Document Collection",
+        "position": 1,
+        "probability": 27,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Consultation",
+        "position": 2,
+        "probability": 40,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Proposal",
+        "position": 3,
+        "probability": 53,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Engaged",
+        "position": 4,
+        "probability": 100,
+        "required_fields": [],
+        "is_won": true,
+        "is_lost": false
+      },
+      {
+        "name": "Lost",
+        "position": 5,
+        "probability": 0,
+        "required_fields": [
+          "loss_reason"
+        ],
+        "is_won": false,
+        "is_lost": true
+      }
+    ],
+    "message_templates": [
+      {
+        "name": "document_request",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "Hello {{contact.first_name}}, please upload the documents for {{service}} securely here: {{secure_upload_url}}"
+      },
+      {
+        "name": "deadline_reminder",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "Reminder: the {{service}} deadline is {{deadline}}. Please share any pending documents."
+      }
+    ],
+    "document_templates": [
+      {
+        "name": "engagement_letter",
+        "type": "engagement_letter"
+      },
+      {
+        "name": "document_checklist",
+        "type": "document_checklist"
+      },
+      {
+        "name": "invoice",
+        "type": "invoice"
+      },
+      {
+        "name": "filing_acknowledgement",
+        "type": "filing_acknowledgement"
+      }
+    ],
+    "workflow_recipes": [
+      {
+        "key": "document_chase"
+      },
+      {
+        "key": "deadline_reminder"
+      },
+      {
+        "key": "consultation_scheduling"
+      }
+    ],
+    "business_hours": {
+      "monday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "tuesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "wednesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "thursday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "friday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "saturday": {
+        "start": "10:00",
+        "end": "14:00"
+      },
+      "sunday": null
+    },
+    "dashboard_presets": [
+      {
+        "key": "engagement_funnel"
+      },
+      {
+        "key": "deadline_risk"
+      },
+      {
+        "key": "service_mix"
+      },
+      {
+        "key": "document_collection_sla"
+      }
+    ],
+    "prohibited_ai_rules": [
+      {
+        "rule": "no_tax_opinion",
+        "detail": "Administrative assistance only. Never provide a tax or legal opinion."
+      },
+      {
+        "rule": "no_legal_advice",
+        "detail": "Never advise on statutory positions, disputes or penalties."
+      },
+      {
+        "rule": "restrict_financial_documents",
+        "detail": "Financial and identity documents are P3; restrict access, never send to AI without an approved minimal policy."
+      },
+      {
+        "rule": "no_outcome_guarantee",
+        "detail": "Never guarantee refunds, assessments or approval outcomes."
+      }
+    ],
+    "consent_copy": {
+      "whatsapp_optin": "I agree to receive updates about my enquiry on WhatsApp. Reply STOP at any time to opt out.",
+      "marketing": "I agree to receive occasional offers and updates. I can withdraw consent at any time.",
+      "data_processing": "I consent to {{tenant_name}} processing my personal data for the purpose of handling this enquiry, in line with their privacy notice."
+    },
+    "active": true
+  },
+  "gyms": {
+    "code": "gyms",
+    "version": 1,
+    "name": "Gyms and Fitness",
+    "terminology": {
+      "lead": "Prospect",
+      "leads": "Prospects",
+      "contact": "Member",
+      "deal": "Membership",
+      "deals": "Memberships",
+      "lead_types": [
+        "member",
+        "prospect"
+      ]
+    },
+    "lead_schema": {
+      "fields": [
+        {
+          "key": "goal_category",
+          "label": "Fitness goal",
+          "type": "select",
+          "options": [
+            "weight_loss",
+            "strength",
+            "general_fitness",
+            "sport_specific",
+            "rehabilitation"
+          ],
+          "required": true,
+          "classification": "P2"
+        },
+        {
+          "key": "preferred_branch",
+          "label": "Preferred branch",
+          "type": "text",
+          "required": true,
+          "classification": "P1"
+        },
+        {
+          "key": "preferred_time",
+          "label": "Preferred time",
+          "type": "select",
+          "options": [
+            "early_morning",
+            "morning",
+            "evening",
+            "night"
+          ],
+          "classification": "P1"
+        },
+        {
+          "key": "plan_interest",
+          "label": "Plan of interest",
+          "type": "select",
+          "options": [
+            "monthly",
+            "quarterly",
+            "half_yearly",
+            "annual"
+          ],
+          "classification": "P1"
+        },
+        {
+          "key": "start_date",
+          "label": "Intended start date",
+          "type": "date",
+          "classification": "P1"
+        }
+      ]
+    },
+    "qualification_rubric": {
+      "criteria": [
+        {
+          "key": "goal_category",
+          "label": "Goal",
+          "weight": 25,
+          "required": true
+        },
+        {
+          "key": "preferred_branch",
+          "label": "Branch",
+          "weight": 20,
+          "required": true
+        },
+        {
+          "key": "plan_interest",
+          "label": "Plan",
+          "weight": 25,
+          "required": false
+        },
+        {
+          "key": "start_date",
+          "label": "Start date",
+          "weight": 30,
+          "required": false
+        }
+      ],
+      "hot_threshold": 80,
+      "warm_threshold": 40
+    },
+    "pipeline_stages": [
+      {
+        "name": "Inquiry",
+        "position": 0,
+        "probability": 13,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Contacted",
+        "position": 1,
+        "probability": 27,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Trial Booked",
+        "position": 2,
+        "probability": 40,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Trial Attended",
+        "position": 3,
+        "probability": 53,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Membership",
+        "position": 4,
+        "probability": 100,
+        "required_fields": [],
+        "is_won": true,
+        "is_lost": false
+      },
+      {
+        "name": "Lost",
+        "position": 5,
+        "probability": 0,
+        "required_fields": [
+          "loss_reason"
+        ],
+        "is_won": false,
+        "is_lost": true
+      }
+    ],
+    "message_templates": [
+      {
+        "name": "trial_invite",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "Hello {{contact.first_name}}, your free trial at {{branch_name}} can be booked for {{trial_slot}}. Shall we confirm?"
+      },
+      {
+        "name": "renewal_reminder",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "Your membership at {{branch_name}} expires on {{expiry_date}}. Renew here: {{payment_link}}"
+      }
+    ],
+    "document_templates": [
+      {
+        "name": "membership_agreement",
+        "type": "membership_agreement"
+      },
+      {
+        "name": "receipt",
+        "type": "receipt"
+      },
+      {
+        "name": "par_q_form",
+        "type": "par_q_form"
+      }
+    ],
+    "workflow_recipes": [
+      {
+        "key": "trial_reminder"
+      },
+      {
+        "key": "renewal_reminder"
+      },
+      {
+        "key": "payment_followup"
+      }
+    ],
+    "business_hours": {
+      "monday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "tuesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "wednesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "thursday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "friday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "saturday": {
+        "start": "10:00",
+        "end": "14:00"
+      },
+      "sunday": null
+    },
+    "dashboard_presets": [
+      {
+        "key": "trial_conversion"
+      },
+      {
+        "key": "membership_renewals"
+      },
+      {
+        "key": "branch_performance"
+      },
+      {
+        "key": "payment_collection"
+      }
+    ],
+    "prohibited_ai_rules": [
+      {
+        "rule": "no_medical_claim",
+        "detail": "Never make medical, injury, nutrition-prescription or rehabilitation claims."
+      },
+      {
+        "rule": "no_transformation_guarantee",
+        "detail": "Never guarantee weight loss, body composition or transformation outcomes."
+      }
+    ],
+    "consent_copy": {
+      "whatsapp_optin": "I agree to receive updates about my enquiry on WhatsApp. Reply STOP at any time to opt out.",
+      "marketing": "I agree to receive occasional offers and updates. I can withdraw consent at any time.",
+      "data_processing": "I consent to {{tenant_name}} processing my personal data for the purpose of handling this enquiry, in line with their privacy notice."
+    },
+    "active": true
+  },
+  "automobile_dealerships": {
+    "code": "automobile_dealerships",
+    "version": 1,
+    "name": "Automobile Dealerships",
+    "terminology": {
+      "lead": "Buyer",
+      "leads": "Buyers",
+      "contact": "Customer",
+      "deal": "Booking",
+      "deals": "Bookings",
+      "lead_types": [
+        "buyer",
+        "vehicle",
+        "branch"
+      ]
+    },
+    "lead_schema": {
+      "fields": [
+        {
+          "key": "model",
+          "label": "Model of interest",
+          "type": "text",
+          "required": true,
+          "classification": "P1"
+        },
+        {
+          "key": "variant",
+          "label": "Variant",
+          "type": "text",
+          "classification": "P1"
+        },
+        {
+          "key": "budget_minor",
+          "label": "Budget",
+          "type": "money",
+          "required": true,
+          "classification": "P2"
+        },
+        {
+          "key": "purchase_timeline",
+          "label": "Purchase timeline",
+          "type": "select",
+          "options": [
+            "this_month",
+            "1_3_months",
+            "3_6_months",
+            "exploring"
+          ],
+          "classification": "P1"
+        },
+        {
+          "key": "exchange_vehicle",
+          "label": "Exchange vehicle",
+          "type": "text",
+          "classification": "P2"
+        },
+        {
+          "key": "finance_required",
+          "label": "Finance required",
+          "type": "boolean",
+          "classification": "P2"
+        },
+        {
+          "key": "preferred_branch",
+          "label": "Preferred branch",
+          "type": "text",
+          "classification": "P1"
+        }
+      ]
+    },
+    "qualification_rubric": {
+      "criteria": [
+        {
+          "key": "model",
+          "label": "Model",
+          "weight": 25,
+          "required": true
+        },
+        {
+          "key": "budget_minor",
+          "label": "Budget",
+          "weight": 25,
+          "required": true
+        },
+        {
+          "key": "purchase_timeline",
+          "label": "Timeline",
+          "weight": 25,
+          "required": false
+        },
+        {
+          "key": "finance_required",
+          "label": "Finance clarity",
+          "weight": 10,
+          "required": false
+        },
+        {
+          "key": "exchange_vehicle",
+          "label": "Exchange",
+          "weight": 15,
+          "required": false
+        }
+      ],
+      "hot_threshold": 80,
+      "warm_threshold": 40
+    },
+    "pipeline_stages": [
+      {
+        "name": "Inquiry",
+        "position": 0,
+        "probability": 11,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Contacted",
+        "position": 1,
+        "probability": 23,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Qualified",
+        "position": 2,
+        "probability": 34,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Test Drive",
+        "position": 3,
+        "probability": 46,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Quote",
+        "position": 4,
+        "probability": 57,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Booking",
+        "position": 5,
+        "probability": 100,
+        "required_fields": [],
+        "is_won": true,
+        "is_lost": false
+      },
+      {
+        "name": "Lost",
+        "position": 6,
+        "probability": 0,
+        "required_fields": [
+          "loss_reason"
+        ],
+        "is_won": false,
+        "is_lost": true
+      }
+    ],
+    "message_templates": [
+      {
+        "name": "test_drive_invite",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "Hello {{contact.first_name}}, a test drive for the {{model}} can be arranged at {{branch_name}}. Which day suits you?"
+      },
+      {
+        "name": "quote_share",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "Sharing an indicative quote for the {{model}}. Final pricing, availability and finance terms are confirmed by our team in writing."
+      }
+    ],
+    "document_templates": [
+      {
+        "name": "quotation",
+        "type": "quotation"
+      },
+      {
+        "name": "booking_form",
+        "type": "booking_form"
+      },
+      {
+        "name": "invoice",
+        "type": "invoice"
+      },
+      {
+        "name": "finance_application",
+        "type": "finance_application"
+      }
+    ],
+    "workflow_recipes": [
+      {
+        "key": "test_drive_reminder"
+      },
+      {
+        "key": "quote_followup"
+      },
+      {
+        "key": "booking_confirmation"
+      }
+    ],
+    "business_hours": {
+      "monday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "tuesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "wednesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "thursday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "friday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "saturday": {
+        "start": "10:00",
+        "end": "14:00"
+      },
+      "sunday": null
+    },
+    "dashboard_presets": [
+      {
+        "key": "test_drive_conversion"
+      },
+      {
+        "key": "model_mix"
+      },
+      {
+        "key": "booking_funnel"
+      },
+      {
+        "key": "branch_performance"
+      }
+    ],
+    "prohibited_ai_rules": [
+      {
+        "rule": "verified_price_only",
+        "detail": "Price, inventory, delivery date and finance terms require verified data or explicit human confirmation."
+      },
+      {
+        "rule": "no_delivery_promise",
+        "detail": "Never promise a delivery date without a verified allocation."
+      },
+      {
+        "rule": "no_finance_approval_claim",
+        "detail": "Never state or imply that finance is approved."
+      }
+    ],
+    "consent_copy": {
+      "whatsapp_optin": "I agree to receive updates about my enquiry on WhatsApp. Reply STOP at any time to opt out.",
+      "marketing": "I agree to receive occasional offers and updates. I can withdraw consent at any time.",
+      "data_processing": "I consent to {{tenant_name}} processing my personal data for the purpose of handling this enquiry, in line with their privacy notice."
+    },
+    "active": true
+  },
+  "other_sme": {
+    "code": "other_sme",
+    "version": 1,
+    "name": "General SME",
+    "terminology": {
+      "lead": "Lead",
+      "leads": "Leads",
+      "contact": "Contact",
+      "deal": "Deal",
+      "deals": "Deals",
+      "lead_types": [
+        "lead"
+      ]
+    },
+    "lead_schema": {
+      "fields": [
+        {
+          "key": "requirement",
+          "label": "Requirement",
+          "type": "text",
+          "required": true,
+          "classification": "P1"
+        },
+        {
+          "key": "budget_minor",
+          "label": "Budget",
+          "type": "money",
+          "classification": "P2"
+        },
+        {
+          "key": "timeline",
+          "label": "Timeline",
+          "type": "select",
+          "options": [
+            "immediate",
+            "1_month",
+            "quarter",
+            "exploring"
+          ],
+          "classification": "P1"
+        }
+      ]
+    },
+    "qualification_rubric": {
+      "criteria": [
+        {
+          "key": "requirement",
+          "label": "Requirement",
+          "weight": 40,
+          "required": true
+        },
+        {
+          "key": "budget_minor",
+          "label": "Budget",
+          "weight": 30,
+          "required": false
+        },
+        {
+          "key": "timeline",
+          "label": "Timeline",
+          "weight": 30,
+          "required": false
+        }
+      ],
+      "hot_threshold": 80,
+      "warm_threshold": 40
+    },
+    "pipeline_stages": [
+      {
+        "name": "New",
+        "position": 0,
+        "probability": 13,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Contacted",
+        "position": 1,
+        "probability": 27,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Qualified",
+        "position": 2,
+        "probability": 40,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Proposal",
+        "position": 3,
+        "probability": 53,
+        "required_fields": [],
+        "is_won": false,
+        "is_lost": false
+      },
+      {
+        "name": "Won",
+        "position": 4,
+        "probability": 100,
+        "required_fields": [],
+        "is_won": true,
+        "is_lost": false
+      },
+      {
+        "name": "Lost",
+        "position": 5,
+        "probability": 0,
+        "required_fields": [
+          "loss_reason"
+        ],
+        "is_won": false,
+        "is_lost": true
+      }
+    ],
+    "message_templates": [
+      {
+        "name": "acknowledge",
+        "channel": "whatsapp",
+        "category": "utility",
+        "body": "Thank you for your enquiry, {{contact.first_name}}. A member of our team will be in touch shortly."
+      }
+    ],
+    "document_templates": [
+      {
+        "name": "proposal",
+        "type": "proposal"
+      },
+      {
+        "name": "invoice",
+        "type": "invoice"
+      }
+    ],
+    "workflow_recipes": [
+      {
+        "key": "new_lead_acknowledge"
+      },
+      {
+        "key": "followup_reminder"
+      }
+    ],
+    "business_hours": {
+      "monday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "tuesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "wednesday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "thursday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "friday": {
+        "start": "09:30",
+        "end": "18:30"
+      },
+      "saturday": {
+        "start": "10:00",
+        "end": "14:00"
+      },
+      "sunday": null
+    },
+    "dashboard_presets": [
+      {
+        "key": "lead_funnel"
+      },
+      {
+        "key": "source_attribution"
+      },
+      {
+        "key": "pipeline_value"
+      }
+    ],
+    "prohibited_ai_rules": [
+      {
+        "rule": "no_outcome_guarantee",
+        "detail": "Never guarantee outcomes, results or returns."
+      }
+    ],
+    "consent_copy": {
+      "whatsapp_optin": "I agree to receive updates about my enquiry on WhatsApp. Reply STOP at any time to opt out.",
+      "marketing": "I agree to receive occasional offers and updates. I can withdraw consent at any time.",
+      "data_processing": "I consent to {{tenant_name}} processing my personal data for the purpose of handling this enquiry, in line with their privacy notice."
+    },
+    "active": true
+  }
+}

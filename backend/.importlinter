@@ -1,0 +1,80 @@
+[importlinter]
+root_packages =
+    domain
+    application
+    infrastructure
+    api
+    shared
+include_external_packages = True
+
+# The specification mandates `API -> application -> domain <- infrastructure` and
+# states that infrastructure "implements domain/application ports". Infrastructure
+# is therefore an adapter tier: it may depend on application ports and on domain,
+# but nothing may depend on it except the composition root, and it may never
+# depend on the HTTP layer.
+
+[importlinter:contract:layers]
+name = API depends on application, which depends on domain, which depends on shared
+type = layers
+layers =
+    api
+    application
+    domain
+    shared
+
+[importlinter:contract:infrastructure-is-an-adapter]
+name = Infrastructure never depends on the HTTP layer
+type = forbidden
+source_modules =
+    infrastructure
+forbidden_modules =
+    api
+
+[importlinter:contract:application-independent-of-http]
+name = Application never depends on the HTTP layer
+type = forbidden
+source_modules =
+    application
+forbidden_modules =
+    api
+
+[importlinter:contract:domain-purity]
+name = Domain must not import frameworks or I/O
+type = forbidden
+source_modules =
+    domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    httpx
+    boto3
+    celery
+    starlette
+    asyncpg
+    pydantic_settings
+
+[importlinter:contract:api-no-orm]
+name = API layer must not touch the ORM or provider SDKs directly
+type = forbidden
+source_modules =
+    api
+forbidden_modules =
+    sqlalchemy
+    boto3
+    httpx
+allow_indirect_imports = True
+
+[importlinter:contract:module-independence]
+name = Tenancy has no internal module dependency
+type = forbidden
+source_modules =
+    domain.tenants
+forbidden_modules =
+    domain.leads
+    domain.contacts
+    domain.deals
+    domain.communications
+    domain.payments
+    domain.workflows
+    domain.ai
