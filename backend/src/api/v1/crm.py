@@ -25,6 +25,9 @@ from api.v1.schemas import (
     ActivityLogRequest,
     ContactCreate,
     ContactUpdate,
+    DealCreate,
+    DealStageMoveRequest,
+    DealUpdate,
     NoteCreateRequest,
     NoteUpdateRequest,
 )
@@ -283,3 +286,106 @@ async def update_note(
     )
     response.headers["ETag"] = f'W/"{note["version"]}"'
     return success(note, request_id=_request_id(request))
+
+
+# --- deals and pipelines -----------------------------------------------------
+
+deals_router = APIRouter(prefix="/deals", tags=["crm"])
+
+
+def _deals(principal: Any) -> Any:
+    from application.crm.deals import DealService
+
+    return DealService.for_principal(principal)
+
+
+@deals_router.get("/board", summary="The pipeline as stage columns")
+async def deal_board(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    principal.require("deal", "list")
+    board = await _deals(principal).board()
+    return success(board, request_id=_request_id(request))
+
+
+@deals_router.get("", summary="List deals")
+async def list_deals(
+    request: Request,
+    principal: CurrentPrincipal,
+    query: Annotated[ListQuery, Depends(list_query)],
+    deal_status: Annotated[str | None, Query(alias="status", max_length=20)] = None,
+) -> dict[str, Any]:
+    principal.require("deal", "list")
+    page = await _deals(principal).list_deals(query, status=deal_status)
+    return success({"deals": page.items}, pagination=page.meta(), request_id=_request_id(request))
+
+
+@deals_router.post("", status_code=status.HTTP_201_CREATED, summary="Create a deal")
+async def create_deal(
+    payload: DealCreate, request: Request, response: Response, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("deal", "create")
+    deal = await _deals(principal).create(payload.model_dump())
+    response.headers["ETag"] = f'W/"{deal["version"]}"'
+    return success(deal, request_id=_request_id(request))
+
+
+@deals_router.get("/{deal_id}", summary="Read a deal")
+async def read_deal(
+    deal_id: UUID, request: Request, response: Response, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("deal", "read")
+    deal = await _deals(principal).get(deal_id)
+    response.headers["ETag"] = f'W/"{deal["version"]}"'
+    return success(deal, request_id=_request_id(request))
+
+
+@deals_router.patch("/{deal_id}", summary="Update a deal")
+async def update_deal(
+    deal_id: UUID,
+    payload: DealUpdate,
+    request: Request,
+    response: Response,
+    principal: CurrentPrincipal,
+    if_match: Annotated[int | None, Depends(parse_if_match)] = None,
+) -> dict[str, Any]:
+    principal.require("deal", "update")
+    deal = await _deals(principal).update(
+        deal_id, payload.model_dump(exclude_unset=True), expected_version=if_match
+    )
+    response.headers["ETag"] = f'W/"{deal["version"]}"'
+    return success(deal, request_id=_request_id(request))
+
+
+@deals_router.post("/{deal_id}/stage", summary="Move a deal to another stage")
+async def move_deal_stage(
+    deal_id: UUID,
+    payload: DealStageMoveRequest,
+    request: Request,
+    response: Response,
+    principal: CurrentPrincipal,
+    if_match: Annotated[int | None, Depends(parse_if_match)] = None,
+) -> dict[str, Any]:
+    principal.require("deal", "update")
+    # Every rule -- required fields, direction, loss reason, resulting status --
+    # comes from `domain/deals/pipeline_policy.py`, not from this layer.
+    deal = await _deals(principal).move_stage(
+        deal_id,
+        payload.stage_id,
+        loss_reason=payload.loss_reason,
+        expected_version=if_match,
+    )
+    response.headers["ETag"] = f'W/"{deal["version"]}"'
+    return success(deal, request_id=_request_id(request))
+
+
+@deals_router.post("/{deal_id}/reopen", summary="Reopen a closed deal")
+async def reopen_deal(
+    deal_id: UUID,
+    request: Request,
+    response: Response,
+    principal: CurrentPrincipal,
+    if_match: Annotated[int | None, Depends(parse_if_match)] = None,
+) -> dict[str, Any]:
+    principal.require("deal", "update")
+    deal = await _deals(principal).reopen(deal_id, expected_version=if_match)
+    response.headers["ETag"] = f'W/"{deal["version"]}"'
+    return success(deal, request_id=_request_id(request))

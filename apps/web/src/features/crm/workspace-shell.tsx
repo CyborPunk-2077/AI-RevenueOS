@@ -17,13 +17,14 @@ export function WorkspaceShell({
 }: {
   tenantSlug: string;
   email: string;
-  active: 'leads' | 'contacts' | 'accounts';
+  active: 'leads' | 'contacts' | 'accounts' | 'deals';
   children: React.ReactNode;
 }): JSX.Element {
   const tabs = [
     { key: 'leads', href: '/leads', label: 'Leads' },
     { key: 'contacts', href: '/contacts', label: 'Contacts' },
     { key: 'accounts', href: '/accounts', label: 'Accounts' },
+    { key: 'deals', href: '/deals', label: 'Deals' },
   ] as const;
 
   return (

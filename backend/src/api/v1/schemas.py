@@ -177,6 +177,33 @@ class AccountUpdate(StrictModel):
     owner_id: UUID | None = None
 
 
+class DealCreate(StrictModel):
+    title: Annotated[str, Field(min_length=1, max_length=250)]
+    # Minor units (paise). Storing money as an integer avoids float rounding.
+    amount_minor: Annotated[int, Field(ge=0, le=10**15)] = 0
+    currency: Annotated[str, Field(min_length=3, max_length=3)] = "INR"
+    stage_id: UUID | None = None
+    contact_id: UUID | None = None
+    account_id: UUID | None = None
+    assignee_id: UUID | None = None
+    expected_close_date: datetime | None = None
+
+
+class DealUpdate(StrictModel):
+    title: Annotated[str | None, Field(min_length=1, max_length=250)] = None
+    amount_minor: Annotated[int | None, Field(ge=0, le=10**15)] = None
+    expected_close_date: datetime | None = None
+    assignee_id: UUID | None = None
+    contact_id: UUID | None = None
+    account_id: UUID | None = None
+
+
+class DealStageMoveRequest(StrictModel):
+    stage_id: UUID
+    # Required by the domain policy when the target stage is a lost stage.
+    loss_reason: Annotated[str | None, Field(max_length=200)] = None
+
+
 class ActivityLogRequest(StrictModel):
     """Only the types a human may log by hand; `system` is platform-written."""
 

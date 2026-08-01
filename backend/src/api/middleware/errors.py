@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.app.envelope import failure
+from domain.base import DomainError
 from infrastructure.logging.setup import get_logger
 from shared.exceptions import AppError
 
@@ -47,6 +48,21 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=exc.http_status,
             content=failure(exc.code, exc.message, details=exc.details, request_id=_rid(request)),
             headers=headers,
+        )
+
+    @app.exception_handler(DomainError)
+    async def _domain_error(request: Request, exc: DomainError) -> JSONResponse:
+        """A broken business rule is the caller's problem, not a server fault.
+
+        Without this the domain policies -- invalid stage moves, missing required
+        fields, a loss reason that was not supplied -- reached the generic handler
+        and became a 500, which reads as "we are broken" rather than "that is not
+        allowed", and would have paged somebody.
+        """
+        logger.info("domain_error", code=exc.code, message=str(exc))
+        return JSONResponse(
+            status_code=422,
+            content=failure(exc.code, str(exc), details={}, request_id=_rid(request)),
         )
 
     @app.exception_handler(RequestValidationError)
