@@ -250,3 +250,122 @@ async def test_registration_verification_and_password_reset_are_audited(
     assert reset_token not in serialized
     assert opened.refresh_token not in serialized
     assert "token_hash" not in serialized
+
+
+async def test_mfa_security_mutations_are_audited_without_secrets(
+    wired_engine, seeded_tenants, session_factory, monkeypatch, request
+) -> None:
+    from application.auth.mfa import (
+        complete_enrolment,
+        consume_recovery_code,
+        disable,
+        regenerate_recovery_codes,
+        start_enrolment,
+    )
+    from application.auth.service import issue_session
+    from domain.auth.permissions import Role
+    from infrastructure.auth.mfa import current_totp
+    from infrastructure.auth.passwords import hash_password
+    from infrastructure.auth.tokens import TokenService, generate_keypair
+    from infrastructure.database.models.tenancy import Tenant
+    from infrastructure.database.models.users import User
+    from shared.settings import get_settings
+    from shared.utils.ids import uuid7
+    from shared.utils.timeutil import utcnow
+
+    monkeypatch.setenv("ENCRYPTION_MASTER_KEY", "mfa-audit-master-key-that-is-32-bytes+")
+    get_settings.cache_clear()
+    request.addfinalizer(get_settings.cache_clear)
+
+    tenant_id, _ = seeded_tenants
+    user_id = uuid7()
+    email = f"mfa-audit-{uuid4()}@example.in"
+    password = "MfaAudit-Willow-2026!"
+    async with session_factory() as session, session.begin():
+        await session.execute(
+            text("SELECT set_config('app.tenant_id', :tid, true)"),
+            {"tid": str(tenant_id)},
+        )
+        tenant = (await session.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
+        session.add(
+            User(
+                id=user_id,
+                tenant_id=tenant_id,
+                email=email,
+                full_name="MFA Audit User",
+                password_hash=hash_password(password),
+                status="active",
+                email_verified_at=utcnow(),
+                is_owner=True,
+                version=1,
+            )
+        )
+
+    challenge = await start_enrolment(tenant_id=tenant_id, user_id=user_id, email=email)
+    enrolled = await complete_enrolment(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        pending=challenge.pending,
+        code=current_totp(challenge.secret),
+    )
+    recovery_code = enrolled["recovery_codes"][0]
+    assert await consume_recovery_code(tenant_id=tenant_id, user_id=user_id, code=recovery_code)
+    regenerated = await regenerate_recovery_codes(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        code=current_totp(challenge.secret),
+    )
+
+    private_key, public_key = generate_keypair()
+    tokens = TokenService(
+        private_key=private_key,
+        public_key=public_key,
+        issuer="https://mfa-audit.test",
+    )
+    await issue_session(
+        user_id=user_id,
+        tenant=tenant,
+        roles=[Role.OWNER],
+        email=email,
+        name="MFA Audit User",
+        tokens=tokens,
+        mfa_verified=True,
+    )
+    disabled = await disable(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        password=password,
+        code=current_totp(challenge.secret),
+    )
+    assert disabled["sessions_revoked"] is True
+
+    async with session_factory() as session, session.begin():
+        await session.execute(
+            text("SELECT set_config('app.tenant_id', :tid, true)"),
+            {"tid": str(tenant_id)},
+        )
+        rows = (
+            await session.execute(
+                text(
+                    "SELECT action, new_values, metadata_json FROM audit.audit_logs "
+                    "WHERE resource_id = :uid AND action LIKE 'auth.mfa_%' "
+                    "ORDER BY created_at"
+                ),
+                {"uid": user_id},
+            )
+        ).all()
+
+    assert [row.action for row in rows] == [
+        "auth.mfa_enabled",
+        "auth.mfa_recovery_used",
+        "auth.mfa_recovery_regenerated",
+        "auth.mfa_disabled",
+    ]
+    assert rows[-1].new_values["sessions_revoked"] == 1
+
+    serialized = str(rows)
+    assert challenge.secret not in serialized
+    assert challenge.pending not in serialized
+    assert recovery_code not in serialized
+    assert all(code not in serialized for code in regenerated["recovery_codes"])
+    assert password not in serialized

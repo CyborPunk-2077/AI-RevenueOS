@@ -81,6 +81,8 @@ async def complete_enrolment(
     *, tenant_id: UUID, user_id: UUID, pending: str, code: str
 ) -> dict[str, Any]:
     """Commit the secret only if the user can already generate codes from it."""
+    from application.audit.recorder import AuditRecorder
+
     try:
         secret = _encryptor().decrypt(pending, tenant_id=str(tenant_id)).decode()
     except Exception as exc:
@@ -97,6 +99,14 @@ async def complete_enrolment(
         user.mfa_enabled = True
         user.mfa_secret_encrypted = pending
         user.mfa_recovery_codes = codes.hashes
+        AuditRecorder(session).record(
+            action="auth.mfa_enabled",
+            resource_type="user",
+            resource_id=user_id,
+            tenant_id=tenant_id,
+            actor_id=user_id,
+            new_values={"mfa_enabled": True, "recovery_code_count": len(codes.hashes)},
+        )
 
     logger.info("auth_mfa_enabled", user_id=str(user_id), tenant_id=str(tenant_id))
     # The only time the recovery codes are ever readable.
@@ -121,6 +131,8 @@ async def check_code(*, tenant_id: UUID, user_id: UUID, code: str) -> bool:
 
 async def consume_recovery_code(*, tenant_id: UUID, user_id: UUID, code: str) -> bool:
     """Spend a single-use recovery code. Consumed codes are removed, not marked."""
+    from application.audit.recorder import AuditRecorder
+
     async with tenant_session(tenant_id) as session:
         user = (await session.execute(select(User).where(User.id == user_id))).scalar_one()
         hashes = list(user.mfa_recovery_codes or [])
@@ -132,6 +144,14 @@ async def consume_recovery_code(*, tenant_id: UUID, user_id: UUID, code: str) ->
         remaining = [h for position, h in enumerate(hashes) if position != index]
         user.mfa_recovery_codes = remaining
         left = len(remaining)
+        AuditRecorder(session).record(
+            action="auth.mfa_recovery_used",
+            resource_type="user",
+            resource_id=user_id,
+            tenant_id=tenant_id,
+            actor_id=user_id,
+            new_values={"recovery_codes_remaining": left},
+        )
 
     logger.warning(
         "auth_mfa_recovery_used", user_id=str(user_id), tenant_id=str(tenant_id), remaining=left
@@ -141,6 +161,8 @@ async def consume_recovery_code(*, tenant_id: UUID, user_id: UUID, code: str) ->
 
 async def regenerate_recovery_codes(*, tenant_id: UUID, user_id: UUID, code: str) -> dict[str, Any]:
     """Replace the recovery set. Requires a live TOTP code, not just a session."""
+    from application.audit.recorder import AuditRecorder
+
     if not await check_code(tenant_id=tenant_id, user_id=user_id, code=code):
         raise ValidationError(_BAD_CODE)
 
@@ -148,6 +170,14 @@ async def regenerate_recovery_codes(*, tenant_id: UUID, user_id: UUID, code: str
     async with tenant_session(tenant_id) as session:
         user = (await session.execute(select(User).where(User.id == user_id))).scalar_one()
         user.mfa_recovery_codes = codes.hashes
+        AuditRecorder(session).record(
+            action="auth.mfa_recovery_regenerated",
+            resource_type="user",
+            resource_id=user_id,
+            tenant_id=tenant_id,
+            actor_id=user_id,
+            new_values={"recovery_code_count": len(codes.hashes)},
+        )
 
     logger.info("auth_mfa_recovery_regenerated", user_id=str(user_id))
     return {"recovery_codes": codes.plaintext}
@@ -161,6 +191,8 @@ async def disable(
     Both are demanded because disabling MFA is exactly what an attacker holding a
     hijacked session would try first. Every other session is dropped afterwards.
     """
+    from application.audit.recorder import AuditRecorder
+
     async with tenant_session(tenant_id) as session:
         user = (await session.execute(select(User).where(User.id == user_id))).scalar_one()
         if not user.mfa_enabled:
@@ -181,6 +213,7 @@ async def disable(
         user.mfa_secret_encrypted = None
         user.mfa_recovery_codes = []
 
+        revoked_count = 0
         for token in (
             (
                 await session.execute(
@@ -194,6 +227,15 @@ async def disable(
         ):
             token.revoked_at = utcnow()
             token.revoked_reason = "mfa_disabled"
+            revoked_count += 1
+        AuditRecorder(session).record(
+            action="auth.mfa_disabled",
+            resource_type="user",
+            resource_id=user_id,
+            tenant_id=tenant_id,
+            actor_id=user_id,
+            new_values={"mfa_enabled": False, "sessions_revoked": revoked_count},
+        )
 
     logger.warning("auth_mfa_disabled", user_id=str(user_id), tenant_id=str(tenant_id))
     return {"enabled": False, "sessions_revoked": True}
