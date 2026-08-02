@@ -189,6 +189,8 @@ async def login(email: str, password: str, tokens: TokenService) -> AuthResult:
     Failure is deliberately indistinguishable between an unknown address, a wrong
     password and an inactive account, so the endpoint cannot enumerate users.
     """
+    from application.audit.recorder import AuditRecorder
+
     normalized = normalize_email(email)
     generic = "Email or password is incorrect."
 
@@ -216,6 +218,16 @@ async def login(email: str, password: str, tokens: TokenService) -> AuthResult:
         profile_email, profile_name = user.email, user.full_name
 
     if locked:
+        async with tenant_session(tenant_id) as session:
+            AuditRecorder(session).record(
+                action="auth.login_failed",
+                resource_type="user",
+                resource_id=user_id,
+                tenant_id=tenant_id,
+                actor_type="anonymous",
+                outcome="failure",
+                metadata={"reason": "account_locked"},
+            )
         raise Unauthenticated("This account is temporarily locked after repeated failed attempts.")
 
     password_ok = verify_password(password, password_hash)
@@ -227,10 +239,29 @@ async def login(email: str, password: str, tokens: TokenService) -> AuthResult:
             row = (await session.execute(select(User).where(User.id == user_id))).scalar_one()
             row.failed_login_count = failed_count + 1
             row.locked_until = next_lockout(failed_count)
+            AuditRecorder(session).record(
+                action="auth.login_failed",
+                resource_type="user",
+                resource_id=user_id,
+                tenant_id=tenant_id,
+                actor_type="anonymous",
+                outcome="failure",
+                metadata={"reason": "invalid_credentials"},
+            )
         logger.info("auth_login_failed", user_id=str(user_id))
         raise Unauthenticated(generic)
 
     if not account_ok:
+        async with tenant_session(tenant_id) as session:
+            AuditRecorder(session).record(
+                action="auth.login_failed",
+                resource_type="user",
+                resource_id=user_id,
+                tenant_id=tenant_id,
+                actor_type="anonymous",
+                outcome="failure",
+                metadata={"reason": "account_inactive"},
+            )
         raise Unauthenticated(generic)
 
     async with tenant_session(tenant_id) as session:
@@ -277,6 +308,7 @@ async def issue_session(
     Enforces the per-user session cap first. `sessions_to_evict` returns what must
     go to make room for one more, so it runs before the insert rather than after.
     """
+    from application.audit.recorder import AuditRecorder
     from application.auth.sessions import enforce_session_cap
 
     tenant_id = tenant.id
@@ -294,6 +326,14 @@ async def issue_session(
                 family_id=family_id,
                 expires_at=utcnow() + timedelta(seconds=REFRESH_TTL_SECONDS),
             )
+        )
+        AuditRecorder(session).record(
+            action="auth.login",
+            resource_type="auth_session",
+            resource_id=family_id,
+            tenant_id=tenant_id,
+            actor_id=user_id,
+            new_values={"mfa_verified": mfa_verified},
         )
 
     access_token, expires_at = tokens.issue_access_token(
@@ -327,6 +367,8 @@ async def issue_session(
 
 async def refresh(refresh_token: str, tokens: TokenService) -> AuthResult:
     """Rotate a refresh token. Reuse of a rotated token revokes the whole family."""
+    from application.audit.recorder import AuditRecorder
+
     jti = parse_refresh_token(refresh_token)
     presented = hash_refresh_token(refresh_token)
     expired = "This session is no longer valid. Please sign in again."
@@ -353,6 +395,7 @@ async def refresh(refresh_token: str, tokens: TokenService) -> AuthResult:
     if outcome.reuse_detected and row is not None:
         # Replay of an already-rotated token: assume theft, drop the family.
         async with tenant_session(tenant_id) as session:
+            revoked_count = 0
             for sibling in (
                 (
                     await session.execute(
@@ -367,10 +410,31 @@ async def refresh(refresh_token: str, tokens: TokenService) -> AuthResult:
             ):
                 sibling.revoked_at = utcnow()
                 sibling.revoked_reason = "family_reuse"
+                revoked_count += 1
+            AuditRecorder(session).record(
+                action="auth.refresh_reuse",
+                resource_type="auth_session",
+                resource_id=family_id,
+                tenant_id=tenant_id,
+                actor_id=user_id,
+                outcome="blocked",
+                new_values={"sessions_revoked": revoked_count},
+            )
         logger.warning("auth_refresh_reuse", family_id=str(family_id))
         raise Unauthenticated(expired)
 
     if not outcome.accepted or row is None:
+        if row is not None:
+            async with tenant_session(tenant_id) as session:
+                AuditRecorder(session).record(
+                    action="auth.refresh",
+                    resource_type="auth_session",
+                    resource_id=family_id,
+                    tenant_id=tenant_id,
+                    actor_id=user_id,
+                    outcome="failure",
+                    metadata={"reason": outcome.reason or "refresh_rejected"},
+                )
         raise Unauthenticated(expired)
 
     async with platform_session("authentication: reload principal") as session:
@@ -403,6 +467,14 @@ async def refresh(refresh_token: str, tokens: TokenService) -> AuthResult:
                 expires_at=utcnow() + timedelta(seconds=REFRESH_TTL_SECONDS),
             )
         )
+        AuditRecorder(session).record(
+            action="auth.refresh",
+            resource_type="auth_session",
+            resource_id=family_id,
+            tenant_id=tenant_id,
+            actor_id=user_id,
+            new_values={"rotated": True},
+        )
 
     access_token, expires_at = tokens.issue_access_token(
         _claims_for_values(
@@ -427,6 +499,8 @@ async def refresh(refresh_token: str, tokens: TokenService) -> AuthResult:
 
 async def logout(refresh_token: str) -> None:
     """Revoke the presented token's entire family."""
+    from application.audit.recorder import AuditRecorder
+
     try:
         jti = parse_refresh_token(refresh_token)
     except Unauthenticated:
@@ -441,6 +515,7 @@ async def logout(refresh_token: str) -> None:
         tenant_id, family_id, user_id = row.tenant_id, row.family_id, row.user_id
 
     async with tenant_session(tenant_id) as session:
+        revoked_count = 0
         for sibling in (
             (
                 await session.execute(
@@ -455,4 +530,13 @@ async def logout(refresh_token: str) -> None:
         ):
             sibling.revoked_at = utcnow()
             sibling.revoked_reason = "logout"
+            revoked_count += 1
+        AuditRecorder(session).record(
+            action="auth.logout",
+            resource_type="auth_session",
+            resource_id=family_id,
+            tenant_id=tenant_id,
+            actor_id=user_id,
+            new_values={"sessions_revoked": revoked_count},
+        )
     logger.info("auth_logout", user_id=str(user_id))
