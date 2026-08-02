@@ -369,3 +369,44 @@ async def test_mfa_security_mutations_are_audited_without_secrets(
     assert recovery_code not in serialized
     assert all(code not in serialized for code in regenerated["recovery_codes"])
     assert password not in serialized
+
+
+async def test_api_key_reveal_and_revocation_are_audited_without_the_key(
+    wired_engine, seeded_tenants, session_factory
+) -> None:
+    from application.auth.api_keys import create, revoke
+    from shared.utils.ids import uuid7
+
+    tenant_id, _ = seeded_tenants
+    user_id = uuid7()
+    created = await create(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        name="audit test key",
+        scopes=["lead:read"],
+        granted_permissions=frozenset({"lead:read"}),
+    )
+    await revoke(tenant_id=tenant_id, user_id=user_id, key_id=created["id"])
+
+    async with session_factory() as session, session.begin():
+        await session.execute(
+            text("SELECT set_config('app.tenant_id', :tid, true)"),
+            {"tid": str(tenant_id)},
+        )
+        rows = (
+            await session.execute(
+                text(
+                    "SELECT action, old_values, new_values, metadata_json "
+                    "FROM audit.audit_logs WHERE resource_id = :rid ORDER BY created_at"
+                ),
+                {"rid": created["id"]},
+            )
+        ).all()
+
+    assert [row.action for row in rows] == ["secret.accessed", "api_key.revoked"]
+    assert rows[0].new_values["scopes"] == ["lead:read"]
+    assert rows[1].new_values["revoked"] is True
+
+    serialized = str(rows)
+    assert created["key"] not in serialized
+    assert "key_hash" not in serialized

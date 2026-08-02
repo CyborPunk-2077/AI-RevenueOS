@@ -61,6 +61,8 @@ async def create(
     granted_permissions: frozenset[str],
 ) -> dict[str, Any]:
     """Mint a key. Its scopes cannot exceed what the creating principal holds."""
+    from application.audit.recorder import AuditRecorder
+
     clean_name = (name or "").strip()
     if not clean_name:
         raise ValidationError("A name is required.")
@@ -88,6 +90,15 @@ async def create(
         session.add(row)
         await session.flush()
         created = _serialize(row)
+        AuditRecorder(session).record(
+            action="secret.accessed",
+            resource_type="api_key",
+            resource_id=row.id,
+            tenant_id=tenant_id,
+            actor_id=user_id,
+            new_values={"name": row.name, "scopes": requested},
+            metadata={"purpose": "api_key_created_and_revealed_once"},
+        )
 
     logger.info("auth_api_key_created", tenant_id=str(tenant_id), user_id=str(user_id))
     # `key` appears here and nowhere else, ever.
@@ -110,8 +121,10 @@ async def list_keys(*, tenant_id: UUID) -> list[dict[str, Any]]:
         return [_serialize(row) for row in rows]
 
 
-async def revoke(*, tenant_id: UUID, key_id: str) -> dict[str, Any]:
+async def revoke(*, tenant_id: UUID, user_id: UUID, key_id: str) -> dict[str, Any]:
     """Soft-revoke. The row is kept so audit history still resolves the key."""
+    from application.audit.recorder import AuditRecorder
+
     try:
         identifier = UUID(key_id)
     except ValueError as exc:
@@ -128,6 +141,15 @@ async def revoke(*, tenant_id: UUID, key_id: str) -> dict[str, Any]:
             # as absent, which is the same answer as a key that never existed.
             raise NotFound("That API key does not exist.")
         row.revoked_at = utcnow()
+        AuditRecorder(session).record(
+            action="api_key.revoked",
+            resource_type="api_key",
+            resource_id=identifier,
+            tenant_id=tenant_id,
+            actor_id=user_id,
+            old_values={"revoked": False},
+            new_values={"revoked": True},
+        )
 
     logger.info("auth_api_key_revoked", tenant_id=str(tenant_id), key_id=key_id)
     return {"revoked": True, "id": key_id}

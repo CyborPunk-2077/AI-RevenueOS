@@ -451,5 +451,9 @@ async def delete_api_key(
     key_id: str, request: Request, principal: CurrentPrincipal
 ) -> dict[str, Any]:
     principal.require("api_key", "delete")
-    result = await api_key_service.revoke(tenant_id=principal.tenant_id, key_id=key_id)
+    result = await api_key_service.revoke(
+        tenant_id=principal.tenant_id,
+        user_id=principal.user_id,
+        key_id=key_id,
+    )
     return success(result, request_id=_request_id(request))
