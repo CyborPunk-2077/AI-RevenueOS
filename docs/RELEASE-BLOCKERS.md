@@ -4,7 +4,7 @@
 **Audit date:** 2026-08-01 · **P0-1 closed:** 2026-08-01 · **P0-2 closed:** 2026-08-01 · **P0-3 closed:** 2026-08-01
 Full findings: `docs/IMPLEMENTATION-AUDIT.md` · P0-1 evidence: `docs/p0-1-gate-results.txt`
 
-GA is blocked by **4 P0** items — 2 code gaps and 2 external gates — plus 11 P1.
+GA is blocked by **4 P0** items — 2 code gaps and 2 external gates — plus 10 P1.
 No release gate may be waived without recorded evidence.
 
 | P0 | Status |
@@ -393,7 +393,7 @@ signed-off copy and policy that the code enforces against.
 | P1-3 | **No alert rules exist.** Spec requires warning/critical alerts with owner and runbook per signal. | M02, M21, criterion 27 | Define alerts for API P95, queue depth/age, DLQ size, circuit opening, AI error >2%, budget 80%, RPO backup failure, WAF events | 2 days |
 | P1-4 | **No restore drill.** `infra/scripts/verify-restore.sh` is referenced by the nightly workflow and does not exist. | M22, criterion 24 | Write the script (restore → `alembic current` → row-count reconciliation → **re-run the RLS suite against the restored instance**) and run it | 2 days + AWS |
 | P1-12 | **Worker action handlers are stubs.** The workflow action dispatch and outbound webhook HTTP transport report `pending_handler`/`pending_transport`. Queues, retry, idempotency and DLQ around them are complete. | M18, criteria 16, 27 | Implement handlers per module as each service lands under P0-4 | folded into P0-4 |
-| P1-5 | **Booking concurrency unproven.** `claim_public_slot` has 0% coverage; the unique constraint is the only defence and no concurrency test exists. | criterion 12 | Integration test firing N concurrent claims on one slot, asserting exactly one 201 and N-1 409s | 1 day |
+| ~~P1-5~~ | **RESOLVED 2026-08-02.** Eight concurrent public claims on one real-Postgres slot produce exactly one booking/lock/audit commit and seven domain conflicts; the audit is anonymous, PII-free and tenant-isolated (`2097ba2`). | criterion 12 | Complete | — |
 | P1-6 | **Storage lifecycle not wired**; `ClamAvScanner.scan` raises `NotImplementedError`. Policy helpers are tested but no file can complete the flow. | M13, criterion 13 | Implement presign → complete → scan → clean/quarantine → signed download; integration test with a real clamd | 4 days |
 | P1-7 | **No reproducible builds.** No lockfile on either side. | M01, M21 | Commit `pnpm-lock.yaml` and a Python lock (`uv.lock`/`requirements.lock`); pin in CI | 1 day |
 | P1-8 | **Prompt governance absent.** `prompts/` is empty though the spec mandates Git-backed `prompts/<task>/v<n>.yaml` with promote/rollback and evaluation. `run_ai_evals.py` is referenced by CI and missing. | M12, criterion 6 | Author prompt files, implement the registry endpoints and the eval runner with gold sets | 5 days |
@@ -425,7 +425,7 @@ signed-off copy and policy that the code enforces against.
 | Priority | Code gaps | External gates | Total |
 |---|---:|---:|---:|
 | P0 | 3 (was 4) | 2 | 5 |
-| P1 | 9 | 2 | 11 |
+| P1 | 8 | 2 | 10 |
 | P2 | 10 | 0 | 10 |
 
 **Critical path to a pilot:** P0-1 (workers) → P0-2 (auth) → P0-3 (frontend

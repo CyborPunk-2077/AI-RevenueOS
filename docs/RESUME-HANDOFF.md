@@ -4,7 +4,7 @@ Read this first when picking the project back up. Do not re-plan the project.
 
 ## Where things stand
 
-**Commit:** `0caa2e8` — "P1-2: audit AI usage tasks"
+**Commit:** `2097ba2` — "P1-5: prove atomic public slot claims"
 **Branch:** `master` · **Working tree:** clean except the preserved pre-existing
 untracked empty file `_tmp_5_43bb29c7ce5ddd61b5e99cfa69f4daf1`
 
@@ -44,17 +44,25 @@ auth audit scenarios, AI usage/audit atomicity, tenant isolation and audit
 immutability. Ruff/format now cover 228 files; focused mypy, import-linter 6/6,
 and the complete unit+contract suite are green.
 
+**P1-5 is complete (do not redo):** `2097ba2` adds the anonymous, PII-free
+`appointment.create` audit row to the public slot-claim transaction and races eight
+claims against one slot on real PostgreSQL. Exactly one succeeds, seven raise the
+domain conflict, and exactly one appointment, slot lock and tenant-isolated audit
+row commit. The existing appointment E2E suite plus the new race test are 24/24;
+ruff/format cover 229 files, focused strict mypy is green, import-linter remains
+6/6, and the complete unit+contract suite is green.
+
 ## Exact next task
 
-P1-5 public-booking concurrency, coupled with its missing audit row.
-`application/appointments/booking.py::claim_public_slot` creates the `SlotLock`
-and `Appointment` in one `SqlAlchemyUnitOfWork`, but has no focused test and no
-audit entry. Add a compact anonymous `appointment.create` record inside that UoW
-(no intake/customer PII). Fire N concurrent claims at one slot on real Postgres;
-prove exactly one succeeds, N-1 raise `Conflict`, and exactly one appointment,
-slot lock and audit row commit. Also prove the audit row is tenant-isolated.
-Commit this module independently. Do not touch the already-audited admin
-appointment service.
+P1-3 alert rules. The application exports API latency/error, queue depth/age, DLQ,
+worker heartbeat, provider circuit, AI usage and tenant-isolation metrics, and the
+runbooks name the response workflow, but no executable alert rules exist. Define
+warning/critical rules with an explicit owner and runbook for API P95/error rate,
+queue depth/age, DLQ growth, missing worker heartbeat, open circuits, AI errors and
+80% budget use, tenant-isolation violations, backup/RPO failures and WAF events.
+Add a deterministic validation test for expressions, required labels and runbook
+targets, and wire the rules into the deployment configuration that owns each
+signal. Do not claim a live firing test for AWS-backed signals until P0-5 clears.
 
 ## Blockers that engineering cannot clear
 
