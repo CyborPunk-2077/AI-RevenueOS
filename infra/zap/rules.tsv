@@ -1,0 +1,10 @@
+# rule-id	action	rationale
+10003	FAIL	Vulnerable JavaScript libraries are release blocking.
+10010	FAIL	Session cookies must use HttpOnly.
+10011	FAIL	Session cookies must use Secure outside local development.
+10020	FAIL	Clickjacking protection is mandatory.
+10021	FAIL	X-Content-Type-Options is mandatory.
+10035	FAIL	HSTS is mandatory on the staging HTTPS target.
+10038	FAIL	Content-Security-Policy is mandatory.
+10049	FAIL	Sensitive responses must not be cacheable.
+10054	FAIL	Session cookies must declare SameSite.

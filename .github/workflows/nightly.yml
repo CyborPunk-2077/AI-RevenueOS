@@ -20,11 +20,17 @@ jobs:
   load:
     name: k6 performance profiles
     runs-on: ubuntu-latest
+    env:
+      BASE_URL: ${{ vars.STAGING_URL }}
+      ACCESS_TOKEN: ${{ secrets.STAGING_LOAD_ACCESS_TOKEN }}
+      NOISY_TOKEN: ${{ secrets.STAGING_NOISY_TENANT_TOKEN }}
+      QUIET_TOKEN: ${{ secrets.STAGING_QUIET_TENANT_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: grafana/setup-k6-action@v1
       - run: k6 run infra/k6/normal.js
       - run: k6 run infra/k6/peak.js
+      - run: k6 run infra/k6/spike.js
       - run: k6 run infra/k6/noisy-tenant.js
 
   restore:

@@ -402,7 +402,7 @@ signed-off copy and policy that the code enforces against.
 | ~~P1-8~~ | **RESOLVED 2026-08-02.** Every AI task has immutable Git-backed `prompts/<task>/v<n>.yaml` content and a versioned gold set. Platform-only, durably idempotent sync/evaluate/promote/rollback endpoints commit audit/outbox evidence atomically; runtime calls fail closed until a passing version is promoted. The CI runner executes deterministic prompt/guard contracts without contacting or claiming quality from a provider. | M12, criterion 6 | Complete; approved sandbox model-quality evaluation remains an external activation activity | — |
 | ~~P1-9~~ | **RESOLVED by the specification's exception path 2026-08-02.** CI now measures the full application suite and enforces 85% generally and 90% for auth/payments/idempotency/support/integrations. Every module below its target has a named owner, regression floor, reason, and near-term expiry in `backend/coverage-policy.yaml`; missing, expired, or regressed exceptions fail the gate. This is not a claim that the target percentages have already been reached. | M21 | Owners must raise coverage before each dated exception expires; the gate prevents silent permanence or regression | tracked debt |
 | P1-10 | **Provider credentials absent** — WhatsApp BSP + template approval, email provider + domain, Razorpay commercial model. Adapters are complete and mock-tested; none has touched a live endpoint. | M15–M17, criteria 8, 15 | Follow `docs/runbooks/provider-activation.md` per provider | external |
-| P1-11 | **k6 and ZAP never executed**; `peak.js` missing. | M21, criterion 23 | Run against staging once P0-5 clears; add the peak and spike profiles | 2 days + AWS |
+| P1-11 | **Engineering complete; live evidence externally blocked.** Normal, documented 200-user peak, 2x spike/recovery, and noisy-tenant profiles now fail closed without an explicit target/token. ZAP has explicit release-failing security rules. Neither tool has been run because no approved staging environment exists, so no performance or DAST pass is claimed. | M21, criterion 23 | Run the committed staging-verification runbook after P0-5 activation and retain raw evidence | AWS gate |
 
 ---
 
@@ -419,7 +419,7 @@ signed-off copy and policy that the code enforces against.
 | P2-7 | No tracing despite X-Ray in the stack table | Instrument with OpenTelemetry |
 | P2-8 | Storybook declared in the Makefile, absent | Add it or drop the claim |
 | P2-9 | Only `envs/prod` exists | Add dev/staging/sandbox stacks |
-| P2-10 | Missing referenced files: `generate_evidence.py`, `zap/rules.tsv`, `k6/peak.js` | Create them or remove the references from CI and the Makefile (`verify-restore.sh` and `run_ai_evals.py` are now implemented) |
+| ~~P2-10~~ | **RESOLVED 2026-08-02.** Every referenced verification asset exists: restore, AI eval, evidence index, explicit ZAP rules, and normal/peak/spike/noisy-tenant k6 profiles. Their tests verify fail-closed targets and truthful non-production evidence metadata. | Complete |
 
 ---
 

@@ -20,11 +20,15 @@ export const options = {
   },
 };
 
-const BASE = __ENV.BASE_URL || 'http://localhost:8000';
-const TOKEN = __ENV.ACCESS_TOKEN || '';
-const headers = { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' };
+const BASE = __ENV.BASE_URL;
+const TOKEN = __ENV.ACCESS_TOKEN;
 
-export default function () {
+export function setup() {
+  if (!BASE || !TOKEN) throw new Error('BASE_URL and ACCESS_TOKEN are required; no target is assumed');
+  return { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' };
+}
+
+export default function (headers) {
   const list = http.get(`${BASE}/v1/leads?page_size=50`, { headers });
   readLatency.add(list.timings.duration);
   check(list, { 'list returns 200': (r) => r.status === 200 });

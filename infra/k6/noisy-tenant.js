@@ -19,7 +19,13 @@ export const options = {
   },
 };
 
-const BASE = __ENV.BASE_URL || 'http://localhost:8000';
+const BASE = __ENV.BASE_URL;
+
+export function setup() {
+  if (!BASE || !__ENV.NOISY_TOKEN || !__ENV.QUIET_TOKEN) {
+    throw new Error('BASE_URL, NOISY_TOKEN and QUIET_TOKEN are required; no target is assumed');
+  }
+}
 
 export default function () {
   const token = __ENV.TENANT === 'noisy' ? __ENV.NOISY_TOKEN : __ENV.QUIET_TOKEN;
