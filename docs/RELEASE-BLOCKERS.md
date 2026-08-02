@@ -411,7 +411,7 @@ signed-off copy and policy that the code enforces against.
 | # | Item | Remediation |
 |---|---|---|
 | ~~P2-1~~ | **RESOLVED 2026-08-02.** Runtime, Ruff, mypy, Docker, CI and hashed dependency locks now uniformly target Python 3.12; the compatibility shim was deleted and standard-library `StrEnum`/`UTC` are used directly. | Complete |
-| P2-2 | Onboarding state machine missing (`GET/PATCH /onboarding/state`, `POST complete`) | Implement over the existing `tenants.onboarding_state` column |
+| P2-2 | **Resolved** — versioned onboarding state machine now exposes tenant-scoped `GET/PATCH /onboarding/state` and `POST /onboarding/complete`; required/dependent steps are monotonic, mutations are durably idempotent, and state/audit/outbox commit atomically. Provider activation is never inferred from onboarding progress. | Real-PostgreSQL tests cover isolation, replay, rollback, completion preconditions and RBAC. |
 | ~~P2-3~~ | **RESOLVED 2026-08-02.** Kill switches persist on workflow definitions, survive Redis loss, and emit audit/outbox events (`9d2c8f2`). | Complete |
 | ~~P2-4~~ | **RESOLVED 2026-08-02.** Verified Razorpay events are durably persisted, tenant-derived from stored order/payment mappings, atomically transitioned/audited/outboxed, and duplicate-safe without Redis (`a2e45df`). | Complete |
 | P2-5 | Mutation testing absent despite a stated 75–85% target | Add `mutmut`/`cosmic-ray` for domain and auth |

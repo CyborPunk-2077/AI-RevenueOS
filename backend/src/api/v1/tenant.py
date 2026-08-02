@@ -8,7 +8,9 @@ from fastapi import APIRouter, Depends, Request
 
 from api.app.envelope import success
 from api.app.settings import Settings
+from api.deps.idempotency import IdempotencyContext, idempotency
 from api.deps.principal import CurrentPrincipal, get_app_settings, require_step_up
+from api.v1.schemas import OnboardingPatch
 from domain.tenants.entitlements import Feature, PlanCode, check_feature, get_plan
 from domain.tenants.templates import apply_template
 
@@ -140,3 +142,47 @@ async def apply_industry_template(
     except KeyError as exc:
         raise NotFound("Industry template not found.") from exc
     return success(applied.to_dict(), request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.get("/onboarding/state", summary="Read tenant onboarding progress")
+async def read_onboarding(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    from application.tenants.onboarding import read_onboarding_state
+
+    return success(
+        await read_onboarding_state(principal),
+        request_id=getattr(request.state, "correlation_id", None),
+    )
+
+
+@router.patch("/onboarding/state", summary="Advance one onboarding step")
+async def patch_onboarding(
+    payload: OnboardingPatch,
+    request: Request,
+    principal: CurrentPrincipal,
+    idem: Annotated[IdempotencyContext, Depends(idempotency)],
+) -> dict[str, Any]:
+    from application.tenants.onboarding import update_onboarding_step
+
+    return success(
+        await update_onboarding_step(
+            principal,
+            step=payload.step,
+            status=payload.status,
+            idempotency_key=idem.key,
+        ),
+        request_id=getattr(request.state, "correlation_id", None),
+    )
+
+
+@router.post("/onboarding/complete", summary="Complete required onboarding")
+async def complete_onboarding(
+    request: Request,
+    principal: CurrentPrincipal,
+    idem: Annotated[IdempotencyContext, Depends(idempotency)],
+) -> dict[str, Any]:
+    from application.tenants.onboarding import finish_onboarding
+
+    return success(
+        await finish_onboarding(principal, idempotency_key=idem.key),
+        request_id=getattr(request.state, "correlation_id", None),
+    )

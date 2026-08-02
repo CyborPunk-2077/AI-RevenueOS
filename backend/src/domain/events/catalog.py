@@ -65,6 +65,8 @@ PROMPT_SYNCED: Final = "prompt.synced"
 PROMPT_EVALUATED: Final = "prompt.evaluated"
 PROMPT_PROMOTED: Final = "prompt.promoted"
 PROMPT_ROLLED_BACK: Final = "prompt.rolled_back"
+ONBOARDING_UPDATED: Final = "tenant.onboarding.updated"
+ONBOARDING_COMPLETED: Final = "tenant.onboarding.completed"
 CONVERSATION_ASSIGNED: Final = "conversation.assigned"
 CONVERSATION_RESOLVED: Final = "conversation.resolved"
 MESSAGE_QUEUED: Final = "message.queued"
@@ -151,6 +153,8 @@ INTERNAL_EVENT_TYPES: Final[frozenset[str]] = frozenset(
         PROMPT_EVALUATED,
         PROMPT_PROMOTED,
         PROMPT_ROLLED_BACK,
+        ONBOARDING_UPDATED,
+        ONBOARDING_COMPLETED,
     }
 )
 

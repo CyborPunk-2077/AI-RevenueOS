@@ -56,6 +56,8 @@ MANDATORY_AUDIT_ACTIONS = frozenset(
         "prompt.evaluated",
         "prompt.promoted",
         "prompt.rolled_back",
+        "tenant.onboarding_updated",
+        "tenant.onboarding_completed",
     }
 )
 

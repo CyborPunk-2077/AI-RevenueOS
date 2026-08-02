@@ -504,7 +504,7 @@ class TenantPatch(StrictModel):
 
 class OnboardingPatch(StrictModel):
     step: Literal["welcome", "tenant", "industry", "channels", "team", "billing"]
-    data: dict[str, Any] = Field(default_factory=dict)
+    status: Literal["in_progress", "completed", "skipped"]
 
 
 class FileUploadRequest(StrictModel):
