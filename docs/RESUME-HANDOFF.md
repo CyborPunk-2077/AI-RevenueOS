@@ -4,7 +4,7 @@ Read this first when picking the project back up. Do not re-plan the project.
 
 ## Where things stand
 
-**Commit:** `2097ba2` — "P1-5: prove atomic public slot claims"
+**Latest implementation commit:** `784cbfc` — "P1-7: lock Python dependency graph"
 **Branch:** `master` · **Working tree:** clean except the preserved pre-existing
 untracked empty file `_tmp_5_43bb29c7ce5ddd61b5e99cfa69f4daf1`
 
@@ -52,17 +52,34 @@ row commit. The existing appointment E2E suite plus the new race test are 24/24;
 ruff/format cover 229 files, focused strict mypy is green, import-linter remains
 6/6, and the complete unit+contract suite is green.
 
+**Recovery continuation (do not redo):** `24676fe` defines owned, executable
+warning/critical Prometheus and AWS alert rules plus runbooks; `1c07f0b` makes
+every public repository read require `EffectivePermissions`; `b1f9e08` persists
+tenant export/deletion requests with audit and outbox; `9d2c8f2` durably publishes
+versioned workflows and makes audited kill switches survive Redis loss; `040aed2`
+records authenticated authorization denials; and `784cbfc` installs the runtime
+and development Python graphs exclusively from committed, hash-locked files in
+CI and Docker while keeping pnpm frozen. Focused real-Postgres tests prove tenant
+isolation, atomic audit/outbox writes, workflow publication idempotency, and kill-
+switch recovery. The complete unit+contract suite, Ruff/format over 239 files,
+strict mypy over 176 source files, import-linter 6/6, and a fresh hash-locked pip
+resolution are green. Docker and Terraform CLIs remain unavailable on this host;
+alert YAML and all Terraform HCL were validated statically.
+
 ## Exact next task
 
-P1-3 alert rules. The application exports API latency/error, queue depth/age, DLQ,
-worker heartbeat, provider circuit, AI usage and tenant-isolation metrics, and the
-runbooks name the response workflow, but no executable alert rules exist. Define
-warning/critical rules with an explicit owner and runbook for API P95/error rate,
-queue depth/age, DLQ growth, missing worker heartbeat, open circuits, AI errors and
-80% budget use, tenant-isolation violations, backup/RPO failures and WAF events.
-Add a deterministic validation test for expressions, required labels and runbook
-targets, and wire the rules into the deployment configuration that owns each
-signal. Do not claim a live firing test for AWS-backed signals until P0-5 clears.
+P1-2 payments plus P2-4 durable inbound idempotency. Replace the Redis-only
+Razorpay receipt path in `application/payments/inbound.py` with an atomic verified
+`provider_webhook_events` insert, resolve the tenant from an existing provider
+order/payment mapping (never trust tenant identity in webhook metadata), apply the
+payment state machine, append `payment_transitions`, write compact
+`payment.captured`/`payment.refunded` audit and outbox rows in the same transaction,
+and mark the event processed only after business state commits. A duplicate event
+must be a durable no-op even after Redis loss; an unknown mapping must remain
+pending with a truthful error. Prove signature-before-persistence, duplicate and
+out-of-order behavior, tenant isolation, and atomic rollback on real PostgreSQL.
+Keep Razorpay disabled unless its external credentials and commercial approval
+are actually present.
 
 ## Blockers that engineering cannot clear
 
@@ -99,6 +116,9 @@ All built, gated off, returning "not configured" rather than faking success. See
 4. `tests/e2e/test_auth_surface.py` uses Unix-only `redislite`, so it was not
    rerun on this Windows recovery. The new auth audit coverage runs the same
    application services against real Postgres with the shared fakeredis fixture.
+5. Terraform CLI is not installed. Terraform syntax is covered by `python-hcl2`,
+   but format, validate, plan, apply, live AWS alert firing, and restore evidence
+   remain unclaimed until the CLI and P0-5 account access exist.
 
 `.git/config` contains a stale Linux `core.worktree`. Drive Git with the current
 directory as `GIT_WORK_TREE` and the preserved alternate index at

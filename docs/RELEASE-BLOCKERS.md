@@ -1,10 +1,10 @@
 # Release blockers — AI RevenueOS
 
 **Status: NOT GA-ready.**
-**Audit date:** 2026-08-01 · **P0-1 closed:** 2026-08-01 · **P0-2 closed:** 2026-08-01 · **P0-3 closed:** 2026-08-01
+**Audit date:** 2026-08-02 · **P0-1 closed:** 2026-08-01 · **P0-2 closed:** 2026-08-01 · **P0-3 closed:** 2026-08-01
 Full findings: `docs/IMPLEMENTATION-AUDIT.md` · P0-1 evidence: `docs/p0-1-gate-results.txt`
 
-GA is blocked by **4 P0** items — 2 code gaps and 2 external gates — plus 10 P1.
+GA is blocked by **2 external P0** items plus 7 remaining P1 items.
 No release gate may be waived without recorded evidence.
 
 | P0 | Status |
@@ -13,7 +13,7 @@ No release gate may be waived without recorded evidence.
 | P0-1 worker tier | **RESOLVED** — 34 integration tests on real Postgres + Redis + Celery |
 | P0-2 auth endpoints | **RESOLVED** — 21 operations, 37 e2e tests on real Postgres + Redis |
 | P0-3 frontend build | **RESOLVED** — reproducible install, lint, strict typecheck, production build, 14 unit tests |
-| P0-4 domain services | **partial** — contacts, accounts, timeline, deals, tasks, inbox and appointments done; documents and analytics open |
+| P0-4 domain services | **RESOLVED** — CRM, inbox, appointments, documents and analytics are tenant-scoped and tested |
 | P0-5 AWS account | open (external) |
 | P0-6 legal sign-off | open (external) |
 
@@ -388,14 +388,14 @@ signed-off copy and policy that the code enforces against.
 
 | # | Item | Blocks | Remediation | Effort |
 |---|---|---|---|---|
-| P1-1 | **Scope enforcement is per-service, easy to forget.** Fixed for leads; every future service must remember `scoped_query`/`get_scoped`. | criteria 2, 4 | Make unscoped variants private; require an explicit `EffectivePermissions` argument. Add an architecture test asserting no service calls `base_query` directly | 1 day |
-| P1-2 | **`AuditRecorder` is never called** and has 0% coverage. The audit trail is empty. | criterion 22 | Wire into every `MANDATORY_AUDIT_ACTIONS` path; assert an audit row per mutation in E2E | 3 days |
-| P1-3 | **No alert rules exist.** Spec requires warning/critical alerts with owner and runbook per signal. | M02, M21, criterion 27 | Define alerts for API P95, queue depth/age, DLQ size, circuit opening, AI error >2%, budget 80%, RPO backup failure, WAF events | 2 days |
+| ~~P1-1~~ | **RESOLVED 2026-08-02.** Every public repository read requires `EffectivePermissions`; unscoped builders are private and architecture-tested (`1c07f0b`). | criteria 2, 4 | Complete | — |
+| P1-2 | **Partial.** Auth, leads, AI, CRM, analytics exports, tenant governance, workflow controls/execution, public booking and authorization denials are durably audited; payment, consent, provider/config, support, download and bulk paths remain. | criterion 22 | Finish every remaining `MANDATORY_AUDIT_ACTIONS` path and assert atomic audit rows in E2E | remaining product work |
+| ~~P1-3~~ | **RESOLVED 2026-08-02.** Owned warning/critical Prometheus rules, AWS backup/WAF alarms, runbooks and deterministic validation are committed (`24676fe`). Live AWS firing remains correctly gated by P0-5. | M02, M21, criterion 27 | Complete | — |
 | P1-4 | **No restore drill.** `infra/scripts/verify-restore.sh` is referenced by the nightly workflow and does not exist. | M22, criterion 24 | Write the script (restore → `alembic current` → row-count reconciliation → **re-run the RLS suite against the restored instance**) and run it | 2 days + AWS |
 | P1-12 | **Worker action handlers are stubs.** The workflow action dispatch and outbound webhook HTTP transport report `pending_handler`/`pending_transport`. Queues, retry, idempotency and DLQ around them are complete. | M18, criteria 16, 27 | Implement handlers per module as each service lands under P0-4 | folded into P0-4 |
 | ~~P1-5~~ | **RESOLVED 2026-08-02.** Eight concurrent public claims on one real-Postgres slot produce exactly one booking/lock/audit commit and seven domain conflicts; the audit is anonymous, PII-free and tenant-isolated (`2097ba2`). | criterion 12 | Complete | — |
 | P1-6 | **Storage lifecycle not wired**; `ClamAvScanner.scan` raises `NotImplementedError`. Policy helpers are tested but no file can complete the flow. | M13, criterion 13 | Implement presign → complete → scan → clean/quarantine → signed download; integration test with a real clamd | 4 days |
-| P1-7 | **No reproducible builds.** No lockfile on either side. | M01, M21 | Commit `pnpm-lock.yaml` and a Python lock (`uv.lock`/`requirements.lock`); pin in CI | 1 day |
+| ~~P1-7~~ | **RESOLVED 2026-08-02.** Runtime/dev Python graphs are fully pinned with hashes and used by CI/Docker; pnpm CI installs fail on lock drift (`784cbfc`). | M01, M21 | Complete | — |
 | P1-8 | **Prompt governance absent.** `prompts/` is empty though the spec mandates Git-backed `prompts/<task>/v<n>.yaml` with promote/rollback and evaluation. `run_ai_evals.py` is referenced by CI and missing. | M12, criterion 6 | Author prompt files, implement the registry endpoints and the eval runner with gold sets | 5 days |
 | P1-9 | **Coverage below the stated bars** in `application/*` (0–92% against a 90/85 target); several modules at 0%. | M21 | Raise to bar or record a per-module exception with an owner | 3 days |
 | P1-10 | **Provider credentials absent** — WhatsApp BSP + template approval, email provider + domain, Razorpay commercial model. Adapters are complete and mock-tested; none has touched a live endpoint. | M15–M17, criteria 8, 15 | Follow `docs/runbooks/provider-activation.md` per provider | external |
@@ -409,7 +409,7 @@ signed-off copy and policy that the code enforces against.
 |---|---|---|
 | P2-1 | Python version deviation (spec 3.12, project `>=3.10` with a `StrEnum` shim) | Adopt 3.12 and delete `shared/compat.py`, or record the deviation |
 | P2-2 | Onboarding state machine missing (`GET/PATCH /onboarding/state`, `POST complete`) | Implement over the existing `tenants.onboarding_state` column |
-| P2-3 | Kill switches live only in Redis — a flush disengages them and the action is unaudited | Persist to `workflow_definitions.kill_switch` and emit an audit event |
+| ~~P2-3~~ | **RESOLVED 2026-08-02.** Kill switches persist on workflow definitions, survive Redis loss, and emit audit/outbox events (`9d2c8f2`). | Complete |
 | P2-4 | `provider_webhook_events` table exists but is never written; inbound dedupe is Redis-only | Write verified events durably so a Redis outage cannot cause reprocessing |
 | P2-5 | Mutation testing absent despite a stated 75–85% target | Add `mutmut`/`cosmic-ray` for domain and auth |
 | P2-6 | `mypy` excludes `tests/` | Extend strict checking to tests |
@@ -424,9 +424,9 @@ signed-off copy and policy that the code enforces against.
 
 | Priority | Code gaps | External gates | Total |
 |---|---:|---:|---:|
-| P0 | 3 (was 4) | 2 | 5 |
-| P1 | 8 | 2 | 10 |
-| P2 | 10 | 0 | 10 |
+| P0 | 0 | 2 | 2 |
+| P1 | 5 | 2 | 7 |
+| P2 | 9 | 0 | 9 |
 
 **Critical path to a pilot:** P0-1 (workers) → P0-2 (auth) → P0-3 (frontend
 toolchain) → P0-4 (services, at least CRM + inbox) → P1-2 (audit wiring) →
