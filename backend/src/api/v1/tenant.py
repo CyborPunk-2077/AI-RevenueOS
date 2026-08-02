@@ -99,8 +99,11 @@ async def request_export(
     principal: Annotated[Any, Depends(require_step_up("export.create"))],
 ) -> dict[str, Any]:
     principal.require("export", "create")
+    from application.tenants.requests import request_tenant_export
+
+    result = await request_tenant_export(tenant_id=principal.tenant_id, actor_id=principal.user_id)
     return success(
-        {"status": "queued", "delivery": "asynchronous", "encrypted": True},
+        result,
         request_id=getattr(request.state, "correlation_id", None),
     )
 
@@ -111,12 +114,13 @@ async def request_deletion(
     principal: Annotated[Any, Depends(require_step_up("tenant.delete"))],
 ) -> dict[str, Any]:
     principal.require("tenant", "delete")
+    from application.tenants.requests import request_tenant_deletion
+
+    result = await request_tenant_deletion(
+        tenant_id=principal.tenant_id, actor_id=principal.user_id
+    )
     return success(
-        {
-            "status": "scheduled",
-            "retention_days": 90,
-            "note": "Deletion is delayed by the retention policy and is fully audited.",
-        },
+        result,
         request_id=getattr(request.state, "correlation_id", None),
     )
 

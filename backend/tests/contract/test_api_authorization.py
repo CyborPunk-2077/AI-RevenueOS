@@ -38,7 +38,13 @@ class TestRoleEnforcement:
     ) -> None:
         assert client.post("/v1/tenant/delete-request", headers=auth_headers).status_code == 403
 
-    def test_owner_may_request_deletion(self, client: TestClient, owner_headers: dict) -> None:
+    def test_owner_may_request_deletion(
+        self, client: TestClient, owner_headers: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def request(**_: object) -> dict[str, object]:
+            return {"request_id": "request-1", "status": "received", "retention_days": 90}
+
+        monkeypatch.setattr("application.tenants.requests.request_tenant_deletion", request)
         body = client.post("/v1/tenant/delete-request", headers=owner_headers).json()
         assert body["data"]["retention_days"] == 90
 
@@ -51,8 +57,19 @@ class TestStepUpAuthentication:
         assert response.json()["error"]["details"]["step_up_required"] is True
 
     def test_export_with_recent_mfa_is_permitted(
-        self, client: TestClient, owner_headers: dict
+        self,
+        client: TestClient,
+        owner_headers: dict,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        async def request(**_: object) -> dict[str, object]:
+            return {
+                "request_id": "request-1",
+                "status": "received",
+                "download_available": False,
+            }
+
+        monkeypatch.setattr("application.tenants.requests.request_tenant_export", request)
         assert client.post("/v1/tenant/export", headers=owner_headers).status_code == 200
 
     def test_deletion_without_mfa_demands_step_up(self, client: TestClient, token_service) -> None:
