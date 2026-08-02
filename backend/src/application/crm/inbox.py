@@ -554,6 +554,19 @@ class InboxService(_PrincipalScoped):
                     select(Conversation).where(Conversation.id == conversation_id)
                 )
             ).scalar_one()
+            if row.contact_id and channel in {"whatsapp", "email", "sms", "voice"}:
+                from application.communications.consents import contact_has_consent
+
+                if not await contact_has_consent(
+                    uow.session,
+                    tenant_id=self.tenant_id,
+                    contact_id=row.contact_id,
+                    channel=channel,
+                ):
+                    raise ValidationError(
+                        "No current consent permits this channel for the linked contact.",
+                        details={"channel": channel, "consent_required": True},
+                    )
             row.last_message_at = moment
             # A human replied, so automation stops driving this thread.
             if not row.automation_stopped:

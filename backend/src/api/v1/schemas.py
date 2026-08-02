@@ -394,6 +394,34 @@ class WorkflowApprovalDecisionRequest(StrictModel):
     comment: Annotated[str, Field(max_length=1000)] = ""
 
 
+class ConsentGrantRequest(StrictModel):
+    subject_type: Literal["contact"] = "contact"
+    subject_id: UUID
+    consent_type: Literal["marketing", "communication", "data_processing", "whatsapp_optin"]
+    channel: Literal["whatsapp", "email", "sms", "voice", "web_chat"]
+    policy_version: Annotated[str, Field(min_length=1, max_length=30)]
+    # Authenticated users cannot label evidence as provider/import/public-form
+    # sourced; those labels are reserved for their trusted ingestion paths.
+    source: Literal["api", "agent_confirmed"] = "api"
+    evidence: dict[str, Any] = Field(default_factory=dict)
+    expires_at: datetime | None = None
+
+    @field_validator("evidence")
+    @classmethod
+    def _bounded_evidence(cls, value: dict[str, Any]) -> dict[str, Any]:
+        import json
+
+        if len(value) > 30:
+            raise ValueError("consent evidence may contain at most 30 fields")
+        if len(json.dumps(value, default=str)) > 16_000:
+            raise ValueError("consent evidence may not exceed 16000 bytes")
+        return value
+
+
+class ConsentWithdrawRequest(StrictModel):
+    reason: Annotated[str, Field(min_length=1, max_length=500)]
+
+
 class TenantPatch(StrictModel):
     name: Annotated[str | None, Field(min_length=1, max_length=200)] = None
     timezone: Annotated[str | None, Field(max_length=64)] = None

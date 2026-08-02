@@ -141,6 +141,9 @@ ignore = [
 "tests/e2e/test_crm_documents.py" = [
     "F811",
 ]
+"tests/e2e/test_consents.py" = [
+    "F811",
+]
 "tests/e2e/test_analytics.py" = [
     "F811",
 ]
