@@ -10,7 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from api.app.envelope import failure
 from domain.base import DomainError
 from infrastructure.logging.setup import get_logger
-from shared.exceptions import AppError
+from shared.exceptions import AppError, Forbidden
 
 logger = get_logger("api.errors")
 
@@ -37,6 +37,16 @@ def _rid(request: Request) -> str | None:
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _app_error(request: Request, exc: AppError) -> JSONResponse:
+        if isinstance(exc, Forbidden):
+            auditor = getattr(request.app.state, "authorization_denial_auditor", None)
+            if auditor is not None:
+                try:
+                    await auditor(request, exc)
+                except Exception as audit_exc:
+                    logger.error(
+                        "authorization_denial_audit_failed",
+                        error_type=type(audit_exc).__name__,
+                    )
         if exc.http_status >= 500:
             logger.error("app_error", code=exc.code, message=exc.message, details=exc.details)
         else:

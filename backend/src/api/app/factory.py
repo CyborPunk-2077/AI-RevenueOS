@@ -51,6 +51,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = cfg
+    from application.audit.denials import audit_authorization_denial
+
+    app.state.authorization_denial_auditor = audit_authorization_denial
 
     app.add_middleware(SecurityHeadersMiddleware, hsts=cfg.environment in ("staging", "prod"))
     app.add_middleware(BodyLimitMiddleware, max_bytes=cfg.json_body_limit_bytes)

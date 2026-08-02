@@ -54,7 +54,13 @@ def token_service(settings: Settings) -> TokenService:
 def app(settings: Settings) -> Any:
     from api.app.factory import create_app
 
-    return create_app(settings)
+    built = create_app(settings)
+
+    async def ignore_denial(*_: object) -> None:
+        return None
+
+    built.state.authorization_denial_auditor = ignore_denial
+    return built
 
 
 @pytest.fixture

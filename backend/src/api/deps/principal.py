@@ -151,7 +151,6 @@ async def get_principal(
         actor_type=str(claims.get("actor_type", "user")),
         jti=str(claims.get("jti", "")),
     )
-    _assert_host_matches_tenant(request, principal)
     bind_context(
         correlation_id=getattr(request.state, "correlation_id", None),
         tenant_id=str(principal.tenant_id),
@@ -159,6 +158,7 @@ async def get_principal(
         actor_type=principal.actor_type,
     )
     request.state.principal = principal
+    _assert_host_matches_tenant(request, principal)
     return principal
 
 

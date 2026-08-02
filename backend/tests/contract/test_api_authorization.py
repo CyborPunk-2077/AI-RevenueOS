@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -17,6 +19,27 @@ class TestRoleEnforcement:
             "/v1/leads", headers=viewer_headers, json={"first_name": "A", "email": "a@b.in"}
         )
         assert response.status_code == 403
+
+    def test_authenticated_denial_invokes_the_security_auditor(
+        self,
+        client: TestClient,
+        viewer_headers: dict,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        captured: list[tuple[str, str]] = []
+
+        async def capture(request: Any, error: Any) -> None:
+            captured.append((request.url.path, error.details["required_permission"]))
+
+        monkeypatch.setattr(client.app.state, "authorization_denial_auditor", capture)
+        response = client.post(
+            "/v1/leads",
+            headers=viewer_headers,
+            json={"first_name": "A", "email": "a@b.in"},
+        )
+
+        assert response.status_code == 403
+        assert captured == [("/v1/leads", "lead:create")]
 
     def test_viewer_can_read_reference_data(self, client: TestClient, viewer_headers: dict) -> None:
         assert client.get("/v1/tenant", headers=viewer_headers).status_code == 200
