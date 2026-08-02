@@ -202,7 +202,9 @@ class InboxService(_PrincipalScoped):
                 Conversation.created_at.desc(),
             )
 
-            page = await repo.paginate_cursor(stmt, cursor=query.cursor, page_size=query.page_size)
+            page = await repo.paginate_cursor(
+                self.permissions_scope(), stmt, cursor=query.cursor, page_size=query.page_size
+            )
             contacts = await self._contact_names(
                 session, {c.contact_id for c in page.items if c.contact_id}
             )

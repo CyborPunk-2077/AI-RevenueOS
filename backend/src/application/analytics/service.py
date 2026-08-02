@@ -425,7 +425,7 @@ class AnalyticsService(_PrincipalScoped):
             soft_delete = False
 
         async with tenant_session(self.tenant_id) as session:
-            row = await ExportRepo(session, self.tenant_id).get(export_id)
+            row = await ExportRepo(session, self.tenant_id).get(export_id, self.permissions_scope())
             if row is None or row.requested_by != self.user_id:
                 raise NotFound("Export not found.")
             return {

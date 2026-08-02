@@ -71,6 +71,7 @@ class LeadService:
         async with tenant_session(self.tenant_id) as session:
             repo = LeadRepository(session, self.tenant_id)
             page = await repo.paginate_cursor(
+                self.permissions_scope(),
                 repo.scoped_query(self.permissions_scope()),
                 cursor=query.cursor,
                 page_size=query.page_size,

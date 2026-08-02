@@ -125,11 +125,17 @@ class AppointmentService(_PrincipalScoped):
             model = Deal
 
         if payload.get("contact_id") and (
-            await ContactRepository(session, self.tenant_id).get(payload["contact_id"]) is None
+            await ContactRepository(session, self.tenant_id).get(
+                payload["contact_id"], self.permissions_scope()
+            )
+            is None
         ):
             raise NotFound("Contact not found.")
         if payload.get("deal_id") and (
-            await DealRepository(session, self.tenant_id).get(payload["deal_id"]) is None
+            await DealRepository(session, self.tenant_id).get(
+                payload["deal_id"], self.permissions_scope()
+            )
+            is None
         ):
             raise NotFound("Deal not found.")
 
@@ -159,7 +165,9 @@ class AppointmentService(_PrincipalScoped):
                 )
             stmt = stmt.order_by(Appointment.start_at.asc())
 
-            page = await repo.paginate_cursor(stmt, cursor=query.cursor, page_size=query.page_size)
+            page = await repo.paginate_cursor(
+                self.permissions_scope(), stmt, cursor=query.cursor, page_size=query.page_size
+            )
             contacts = await self._contact_names(
                 session, {a.contact_id for a in page.items if a.contact_id}
             )

@@ -393,7 +393,9 @@ class DocumentService(_PrincipalScoped):
                     FileObject.entity_id == entity_id,
                 )
 
-            page = await repo.paginate_cursor(stmt, cursor=query.cursor, page_size=query.page_size)
+            page = await repo.paginate_cursor(
+                self.permissions_scope(), stmt, cursor=query.cursor, page_size=query.page_size
+            )
             names = await self._owner_names(session, {f.owner_id for f in page.items if f.owner_id})
             page.items = [
                 serialize_file(f, owner_name=names.get(f.owner_id) if f.owner_id else None)
@@ -512,7 +514,9 @@ class DocumentService(_PrincipalScoped):
             if deal_id is not None:
                 stmt = stmt.where(Document.deal_id == deal_id)
 
-            page = await repo.paginate_cursor(stmt, cursor=query.cursor, page_size=query.page_size)
+            page = await repo.paginate_cursor(
+                self.permissions_scope(), stmt, cursor=query.cursor, page_size=query.page_size
+            )
             names = await self._file_names(session, {d.file_id for d in page.items if d.file_id})
             page.items = [
                 serialize_document(d, file_name=names.get(d.file_id) if d.file_id else None)

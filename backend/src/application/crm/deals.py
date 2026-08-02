@@ -305,7 +305,9 @@ class DealService(_PrincipalScoped):
                 if status not in {s.value for s in DealStatus}:
                     raise ValidationError(f"Unknown status: {status!r}.")
                 stmt = stmt.where(Deal.status == status)
-            page = await repo.paginate_cursor(stmt, cursor=query.cursor, page_size=query.page_size)
+            page = await repo.paginate_cursor(
+                self.permissions_scope(), stmt, cursor=query.cursor, page_size=query.page_size
+            )
             page.items = [serialize_deal(d) for d in page.items]
             return page
 
@@ -441,11 +443,17 @@ class DealService(_PrincipalScoped):
             model = Account
 
         if payload.get("contact_id") and (
-            await ContactRepository(session, self.tenant_id).get(payload["contact_id"]) is None
+            await ContactRepository(session, self.tenant_id).get(
+                payload["contact_id"], self.permissions_scope()
+            )
+            is None
         ):
             raise NotFound("Contact not found.")
         if payload.get("account_id") and (
-            await AccountRepository(session, self.tenant_id).get(payload["account_id"]) is None
+            await AccountRepository(session, self.tenant_id).get(
+                payload["account_id"], self.permissions_scope()
+            )
+            is None
         ):
             raise NotFound("Account not found.")
 

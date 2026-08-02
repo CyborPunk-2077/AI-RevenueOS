@@ -153,7 +153,9 @@ class ContactService(_PrincipalScoped):
                     )
                 )
 
-            page = await repo.paginate_cursor(stmt, cursor=query.cursor, page_size=query.page_size)
+            page = await repo.paginate_cursor(
+                self.permissions_scope(), stmt, cursor=query.cursor, page_size=query.page_size
+            )
 
             # One extra query for the account names rather than N+1 per row.
             account_ids = {c.account_id for c in page.items if c.account_id}
@@ -334,7 +336,12 @@ class ContactService(_PrincipalScoped):
         class AccountRepository(TenantRepository[Account]):
             model = Account
 
-        if await AccountRepository(session, self.tenant_id).get(account_id) is None:
+        if (
+            await AccountRepository(session, self.tenant_id).get(
+                account_id, self.permissions_scope()
+            )
+            is None
+        ):
             raise NotFound("Account not found.")
 
 
@@ -363,7 +370,9 @@ class AccountService(_PrincipalScoped):
                         func.lower(func.coalesce(Account.industry, "")).like(needle),
                     )
                 )
-            page = await repo.paginate_cursor(stmt, cursor=query.cursor, page_size=query.page_size)
+            page = await repo.paginate_cursor(
+                self.permissions_scope(), stmt, cursor=query.cursor, page_size=query.page_size
+            )
 
             ids = [a.id for a in page.items]
             counts: dict[UUID, int] = {}

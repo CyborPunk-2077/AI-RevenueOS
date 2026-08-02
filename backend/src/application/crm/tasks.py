@@ -141,7 +141,9 @@ class TaskService(_PrincipalScoped):
                 )
             stmt = stmt.order_by(Task.due_at.asc().nulls_last(), Task.created_at.desc())
 
-            page = await repo.paginate_cursor(stmt, cursor=query.cursor, page_size=query.page_size)
+            page = await repo.paginate_cursor(
+                self.permissions_scope(), stmt, cursor=query.cursor, page_size=query.page_size
+            )
             names = await self._assignee_names(
                 session, {t.assignee_id for t in page.items if t.assignee_id}
             )

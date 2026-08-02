@@ -351,7 +351,7 @@ class TimelineService(_PrincipalScoped):
 
         async with SqlAlchemyUnitOfWork(self.tenant_id) as uow:
             repo = NoteRepository(uow.session, self.tenant_id)
-            note = await repo.get(note_id)
+            note = await repo.get(note_id, self.permissions_scope())
             if note is None:
                 raise NotFound("Note not found.")
             if note.created_by != self.user_id:

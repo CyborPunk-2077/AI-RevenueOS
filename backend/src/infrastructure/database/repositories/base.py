@@ -32,13 +32,14 @@ class TenantRepository(Generic[M]):
         self.tenant_id = tenant_id
 
     # -- query construction ------------------------------------------------
-    def base_query(self, *, include_deleted: bool = False) -> Select[Any]:
+    def _tenant_query(self, *, include_deleted: bool = False) -> Select[Any]:
+        """Build the tenant predicate; callers must add an effective role scope."""
         stmt = select(self.model).where(self.model.tenant_id == self.tenant_id)
         if self.soft_delete and not include_deleted and hasattr(self.model, "deleted_at"):
             stmt = stmt.where(self.model.deleted_at.is_(None))
         return stmt
 
-    def apply_scope(self, stmt: Select[Any], perms: EffectivePermissions) -> Select[Any]:
+    def _apply_scope(self, stmt: Select[Any], perms: EffectivePermissions) -> Select[Any]:
         """Apply branch/team/self scope inside the query, per the role matrix.
 
         Fails closed: if the model carries the scoping column but the principal has
@@ -73,19 +74,21 @@ class TenantRepository(Generic[M]):
     def scoped_query(
         self, perms: EffectivePermissions, *, include_deleted: bool = False
     ) -> Select[Any]:
-        """Tenant filter plus role scope. List endpoints must use this, not `base_query`."""
-        return self.apply_scope(self.base_query(include_deleted=include_deleted), perms)
+        """Tenant filter plus an explicit effective role scope."""
+        return self._apply_scope(self._tenant_query(include_deleted=include_deleted), perms)
 
     # -- reads -------------------------------------------------------------
-    async def get(self, entity_id: UUID, *, include_deleted: bool = False) -> M | None:
-        stmt = self.base_query(include_deleted=include_deleted).where(self.model.id == entity_id)
-        return (await self.session.execute(stmt)).scalar_one_or_none()
+    async def get(
+        self,
+        entity_id: UUID,
+        perms: EffectivePermissions,
+        *,
+        include_deleted: bool = False,
+    ) -> M | None:
+        return await self.get_scoped(entity_id, perms, include_deleted=include_deleted)
 
-    async def get_or_404(self, entity_id: UUID) -> M:
-        found = await self.get(entity_id)
-        if found is None:
-            raise NotFound(f"{self.model.__name__} not found.")
-        return found
+    async def get_or_404(self, entity_id: UUID, perms: EffectivePermissions) -> M:
+        return await self.get_scoped_or_404(entity_id, perms)
 
     async def get_scoped(
         self, entity_id: UUID, perms: EffectivePermissions, *, include_deleted: bool = False
@@ -107,13 +110,14 @@ class TenantRepository(Generic[M]):
             raise NotFound(f"{self.model.__name__} not found.")
         return found
 
-    async def count(self, stmt: Select[Any] | None = None) -> int:
-        base = stmt if stmt is not None else self.base_query()
+    async def count(self, perms: EffectivePermissions, stmt: Select[Any] | None = None) -> int:
+        base = stmt if stmt is not None else self.scoped_query(perms)
         counted = select(func.count()).select_from(base.subquery())
         return int((await self.session.execute(counted)).scalar_one())
 
     async def paginate_cursor(
         self,
+        perms: EffectivePermissions,
         stmt: Select[Any] | None = None,
         *,
         cursor: str | None = None,
@@ -122,7 +126,7 @@ class TenantRepository(Generic[M]):
     ) -> Page:
         """Keyset pagination on the time-ordered UUIDv7 primary key."""
         size = clamp_page_size(page_size)
-        query = stmt if stmt is not None else self.base_query()
+        query = stmt if stmt is not None else self.scoped_query(perms)
         if cursor:
             last_id = UUID(decode_cursor(cursor)["id"])
             query = query.where(self.model.id < last_id if order_desc else self.model.id > last_id)
@@ -144,8 +148,8 @@ class TenantRepository(Generic[M]):
         self.session.add(entity)
         return entity
 
-    async def soft_delete_by_id(self, entity_id: UUID) -> None:
-        entity = await self.get_or_404(entity_id)
+    async def soft_delete_by_id(self, entity_id: UUID, perms: EffectivePermissions) -> None:
+        entity = await self.get_or_404(entity_id, perms)
         if hasattr(entity, "deleted_at"):
             entity.deleted_at = utcnow()  # type: ignore[attr-defined]
         else:

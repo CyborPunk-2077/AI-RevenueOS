@@ -1,6 +1,6 @@
 """Branch/team/self scope must filter list queries, not merely exist as a method.
 
-`TenantRepository.apply_scope` was previously dead code: no service called it, so a
+`TenantRepository.scoped_query` was previously dead code: no service called it, so a
 Member with `self` scope saw every lead in the tenant. These tests fail against that
 version.
 """
