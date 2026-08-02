@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-
-from shared.compat import StrEnum
+from enum import StrEnum
 
 
 class Provider(StrEnum):

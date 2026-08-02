@@ -409,7 +409,7 @@ class ClamAvScanner(ScannerPort):
                 raw={"verdict": verdict},
                 latency_ms=latency,
             )
-        except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError) as exc:
+        except (TimeoutError, OSError, asyncio.IncompleteReadError) as exc:
             return ProviderResult(
                 ok=False,
                 provider="clamav",

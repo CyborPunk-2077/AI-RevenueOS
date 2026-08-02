@@ -7,10 +7,10 @@ recorded separately; a captured payment is never rewritten in place.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
 
 from domain.base import InvalidTransition, PolicyViolation
-from shared.compat import StrEnum
 from shared.utils.money import Money
 
 

@@ -9,10 +9,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any
 
-from shared.compat import StrEnum
 from shared.utils.timeutil import to_local
 
 

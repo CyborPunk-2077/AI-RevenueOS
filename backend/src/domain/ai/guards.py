@@ -10,9 +10,8 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
-
-from shared.compat import StrEnum
 
 INJECTION_BLOCK = 0.70
 INJECTION_SANITIZE = 0.40

@@ -12,6 +12,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
@@ -19,7 +20,6 @@ from domain.workflows.dsl import ACTION_CATALOG, NodeType, compile_workflow
 from infrastructure.integrations.retry import BackoffPolicy, RetryClass, backoff_delay, should_retry
 from infrastructure.logging.setup import get_logger
 from infrastructure.monitoring.metrics import workflow_executions, workflow_lag_seconds
-from shared.compat import StrEnum
 from shared.utils.text import content_hash
 from shared.utils.timeutil import utcnow
 

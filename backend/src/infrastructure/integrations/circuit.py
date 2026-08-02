@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from infrastructure.monitoring.metrics import circuit_state
-from shared.compat import StrEnum
 
 
 class CircuitState(StrEnum):

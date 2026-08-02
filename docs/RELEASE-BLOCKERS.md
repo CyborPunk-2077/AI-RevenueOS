@@ -410,7 +410,7 @@ signed-off copy and policy that the code enforces against.
 
 | # | Item | Remediation |
 |---|---|---|
-| P2-1 | Python version deviation (spec 3.12, project `>=3.10` with a `StrEnum` shim) | Adopt 3.12 and delete `shared/compat.py`, or record the deviation |
+| ~~P2-1~~ | **RESOLVED 2026-08-02.** Runtime, Ruff, mypy, Docker, CI and hashed dependency locks now uniformly target Python 3.12; the compatibility shim was deleted and standard-library `StrEnum`/`UTC` are used directly. | Complete |
 | P2-2 | Onboarding state machine missing (`GET/PATCH /onboarding/state`, `POST complete`) | Implement over the existing `tenants.onboarding_state` column |
 | ~~P2-3~~ | **RESOLVED 2026-08-02.** Kill switches persist on workflow definitions, survive Redis loss, and emit audit/outbox events (`9d2c8f2`). | Complete |
 | ~~P2-4~~ | **RESOLVED 2026-08-02.** Verified Razorpay events are durably persisted, tenant-derived from stored order/payment mappings, atomically transitioned/audited/outboxed, and duplicate-safe without Redis (`a2e45df`). | Complete |

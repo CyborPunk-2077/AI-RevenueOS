@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC as UTC
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
-# `datetime.UTC` is 3.11+. The declared runtime floor is 3.10.
-UTC = timezone.utc
 
 DEFAULT_TZ = "Asia/Kolkata"
 

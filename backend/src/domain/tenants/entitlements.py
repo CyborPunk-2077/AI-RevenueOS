@@ -7,9 +7,8 @@ every surface calls this one module.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
-
-from shared.compat import StrEnum
 
 UNLIMITED = -1
 

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
 
 from domain.base import InvalidTransition
-from shared.compat import StrEnum
 from shared.utils.phone import try_normalize_phone
 from shared.utils.text import normalize_name_key
 

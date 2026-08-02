@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +32,7 @@ class FakeRds:
                 "DBInstances": [
                     {
                         "DBInstanceIdentifier": identifier,
-                        "LatestRestorableTime": datetime.now(timezone.utc),
+                        "LatestRestorableTime": datetime.now(UTC),
                         "MasterUserSecret": {"SecretArn": "arn:secret:source"},
                         "Endpoint": {"Address": "source.internal", "Port": 5432},
                         "DBName": "airevenueos",

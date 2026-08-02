@@ -7,9 +7,9 @@ declarative - there is no arbitrary code, filesystem, shell or network escape.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
 
-from shared.compat import StrEnum
 from shared.utils.text import content_hash
 
 MAX_NAME = 200

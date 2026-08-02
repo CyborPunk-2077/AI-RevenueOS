@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, Generic, TypeVar
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import Select, false, func, select, update
@@ -15,10 +15,8 @@ from shared.exceptions import NotFound, PreconditionFailed
 from shared.pagination import Page, clamp_page_size, decode_cursor, encode_cursor
 from shared.utils.timeutil import utcnow
 
-M = TypeVar("M")
 
-
-class TenantRepository(Generic[M]):
+class TenantRepository[M]:
     """Every query is tenant filtered before it is executed, never after fetching."""
 
     model: type[Any]

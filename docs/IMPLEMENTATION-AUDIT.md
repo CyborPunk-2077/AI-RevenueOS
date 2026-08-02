@@ -423,7 +423,7 @@ signed by a key that changes on every restart. Recommend failing closed outside
 
 | # | Spec requirement | Actual | Recommendation |
 |---|---|---|---|
-| D1 | Python 3.12 | `requires-python = ">=3.10"`; `shared/compat.py` shims `StrEnum`; ruff realigned to `py310` during this audit | Decide: adopt 3.12, delete the shim and set `target-version = "py312"`; or record the 3.10 floor as an accepted deviation |
+| D1 | Python 3.12 | Resolved: project/runtime, Ruff, mypy, Docker, CI and lock generation target 3.12; standard-library `StrEnum`/`UTC` replace the deleted compatibility shim | Keep the runtime floor aligned across every toolchain |
 | D2 | pnpm 9 + Turborepo workspaces | Declared; no lockfile, no installed workspace | Generate and commit `pnpm-lock.yaml` |
 | D3 | Custom engine executes workflows on Celery | Executor is pure async Python; no Celery app exists | Implement `infrastructure/celery/app.py` with the 8 declared queues |
 | D4 | Prompts Git-backed at `prompts/<task>/v<n>.yaml` | Implemented for every declared AI task, with immutable hashes and versioned gold sets | Keep the offline evaluation gate mandatory; separately activate approved sandbox model-quality evaluation |

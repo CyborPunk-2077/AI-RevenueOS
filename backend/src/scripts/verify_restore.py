@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import quote_plus
@@ -95,7 +95,7 @@ def load_config(
     if missing:
         raise ValueError(f"missing restore configuration: {', '.join(missing)}")
 
-    stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%d%H%M%S")
+    stamp = (now or datetime.now(UTC)).strftime("%Y%m%d%H%M%S")
     target = env.get("RESTORE_DB_INSTANCE_ID", f"{TARGET_PREFIX}{stamp}").strip().lower()
     if not re.fullmatch(r"airevenueos-dr-[a-z0-9-]{1,48}", target):
         raise ValueError(
@@ -260,7 +260,7 @@ def run_drill(
 ) -> DrillEvidence:
     rds_client = rds or boto3.client("rds", region_name=config.region)
     secret_client = secrets_client or boto3.client("secretsmanager", region_name=config.region)
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     started_clock = time.monotonic()
     run_id = config.target_instance_id.removeprefix(TARGET_PREFIX)
     evidence = DrillEvidence(
@@ -276,8 +276,8 @@ def run_drill(
         latest = source.get("LatestRestorableTime")
         if not isinstance(latest, datetime):
             raise RuntimeError("source instance did not report LatestRestorableTime")
-        latest = latest.astimezone(timezone.utc)
-        rpo_seconds = max(0, int((datetime.now(timezone.utc) - latest).total_seconds()))
+        latest = latest.astimezone(UTC)
+        rpo_seconds = max(0, int((datetime.now(UTC) - latest).total_seconds()))
         evidence.latest_restorable_time = latest.isoformat()
         evidence.rpo_seconds = rpo_seconds
         if rpo_seconds > RPO_LIMIT_SECONDS:

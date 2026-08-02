@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Generic, TypeVar
-
-T = TypeVar("T")
-E = TypeVar("E")
 
 
 @dataclass(frozen=True, slots=True)
-class Ok(Generic[T]):
+class Ok[T]:
     value: T
 
     @property
@@ -22,7 +18,7 @@ class Ok(Generic[T]):
 
 
 @dataclass(frozen=True, slots=True)
-class Err(Generic[E]):
+class Err[E]:
     error: E
 
     @property
@@ -33,4 +29,4 @@ class Err(Generic[E]):
         raise ValueError(f"Attempted to unwrap an Err: {self.error!r}")
 
 
-Result = Ok[T] | Err[E]
+type Result[T, E] = Ok[T] | Err[E]

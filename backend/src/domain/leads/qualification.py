@@ -8,9 +8,8 @@ review flag - it never fabricates a confident score.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
-
-from shared.compat import StrEnum
 
 HOT_THRESHOLD = 80
 WARM_THRESHOLD = 40
