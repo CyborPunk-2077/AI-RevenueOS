@@ -52,16 +52,31 @@ CHANNELS = ("whatsapp", "email", "web_chat", "voice", "sms")
 CHANNEL_FLAGS: dict[str, str] = {
     "whatsapp": "whatsapp_enabled",
     "email": "email_enabled",
-    # No dedicated SMS flag exists; DLT registration gates it alongside WhatsApp.
-    "sms": "whatsapp_enabled",
+    "sms": "sms_enabled",
     "voice": "voice_enabled",
     "web_chat": "webchat_enabled",
 }
 
 
 def channel_ready(channel: str, cfg: Settings | None = None) -> bool:
-    """True only when the capability is switched on. Never assumed."""
+    """True only when both the gate and the real provider configuration hold."""
     settings = cfg or get_settings()
+    if channel == "whatsapp":
+        from application.communications.registry import get_whatsapp_adapter
+
+        return get_whatsapp_adapter(settings).is_configured()
+    if channel == "email":
+        from application.communications.registry import get_email_adapter
+
+        return get_email_adapter(settings).is_configured()
+    if channel == "voice":
+        from application.communications.registry import get_voice_adapter
+
+        return get_voice_adapter(settings).is_configured()
+    if channel == "sms":
+        # There is no selected SMS adapter until DLT registration and provider
+        # contracting are complete. A flag alone cannot make delivery real.
+        return False
     flag = CHANNEL_FLAGS.get(channel)
     return bool(flag and getattr(settings.features, flag, False))
 

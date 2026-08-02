@@ -23,6 +23,7 @@ class FeatureFlagDefaults(BaseSettings):
 
     whatsapp_enabled: bool = False  # gate: BSP/Cloud API + template approval
     email_enabled: bool = False  # gate: provider + domain/DNS ownership
+    sms_enabled: bool = False  # gate: provider decision + India DLT registration
     voice_enabled: bool = False  # gate: legal disclosure + recording consent
     payments_enabled: bool = False  # gate: Razorpay commercial model
     ai_enabled: bool = True  # safe: degrades to manual without credentials

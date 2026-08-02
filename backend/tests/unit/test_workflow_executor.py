@@ -218,6 +218,7 @@ class TestExecution:
         result = await WorkflowEngine(action_runner=runner).execute(plan, context(digest))
         assert result.state is ExecutionState.WAITING
         assert result.resume_at is not None
+        assert result.resume_nodes == ["n1"]
         assert runner.calls == []
 
     async def test_approval_node_suspends_before_the_gated_action(self) -> None:
@@ -279,6 +280,23 @@ class TestRetryAndFailure:
         assert result.state is ExecutionState.FAILED
         assert len(runner.calls) == 1
         assert result.nodes[0].error["retried"] is False
+
+    async def test_validation_failure_is_classified_terminal(self) -> None:
+        from shared.exceptions import ValidationError
+
+        plan, digest = build_plan(doc([{"id": "n1", "type": "action", "action": "tag.add"}], []))
+
+        class Invalid(Recorder):
+            async def __call__(
+                self, action: str, inputs: dict[str, Any], ctx: ExecutionContext, key: str
+            ) -> dict[str, Any]:
+                self.calls.append((action, key))
+                raise ValidationError("invalid action input")
+
+        runner = Invalid()
+        result = await WorkflowEngine(action_runner=runner).execute(plan, context(digest))
+        assert result.state is ExecutionState.FAILED
+        assert len(runner.calls) == 1
 
     async def test_continue_policy_carries_on_past_a_failed_node(self) -> None:
         plan, digest = build_plan(

@@ -102,6 +102,7 @@ class ExecutionResult:
     error: dict[str, Any] = field(default_factory=dict)
     resume_at: datetime | None = None
     waiting_on: str | None = None
+    resume_nodes: list[str] = field(default_factory=list)
     external_effects: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -110,6 +111,7 @@ class ExecutionResult:
             "state": self.state.value,
             "waiting_on": self.waiting_on,
             "resume_at": self.resume_at.isoformat() if self.resume_at else None,
+            "resume_nodes": self.resume_nodes,
             "nodes": [
                 {
                     "node_id": n.node_id,
@@ -248,7 +250,11 @@ class WorkflowEngine:
         self._backoff = backoff or BackoffPolicy()
 
     async def execute(
-        self, plan: dict[str, Any], context: ExecutionContext, *, resume_from: str | None = None
+        self,
+        plan: dict[str, Any],
+        context: ExecutionContext,
+        *,
+        resume_from: str | list[str] | None = None,
     ) -> ExecutionResult:
         """Run the compiled plan. A dry run performs no external effect at all."""
         if plan["content_hash"] != context.content_hash:
@@ -259,7 +265,11 @@ class WorkflowEngine:
         external: list[str] = []
         deadline = context.started_at + timedelta(seconds=int(policy["timeout_seconds"]))
 
-        queue = list(plan["entry_nodes"]) if resume_from is None else [resume_from]
+        queue = (
+            list(plan["entry_nodes"])
+            if resume_from is None
+            else ([resume_from] if isinstance(resume_from, str) else list(resume_from))
+        )
         visited: set[str] = set()
         loop_counts: dict[str, int] = {}
 
@@ -320,6 +330,7 @@ class WorkflowEngine:
                     results,
                     resume_at=resume_at,
                     waiting_on=node_id,
+                    resume_nodes=self._next_nodes(plan, node_id, scope),
                     external_effects=external,
                 )
 
@@ -332,6 +343,7 @@ class WorkflowEngine:
                     ExecutionState.WAITING,
                     results,
                     waiting_on=node_id,
+                    resume_nodes=self._next_nodes(plan, node_id, scope),
                     external_effects=external,
                 )
 
@@ -440,7 +452,16 @@ class WorkflowEngine:
             except WorkflowKilled:
                 raise
             except Exception as exc:
-                if not should_retry(RetryClass.PROVIDER, attempt, max_attempts):
+                from infrastructure.celery.reliability import classify_exception
+
+                classified = classify_exception(exc)
+                spec = ACTION_CATALOG.get(action)
+                if classified is not RetryClass.TERMINAL and spec is not None:
+                    if spec.retry_class == "none":
+                        classified = RetryClass.TERMINAL
+                    elif classified is not RetryClass.RATE_LIMITED:
+                        classified = RetryClass(spec.retry_class)
+                if not should_retry(classified, attempt, max_attempts):
                     return NodeResult(
                         node_id,
                         NodeState.FAILED,
@@ -457,6 +478,7 @@ class WorkflowEngine:
                     "workflow_node_retry",
                     node_id=node_id,
                     attempt=attempt,
+                    retry_class=classified.value,
                     delay_seconds=round(delay, 2),
                     error=type(exc).__name__,
                 )

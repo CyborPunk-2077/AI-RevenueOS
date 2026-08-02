@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
-
 from infrastructure.integrations.email import EmailAdapter
 from infrastructure.integrations.voice import VoiceAdapter
 from infrastructure.integrations.whatsapp import WhatsAppAdapter
 from shared.settings import Settings, get_settings
 
 
-@lru_cache(maxsize=1)
 def get_whatsapp_adapter(settings: Settings | None = None) -> WhatsAppAdapter:
     cfg = settings or get_settings()
     return WhatsAppAdapter(
@@ -22,7 +19,6 @@ def get_whatsapp_adapter(settings: Settings | None = None) -> WhatsAppAdapter:
     )
 
 
-@lru_cache(maxsize=1)
 def get_email_adapter(settings: Settings | None = None) -> EmailAdapter:
     cfg = settings or get_settings()
     return EmailAdapter(
@@ -33,7 +29,6 @@ def get_email_adapter(settings: Settings | None = None) -> EmailAdapter:
     )
 
 
-@lru_cache(maxsize=1)
 def get_voice_adapter(settings: Settings | None = None) -> VoiceAdapter:
     cfg = settings or get_settings()
     return VoiceAdapter(provider=cfg.voice_provider, enabled=cfg.features.voice_enabled)

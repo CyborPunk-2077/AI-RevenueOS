@@ -45,6 +45,7 @@ DOCUMENT_SHARED: Final = "document.shared"
 FILE_UPLOAD_REQUESTED: Final = "file.upload_requested"
 FILE_DELETED: Final = "file.deleted"
 ANALYTICS_EXPORT_REQUESTED: Final = "analytics.export_requested"
+ANALYTICS_EVENT_EMITTED: Final = "analytics.event_emitted"
 WORKFLOW_EXECUTION_STARTED: Final = "workflow.execution_started"
 WORKFLOW_EXECUTION_COMPLETED: Final = "workflow.execution_completed"
 WORKFLOW_EXECUTION_FAILED: Final = "workflow.execution_failed"
@@ -127,6 +128,7 @@ INTERNAL_EVENT_TYPES: Final[frozenset[str]] = frozenset(
         FILE_UPLOAD_REQUESTED,
         FILE_DELETED,
         ANALYTICS_EXPORT_REQUESTED,
+        ANALYTICS_EVENT_EMITTED,
     }
 )
 

@@ -125,7 +125,11 @@ ACTION_CATALOG: dict[str, ActionSpec] = {
     ),
     "document.generate": ActionSpec("document.generate", "document:create"),
     "document.send": ActionSpec(
-        "document.send", "document:send", external_effect=True, requires_approval=True
+        "document.send",
+        "document:send",
+        "signatures_enabled",
+        external_effect=True,
+        requires_approval=True,
     ),
     "payment.create_link": ActionSpec(
         "payment.create_link",

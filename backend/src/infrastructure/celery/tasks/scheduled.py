@@ -64,11 +64,11 @@ async def process_due_work(_context: TaskContext) -> dict[str, Any]:
 
     from infrastructure.celery.context import build_headers
     from infrastructure.database.models.workflows import WorkflowExecution
-    from infrastructure.database.session import unscoped_session
+    from infrastructure.database.session import platform_session
     from shared.utils.timeutil import utcnow
 
     resumed = 0
-    async with unscoped_session() as session:
+    async with platform_session("workflow_scheduler") as session:
         due = (
             (
                 await session.execute(

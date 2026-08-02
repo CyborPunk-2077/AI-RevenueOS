@@ -20,6 +20,7 @@ def _flag_state(settings: Settings) -> dict[str, bool]:
     return {
         Feature.WHATSAPP.value: flags.whatsapp_enabled,
         Feature.EMAIL.value: flags.email_enabled,
+        Feature.SMS.value: flags.sms_enabled,
         Feature.VOICE.value: flags.voice_enabled,
         Feature.PAYMENTS.value: flags.payments_enabled,
         Feature.AI_QUALIFICATION.value: flags.ai_enabled,

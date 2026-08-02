@@ -11,7 +11,6 @@ from typing import Any
 from uuid import UUID
 
 from infrastructure.celery.context import TaskContext
-from infrastructure.celery.reliability import action_key, claim_once
 from infrastructure.celery.tasks.base import airev_task
 from infrastructure.logging.setup import get_logger
 
@@ -20,7 +19,19 @@ logger = get_logger("celery.workflow")
 
 @airev_task("critical.execute_workflow", max_attempts=3)
 async def execute_workflow(
-    context: TaskContext, execution_id: str, *, resume_from: str | None = None
+    context: TaskContext,
+    execution_id: str,
+    *,
+    resume_from: str | list[str] | None = None,
+) -> dict[str, Any]:
+    return await _execute_workflow_once(context, execution_id, resume_from=resume_from)
+
+
+async def _execute_workflow_once(
+    context: TaskContext,
+    execution_id: str,
+    *,
+    resume_from: str | list[str] | None = None,
 ) -> dict[str, Any]:
     """Run a pinned workflow version for one execution."""
     tenant_id = context.require_tenant()
@@ -46,7 +57,9 @@ async def execute_workflow(
     async with tenant_session(tenant_id) as session:
         execution = (
             await session.execute(
-                select(WorkflowExecution).where(WorkflowExecution.id == UUID(execution_id))
+                select(WorkflowExecution)
+                .where(WorkflowExecution.id == UUID(execution_id))
+                .with_for_update()
             )
         ).scalar_one_or_none()
         if execution is None:
@@ -70,6 +83,9 @@ async def execute_workflow(
         correlation = execution.correlation_id
         workflow_id = execution.workflow_id
         version_id = execution.version_id
+        execution.state = "running"
+        execution.started_at = execution.started_at or utcnow()
+        execution.resume_at = None
 
     from domain.workflows.dsl import compile_workflow
 
@@ -104,6 +120,19 @@ async def execute_workflow(
         execution.state = result.state.value
         execution.resume_at = result.resume_at
         execution.error = result.error
+        execution.context = {
+            **dict(execution.context or {}),
+            "waiting_on": result.waiting_on,
+            "resume_nodes": result.resume_nodes,
+            "nodes": [
+                {
+                    "node_id": node.node_id,
+                    "state": node.state.value,
+                    "attempt": node.attempt,
+                }
+                for node in result.nodes
+            ],
+        }
         if result.state in (ExecutionState.COMPLETED, ExecutionState.FAILED):
             execution.finished_at = utcnow()
         from application.audit.recorder import AuditRecorder
@@ -122,6 +151,7 @@ async def execute_workflow(
                 "is_dry_run": execution.is_dry_run,
             },
         )
+        await _persist_nodes(session, tenant_id, UUID(execution_id), plan_source, result.nodes)
 
     payload: dict[str, Any] = result.to_dict()
     return payload
@@ -129,6 +159,10 @@ async def execute_workflow(
 
 @airev_task("scheduled.resume_execution", max_attempts=3)
 async def resume_execution(context: TaskContext, execution_id: str) -> dict[str, Any]:
+    return await _resume_execution_once(context, execution_id)
+
+
+async def _resume_execution_once(context: TaskContext, execution_id: str) -> dict[str, Any]:
     """Wake a suspended execution once its durable delay has elapsed."""
     from sqlalchemy import select
 
@@ -144,15 +178,64 @@ async def resume_execution(context: TaskContext, execution_id: str) -> dict[str,
         ).scalar_one_or_none()
         if execution is None or execution.state != "waiting":
             return {"resumed": False}
-        node_ids = [
-            n.get("node_id")
-            for n in (execution.context or {}).get("nodes", [])
-            if n.get("state") == "pending"
-        ]
-        resume_from = node_ids[0] if node_ids else None
+        resume_from = list((execution.context or {}).get("resume_nodes") or [])
+        if not resume_from:
+            return {"resumed": False, "reason": "no durable continuation"}
 
-    resumed: dict[str, Any] = await execute_workflow(context, execution_id, resume_from=resume_from)
+    resumed: dict[str, Any] = await _execute_workflow_once(
+        context, execution_id, resume_from=resume_from
+    )
     return resumed
+
+
+async def _persist_nodes(
+    session: Any,
+    tenant_id: UUID,
+    execution_id: UUID,
+    plan_source: dict[str, Any],
+    nodes: list[Any],
+) -> None:
+    """Upsert durable node evidence in the execution's state transaction."""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from infrastructure.database.models.workflows import WorkflowNodeExecution
+    from shared.utils.ids import uuid7
+    from shared.utils.timeutil import utcnow
+
+    node_types = {
+        str(node.get("id")): str(node.get("type")) for node in plan_source.get("nodes", [])
+    }
+    for result in nodes:
+        values = {
+            "id": uuid7(),
+            "tenant_id": tenant_id,
+            "execution_id": execution_id,
+            "node_id": result.node_id,
+            "node_type": node_types.get(result.node_id, "unknown"),
+            "attempt": result.attempt,
+            "state": result.state.value,
+            "action_idempotency_key": result.idempotency_key or None,
+            "input_snapshot": {},
+            "output": result.output,
+            "error": result.error,
+            "started_at": None,
+            "finished_at": utcnow() if result.state.value not in {"pending", "running"} else None,
+        }
+        await session.execute(
+            pg_insert(WorkflowNodeExecution)
+            .values(**values)
+            .on_conflict_do_update(
+                constraint="exec_node_attempt",
+                set_={
+                    "state": values["state"],
+                    "action_idempotency_key": values["action_idempotency_key"],
+                    "output": values["output"],
+                    "error": values["error"],
+                    "finished_at": values["finished_at"],
+                    "updated_at": utcnow(),
+                },
+            )
+        )
 
 
 async def _run_action(
@@ -160,8 +243,8 @@ async def _run_action(
 ) -> dict[str, Any]:
     """Execute one workflow action under its idempotency key.
 
-    An external effect is claimed before it is performed, so a redelivered message
-    cannot contact the same customer twice.
+    The application dispatcher enforces current publisher permissions, feature
+    gates and a durable audit-backed idempotency receipt.
     """
     from domain.workflows.dsl import ACTION_CATALOG
 
@@ -171,19 +254,12 @@ async def _run_action(
 
         raise TerminalActionError(f"unknown action '{action}'")
 
-    if spec.external_effect:
-        key = action_key(ctx.execution_id, idempotency_key.split(":")[1], 1)
-        if not await claim_once(key):
-            logger.info("action_skipped_duplicate", action=action, key=key.identity)
-            return {"skipped": True, "reason": "already performed"}
-
     logger.info(
         "workflow_action",
         action=action,
         external_effect=spec.external_effect,
         tenant_id=str(ctx.tenant_id),
     )
-    # Concrete action handlers are wired per module as those services land. The
-    # dispatch table, permission, feature gate, retry class and idempotency key are
-    # already declared on the action spec.
-    return {"action": action, "applied": False, "pending_handler": True}
+    from application.workflows.actions import dispatch_action
+
+    return await dispatch_action(action, inputs, ctx, idempotency_key)

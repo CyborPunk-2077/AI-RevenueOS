@@ -73,11 +73,13 @@ passing**. Raw output in `docs/p0-1-gate-results.txt`.
 | W3 | **P1 security** | Partition creation and RLS enablement need CREATE and ownership. The runtime role deliberately has neither, so a separate `airevenueos_maintenance` role was introduced (migration 0003) — the API role still cannot create or drop a table. |
 | W4 | **P2** | Seeding reference data used the runtime role, which migration 0001 correctly revokes write access from. It now uses an administrative session. |
 
-**Residual scope deliberately left open** (tracked under P0-4, not P0-1): concrete
-workflow action handlers still report `pending_handler`. The outbound webhook path
-is now complete: public-event subscription, durable tenant-isolated delivery rows,
-signed HTTPS transport with SSRF checks, bounded retries, terminal classification,
-automatic disable with atomic audit/outbox evidence, and cross-tenant sweep policy.
+**Residual scope deliberately left open** (tracked under P0-4, not P0-1): workflow
+trigger matching and durable approval decisions remain. Concrete actions now resolve
+the current accountable publisher and current grants, enforce plan/feature/provider
+gates, invoke landed module services, and recover duplicates from atomic audit
+receipts after Redis or worker loss. Delays persist exact successor nodes and resume
+without replaying the delay. Externally unapproved payment/signature actions refuse
+truthfully. The signed outbound webhook delivery path is complete.
 
 ### Demo slice (2026-08-01) — narrow, between P0-1 and P0-2
 
@@ -393,7 +395,7 @@ signed-off copy and policy that the code enforces against.
 | P1-2 | **Partial.** Auth, leads, AI, CRM, analytics exports, tenant governance, workflow controls/execution, public booking, authorization denials and verified payment transitions are durably audited; consent, provider/config, support, download and bulk paths remain. | criterion 22 | Finish every remaining `MANDATORY_AUDIT_ACTIONS` path and assert atomic audit rows in E2E | remaining product work |
 | ~~P1-3~~ | **RESOLVED 2026-08-02.** Owned warning/critical Prometheus rules, AWS backup/WAF alarms, runbooks and deterministic validation are committed (`24676fe`). Live AWS firing remains correctly gated by P0-5. | M02, M21, criterion 27 | Complete | — |
 | P1-4 | **Engineering complete; live evidence externally blocked.** The fail-closed PITR orchestrator verifies migration head, reconciles counts, re-runs the RLS suite using a temporary NOBYPASSRLS role, enforces RPO/RTO, uploads evidence and tag-verifies cleanup. The private DR runner/account is not activated, so no drill is claimed. | M22, criterion 24 | Activate the documented AWS DR environment and execute the drill | AWS gate |
-| P1-12 | **Partial.** Outbound webhooks are durably queued once per config/event, HMAC-signed, HTTPS/SSRF guarded, retry-classified and auto-disabled with atomic audit/outbox evidence. Concrete workflow action dispatch still reports `pending_handler`. | M18, criteria 16, 27 | Implement the remaining action handlers against the landed module services | folded into P0-4 |
+| P1-12 | **Partial.** Outbound delivery and concrete tenant-authorized action dispatch are implemented. Action duplicates recover durably from atomic audit receipts, disabled provider actions never claim effects, retry classes are enforced, nodes persist, and delayed executions resume from stored successors. Domain-event trigger matching and durable approval decisions remain. | M18, criteria 16, 27 | Implement trigger-to-execution matching and approval request/decision/resume | folded into P0-4 |
 | ~~P1-5~~ | **RESOLVED 2026-08-02.** Eight concurrent public claims on one real-Postgres slot produce exactly one booking/lock/audit commit and seven domain conflicts; the audit is anonymous, PII-free and tenant-isolated (`2097ba2`). | criterion 12 | Complete | — |
 | P1-6 | **Storage lifecycle not wired**; `ClamAvScanner.scan` raises `NotImplementedError`. Policy helpers are tested but no file can complete the flow. | M13, criterion 13 | Implement presign → complete → scan → clean/quarantine → signed download; integration test with a real clamd | 4 days |
 | ~~P1-7~~ | **RESOLVED 2026-08-02.** Runtime/dev Python graphs are fully pinned with hashes and used by CI/Docker; pnpm CI installs fail on lock drift (`784cbfc`). | M01, M21 | Complete | — |
