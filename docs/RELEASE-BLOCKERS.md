@@ -411,10 +411,10 @@ signed-off copy and policy that the code enforces against.
 | # | Item | Remediation |
 |---|---|---|
 | ~~P2-1~~ | **RESOLVED 2026-08-02.** Runtime, Ruff, mypy, Docker, CI and hashed dependency locks now uniformly target Python 3.12; the compatibility shim was deleted and standard-library `StrEnum`/`UTC` are used directly. | Complete |
-| P2-2 | **Resolved** — versioned onboarding state machine now exposes tenant-scoped `GET/PATCH /onboarding/state` and `POST /onboarding/complete`; required/dependent steps are monotonic, mutations are durably idempotent, and state/audit/outbox commit atomically. Provider activation is never inferred from onboarding progress. | Real-PostgreSQL tests cover isolation, replay, rollback, completion preconditions and RBAC. |
+| ~~P2-2~~ | **RESOLVED 2026-08-02.** Versioned onboarding state machine now exposes tenant-scoped `GET/PATCH /onboarding/state` and `POST /onboarding/complete`; required/dependent steps are monotonic, mutations are durably idempotent, and state/audit/outbox commit atomically. Provider activation is never inferred from onboarding progress. | Real-PostgreSQL tests cover isolation, replay, rollback, completion preconditions and RBAC. |
 | ~~P2-3~~ | **RESOLVED 2026-08-02.** Kill switches persist on workflow definitions, survive Redis loss, and emit audit/outbox events (`9d2c8f2`). | Complete |
 | ~~P2-4~~ | **RESOLVED 2026-08-02.** Verified Razorpay events are durably persisted, tenant-derived from stored order/payment mappings, atomically transitioned/audited/outboxed, and duplicate-safe without Redis (`a2e45df`). | Complete |
-| P2-5 | Mutation testing absent despite a stated 75–85% target | Add `mutmut`/`cosmic-ray` for domain and auth |
+| ~~P2-5~~ | **ENGINEERING RESOLVED 2026-08-02.** Pinned mutmut 3.6 runs nightly against the domain layer (including auth), exports raw CI statistics, and fails below 75% or on missing/incomplete/interrupted evidence. Untested and runtime-failed mutants count against the score. | The runner is Linux-only by upstream design; this Windows host cannot produce a truthful score. A completed nightly artifact is still required before GA and no score is claimed here. |
 | P2-6 | `mypy` excludes `tests/` | Extend strict checking to tests |
 | P2-7 | No tracing despite X-Ray in the stack table | Instrument with OpenTelemetry |
 | P2-8 | Storybook declared in the Makefile, absent | Add it or drop the claim |
@@ -429,7 +429,7 @@ signed-off copy and policy that the code enforces against.
 |---|---:|---:|---:|
 | P0 | 0 | 2 | 2 |
 | P1 | 4 | 3 | 7 |
-| P2 | 8 | 0 | 8 |
+| P2 | 4 | 0 | 4 |
 
 **Critical path to a pilot:** P0-1 (workers) → P0-2 (auth) → P0-3 (frontend
 toolchain) → P0-4 (services, at least CRM + inbox) → P1-2 (audit wiring) →

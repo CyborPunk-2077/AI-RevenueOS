@@ -113,6 +113,12 @@ test-web: ## Frontend unit tests (vitest, jsdom)
 test-unit: ## Unit tests only
 	$(BACKEND) pytest tests/unit -q
 
+.PHONY: mutation
+mutation: ## Run the Linux-only domain/auth mutation gate (minimum 75%)
+	$(BACKEND) mutmut run
+	$(BACKEND) mutmut export-cicd-stats
+	$(BACKEND) python src/scripts/check_mutation_score.py --fail-under 0.75
+
 .PHONY: test-integration
 test-integration: ## Integration and E2E tests (requires PostgreSQL)
 	$(BACKEND) pytest tests/integration tests/e2e -q

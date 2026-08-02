@@ -50,7 +50,15 @@ dev = [
     "python-hcl2>=7.3",
     "bandit>=1.8",
     "pip-audit>=2.9",
+    "mutmut==3.6.0",
 ]
+
+[tool.mutmut]
+source_paths = ["src/domain/"]
+pytest_add_cli_args_test_selection = ["tests/unit/"]
+mutate_only_covered_lines = true
+max_stack_depth = 12
+use_git_change_detection = false
 
 [tool.ruff]
 line-length = 100
