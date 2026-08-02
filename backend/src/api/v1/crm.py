@@ -808,6 +808,16 @@ async def download_file(
     )
 
 
+@files_router.post("/{file_id}/complete", summary="Confirm upload and queue malware scanning")
+async def complete_file_upload(
+    file_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("file", "create")
+    return success(
+        await _documents(principal).complete_upload(file_id), request_id=_request_id(request)
+    )
+
+
 @files_router.delete("/{file_id}", summary="Delete a file")
 async def delete_file(
     file_id: UUID, request: Request, principal: CurrentPrincipal

@@ -670,3 +670,56 @@ class TestFileSecurity:
     async def test_scanner_without_configuration_leaves_the_file_unavailable(self) -> None:
         result = await ClamAvScanner(host=None).scan(bucket="b", key="k")
         assert result.ok is False and result.queued is True
+
+    @pytest.mark.parametrize(
+        ("response", "ok", "error_code"),
+        [
+            (b"stream: OK\0", True, None),
+            (b"stream: Eicar-Test-Signature FOUND\0", False, "MALWARE_FOUND"),
+        ],
+    )
+    async def test_clamd_instream_protocol(
+        self, response: bytes, ok: bool, error_code: str | None
+    ) -> None:
+        import asyncio
+        from io import BytesIO
+        from typing import Any
+
+        received = bytearray()
+
+        async def handler(reader: Any, writer: Any) -> None:
+            assert await reader.readuntil(b"\0") == b"zINSTREAM\0"
+            while True:
+                size = int.from_bytes(await reader.readexactly(4), "big")
+                if size == 0:
+                    break
+                received.extend(await reader.readexactly(size))
+            writer.write(response)
+            await writer.drain()
+            writer.close()
+
+        class Body:
+            def __init__(self) -> None:
+                self._body = BytesIO(b"%PDF-1.7 test")
+
+            def read(self, size: int) -> bytes:
+                return self._body.read(size)
+
+            def close(self) -> None:
+                self._body.close()
+
+        class S3:
+            def get_object(self, **_kwargs: Any) -> dict[str, Any]:
+                return {"Body": Body()}
+
+        server = await asyncio.start_server(handler, "127.0.0.1", 0)
+        try:
+            port = int(server.sockets[0].getsockname()[1])
+            result = await ClamAvScanner(
+                host="127.0.0.1", port=port, client=S3(), timeout_seconds=2
+            ).scan(bucket="private", key="tenant/file")
+        finally:
+            server.close()
+            await server.wait_closed()
+        assert bytes(received) == b"%PDF-1.7 test"
+        assert result.ok is ok and result.error_code == error_code

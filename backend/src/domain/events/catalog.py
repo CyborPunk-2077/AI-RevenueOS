@@ -43,6 +43,8 @@ DOCUMENT_DELETED: Final = "document.deleted"
 DOCUMENT_SIGNED: Final = "document.signed"
 DOCUMENT_SHARED: Final = "document.shared"
 FILE_UPLOAD_REQUESTED: Final = "file.upload_requested"
+FILE_UPLOAD_COMPLETED: Final = "file.upload_completed"
+FILE_SCAN_COMPLETED: Final = "file.scan_completed"
 FILE_DELETED: Final = "file.deleted"
 ANALYTICS_EXPORT_REQUESTED: Final = "analytics.export_requested"
 ANALYTICS_EVENT_EMITTED: Final = "analytics.event_emitted"
@@ -126,6 +128,8 @@ INTERNAL_EVENT_TYPES: Final[frozenset[str]] = frozenset(
         CONSENT_GRANTED,
         CONSENT_REVOKED,
         FILE_UPLOAD_REQUESTED,
+        FILE_UPLOAD_COMPLETED,
+        FILE_SCAN_COMPLETED,
         FILE_DELETED,
         ANALYTICS_EXPORT_REQUESTED,
         ANALYTICS_EVENT_EMITTED,

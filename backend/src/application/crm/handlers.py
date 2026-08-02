@@ -181,3 +181,24 @@ def register_crm_handlers(dispatcher: Any) -> None:
     dispatcher.subscribe("contact.updated", sync_contact_company)
     dispatcher.subscribe("account.updated", propagate_account_rename)
     dispatcher.subscribe("activity.logged", stamp_last_contact_at)
+    dispatcher.subscribe("file.upload_completed", queue_file_scan)
+
+
+async def queue_file_scan(payload: dict[str, Any]) -> None:
+    """Hand a committed upload receipt to the isolated scanning worker."""
+    from infrastructure.celery.context import build_headers
+    from infrastructure.celery.tasks.files import scan_file
+
+    resource = dict(payload.get("resource") or {})
+    tenant_id = payload.get("tenant_id")
+    file_id = resource.get("id")
+    if not tenant_id or not file_id:
+        return
+    scan_file.apply_async(
+        args=[str(file_id)],
+        headers=build_headers(
+            tenant_id=tenant_id,
+            correlation_id=payload.get("correlation_id"),
+            actor_type="worker",
+        ),
+    )

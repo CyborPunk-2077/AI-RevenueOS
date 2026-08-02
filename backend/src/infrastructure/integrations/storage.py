@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import re
+import struct
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -275,13 +277,55 @@ class S3Storage(StoragePort):
     async def delete(self, *, bucket: str, key: str) -> None:
         self._s3().delete_object(Bucket=bucket, Key=key)
 
+    async def inspect_for_scan(
+        self, *, bucket: str, key: str, sample_bytes: int = 1_048_576
+    ) -> dict[str, Any]:
+        """Stream one private object once to compute its digest and safety sample."""
+        import asyncio
+        import hashlib
+
+        response = await asyncio.to_thread(self._s3().get_object, Bucket=bucket, Key=key)
+        body = response["Body"]
+        digest = hashlib.sha256()
+        sample = bytearray()
+        size = 0
+        try:
+            while True:
+                chunk = await asyncio.to_thread(body.read, 64 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > PROTECTED_UPLOAD_LIMIT:
+                    raise ValidationError("Stored object exceeds the protected upload limit.")
+                digest.update(chunk)
+                if len(sample) < sample_bytes:
+                    sample.extend(chunk[: sample_bytes - len(sample)])
+        finally:
+            close = getattr(body, "close", None)
+            if close:
+                close()
+        return {"sha256": digest.hexdigest(), "size_bytes": size, "sample": bytes(sample)}
+
 
 class ClamAvScanner(ScannerPort):
     """When ClamAV is unreachable a file stays `pending` - it never becomes `clean`."""
 
-    def __init__(self, *, host: str | None, port: int = 3310) -> None:
+    def __init__(
+        self,
+        *,
+        host: str | None,
+        port: int = 3310,
+        client: Any | None = None,
+        region: str = "ap-south-1",
+        endpoint_url: str | None = None,
+        timeout_seconds: float = 60.0,
+    ) -> None:
         self._host = host
         self._port = port
+        self._client = client
+        self._region = region
+        self._endpoint = endpoint_url
+        self._timeout = timeout_seconds
 
     def is_configured(self) -> bool:
         return bool(self._host)
@@ -296,4 +340,91 @@ class ClamAvScanner(ScannerPort):
                 error_code="PROVIDER_NOT_CONFIGURED",
                 error_message="Malware scanning is not configured; the file remains unavailable.",
             )
-        raise NotImplementedError("the clamd client is wired in the deployed environment")
+        import asyncio
+
+        started = utcnow()
+        writer: Any | None = None
+        body: Any | None = None
+        try:
+            reader, stream_writer = await asyncio.wait_for(
+                asyncio.open_connection(self._host, self._port), timeout=self._timeout
+            )
+            writer = stream_writer
+            client = self._client
+            if client is None:
+                import boto3
+
+                client = boto3.client("s3", region_name=self._region, endpoint_url=self._endpoint)
+            response = await asyncio.to_thread(client.get_object, Bucket=bucket, Key=key)
+            body = response["Body"]
+            stream_writer.write(b"zINSTREAM\0")
+            total = 0
+            while True:
+                chunk = await asyncio.to_thread(body.read, 64 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > PROTECTED_UPLOAD_LIMIT:
+                    return ProviderResult(
+                        ok=False,
+                        provider="clamav",
+                        operation="scan",
+                        error_code="FILE_TOO_LARGE",
+                        error_message="Object exceeded the protected scan limit.",
+                    )
+                stream_writer.write(struct.pack(">I", len(chunk)))
+                stream_writer.write(chunk)
+                await stream_writer.drain()
+            stream_writer.write(struct.pack(">I", 0))
+            await stream_writer.drain()
+            raw = await asyncio.wait_for(reader.readuntil(b"\0"), timeout=self._timeout)
+            verdict = raw.rstrip(b"\0").decode("utf-8", errors="replace")
+            latency = int((utcnow() - started).total_seconds() * 1000)
+            if verdict.endswith(" OK"):
+                return ProviderResult(
+                    ok=True,
+                    provider="clamav",
+                    operation="scan",
+                    raw={"verdict": verdict, "bytes_scanned": total},
+                    latency_ms=latency,
+                )
+            if verdict.endswith(" FOUND"):
+                signature = verdict.split(":", 1)[-1].removesuffix(" FOUND").strip()
+                return ProviderResult(
+                    ok=False,
+                    provider="clamav",
+                    operation="scan",
+                    error_code="MALWARE_FOUND",
+                    error_message="Malware was detected; the object is quarantined.",
+                    raw={"signature": signature, "bytes_scanned": total},
+                    latency_ms=latency,
+                )
+            return ProviderResult(
+                ok=False,
+                provider="clamav",
+                operation="scan",
+                queued=True,
+                error_code="SCANNER_ERROR",
+                error_message="ClamAV returned an unrecognised scan response.",
+                raw={"verdict": verdict},
+                latency_ms=latency,
+            )
+        except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError) as exc:
+            return ProviderResult(
+                ok=False,
+                provider="clamav",
+                operation="scan",
+                queued=True,
+                error_code="SCANNER_UNAVAILABLE",
+                error_message="Malware scanning is temporarily unavailable.",
+                raw={"error_type": type(exc).__name__},
+            )
+        finally:
+            if body is not None:
+                close = getattr(body, "close", None)
+                if close:
+                    close()
+            if writer is not None:
+                writer.close()
+                with suppress(OSError):
+                    await writer.wait_closed()

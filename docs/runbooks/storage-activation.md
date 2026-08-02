@@ -22,16 +22,16 @@ resources that exist.
    access blocked, KMS encryption, versioning and the intended lifecycle rules.
 3. Give the application task role only the object operations it needs. Do not use
    an access key in `.env`, CI, an image or Terraform state.
-4. Deploy a private ClamAV service and finish the `ClamAvScanner.scan` transport.
-   A scanner host string alone is not evidence that scanning works.
-5. Complete and test ingest confirmation: `HEAD` the uploaded object, compare the
-   actual size and content type, compute the content SHA-256, check magic bytes and
-   active content, scan it, and only then move `scan_status` to `clean`.
-6. Add cleanup for abandoned upload intents and quarantined objects.
+4. Deploy a private ClamAV service. The `ClamAvScanner` INSTREAM transport is
+   implemented and protocol-tested, but a scanner host string alone is not evidence
+   that the deployed service works.
+5. Exercise the implemented ingest confirmation against staging: `HEAD` verifies
+   size/content type/KMS, the worker computes SHA-256, checks magic bytes and active
+   content, streams to clamd, and only then moves `scan_status` to `clean`.
+6. Verify the committed lifecycle policies clean up abandoned upload intents and
+   retain quarantined evidence for the approved interval.
 
-Until steps 4–6 are implemented and verified, this runbook is intentionally a
-non-activation runbook: the S3 adapter can be configured and tested, but uploads
-must remain disabled.
+Until steps 4–6 are verified in the target environment, uploads must remain disabled.
 
 ## Required configuration
 

@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from infrastructure.celery.tasks import maintenance, scheduled, webhook, workflow
+from infrastructure.celery.tasks import files, maintenance, scheduled, webhook, workflow
 
-__all__ = ["maintenance", "scheduled", "webhook", "workflow"]
+__all__ = ["files", "maintenance", "scheduled", "webhook", "workflow"]

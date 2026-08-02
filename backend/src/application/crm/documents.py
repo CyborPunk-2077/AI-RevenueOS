@@ -1,16 +1,11 @@
 """Files and documents attached to CRM records.
 
-**Object storage is not configured, and this module does not pretend otherwise.**
-There is no AWS account (P0-5), so `request_upload` validates the metadata, records
-the file with `scan_status = 'pending'`, and returns `storage_ready: false` with the
-exact missing configuration. It does not mint a presigned URL, because a URL that
-leads nowhere is worse than an honest refusal: the browser would report a successful
-upload and the operator would believe a document exists.
-
-Downloads are refused for the same reason, by the existing `assert_download_allowed`
--- a file is unavailable until a scanner marks it clean, and nothing can mark it
-clean while neither storage nor ClamAV exists. That is correct fail-closed behaviour
-and needs no special casing here.
+**Object storage is not activated, and this module does not pretend otherwise.**
+There is no AWS account (P0-5), so the default path records validated metadata and
+returns the exact missing configuration without minting a URL. Once the feature,
+private buckets, task role and ClamAV are genuinely configured, the same surface
+presigns an upload, verifies its S3 receipt, durably dispatches inspection/scanning,
+and permits short-lived downloads only for a `clean` object.
 
 What *is* real: the validation (size, MIME allow-list, dangerous and double
 extensions, per-user daily allowance), the metadata record, the CRM linkage, the
@@ -33,6 +28,7 @@ from domain.events.catalog import (
     DOCUMENT_DELETED,
     DOCUMENT_UPDATED,
     FILE_DELETED,
+    FILE_UPLOAD_COMPLETED,
     FILE_UPLOAD_REQUESTED,
 )
 from infrastructure.logging.setup import get_logger
@@ -87,7 +83,11 @@ def serialize_file(row: Any, *, owner_name: str | None = None) -> dict[str, Any]
         "downloadable": row.scan_status == "clean",
         # This slice records an upload intent only. A planned object key and a
         # pending scan must never be presented as bytes that exist.
-        "storage_state": "not_stored" if row.sha256 is None else "stored",
+        "storage_state": (
+            "stored"
+            if row.sha256 is not None or bool((row.scan_detail or {}).get("uploaded"))
+            else "not_stored"
+        ),
         "classification": row.classification,
         "entity_type": row.entity_type,
         "entity_id": str(row.entity_id) if row.entity_id else None,
@@ -426,20 +426,116 @@ class DocumentService(_PrincipalScoped):
         `assert_download_allowed` is the existing tested guard: cross-tenant is a
         403, anything not `clean` is a 422 carrying the real scan status.
         """
+        from application.audit.recorder import AuditRecorder
+        from infrastructure.database.models.documents import FileObject
+        from infrastructure.database.repositories.base import TenantRepository
         from infrastructure.integrations.storage import assert_download_allowed
+        from infrastructure.uow.sqlalchemy_uow import SqlAlchemyUnitOfWork
 
-        record = await self.get_file(file_id)
-        assert_download_allowed(
-            scan_status=str(record["scan_status"]),
-            file_tenant_id=self.tenant_id,
-            requester_tenant_id=self.tenant_id,
-        )
-        # Unreachable until a scanner exists. Kept so activation needs no new code.
-        storage = build_storage()
-        url = await storage.presign_download(
-            bucket=get_settings().s3_bucket_uploads, key=str(record["object_key"])
-        )
+        class FileRepository(TenantRepository[FileObject]):
+            model = FileObject
+
+        async with SqlAlchemyUnitOfWork(self.tenant_id) as uow:
+            row = await FileRepository(uow.session, self.tenant_id).get_scoped(
+                file_id, self.permissions_scope()
+            )
+            if row is None:
+                raise NotFound("File not found.")
+            assert_download_allowed(
+                scan_status=row.scan_status,
+                file_tenant_id=row.tenant_id,
+                requester_tenant_id=self.tenant_id,
+            )
+            url = await build_storage().presign_download(bucket=row.bucket, key=row.object_key)
+            AuditRecorder(uow.session).record(
+                action="file.downloaded",
+                resource_type="file",
+                resource_id=row.id,
+                tenant_id=self.tenant_id,
+                actor_id=self.user_id,
+                new_values={"classification": row.classification, "ttl_seconds": 300},
+            )
         return {"url": url, "expires_in_seconds": 300}
+
+    async def complete_upload(self, file_id: UUID) -> dict[str, Any]:
+        """Verify that S3 received exactly the requested private object, then queue scanning."""
+        from sqlalchemy import select
+
+        from application.audit.recorder import AuditRecorder
+        from infrastructure.database.models.documents import FileObject
+        from infrastructure.database.repositories.base import TenantRepository
+        from infrastructure.uow.sqlalchemy_uow import SqlAlchemyUnitOfWork
+        from shared.exceptions import FeatureNotAvailable
+
+        class FileRepository(TenantRepository[FileObject]):
+            model = FileObject
+
+        if not self.storage_status()["configured"]:
+            raise FeatureNotAvailable(
+                "Object storage and malware scanning have not been activated."
+            )
+        visible = await self.get_file(file_id)
+        storage = build_storage()
+        head = await storage.head(
+            bucket=get_settings().s3_bucket_uploads,
+            key=str(visible["object_key"]),
+        )
+        actual_size = int(head.get("ContentLength") or 0)
+        actual_type = str(head.get("ContentType") or "")
+
+        async with SqlAlchemyUnitOfWork(self.tenant_id) as uow:
+            row = (
+                await uow.session.execute(
+                    select(FileObject).where(FileObject.id == file_id).with_for_update()
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                raise NotFound("File not found.")
+            # The pre-read proves scope; repeat it under the write transaction so
+            # a self-scoped caller cannot race an assignment change.
+            scoped = await FileRepository(uow.session, self.tenant_id).get_scoped(
+                file_id, self.permissions_scope()
+            )
+            if scoped is None:
+                raise NotFound("File not found.")
+            if row.scan_status in {"scanning", "clean", "quarantined", "rejected"}:
+                return {**serialize_file(row), "duplicate": True}
+            if actual_size != row.size_bytes:
+                raise ValidationError(
+                    "Stored object size does not match the upload intent.",
+                    details={"expected_bytes": row.size_bytes, "actual_bytes": actual_size},
+                )
+            if actual_type != row.declared_mime:
+                raise ValidationError(
+                    "Stored object content type does not match the upload intent.",
+                    details={"expected_mime": row.declared_mime, "actual_mime": actual_type},
+                )
+            if str(head.get("ServerSideEncryption") or "") != "aws:kms":
+                raise ValidationError("Stored object is not protected by AWS KMS encryption.")
+            row.scan_status = "scanning"
+            row.scan_detail = {
+                "uploaded": True,
+                "etag": str(head.get("ETag") or "")[:200],
+            }
+            AuditRecorder(uow.session).record(
+                action="file.upload_completed",
+                resource_type="file",
+                resource_id=row.id,
+                tenant_id=self.tenant_id,
+                actor_id=self.user_id,
+                new_values={"size_bytes": actual_size, "scan_status": "scanning"},
+            )
+            uow.collect(
+                DomainEvent(
+                    event_type=FILE_UPLOAD_COMPLETED,
+                    tenant_id=self.tenant_id,
+                    resource_type="file",
+                    resource_id=row.id,
+                    actor_id=self.user_id,
+                    payload={"scan_status": "scanning"},
+                )
+            )
+        return {**(await self.get_file(file_id)), "duplicate": False}
 
     async def delete_file(self, file_id: UUID) -> dict[str, Any]:
         """Soft delete, so the audit trail can still resolve what was removed."""
