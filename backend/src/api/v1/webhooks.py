@@ -1,7 +1,8 @@
 """Inbound provider webhooks.
 
-Every route verifies the source signature, enforces a replay window, deduplicates by
-event id and enqueues. No business work is ever performed synchronously.
+Every route verifies the source signature before durable receipt. Razorpay applies
+its bounded database transition atomically with audit/outbox publication; network
+side effects remain asynchronous.
 """
 
 from __future__ import annotations
@@ -59,20 +60,26 @@ async def whatsapp_webhook(provider: str, request: Request) -> dict[str, Any]:
     summary="Razorpay payment events",
 )
 async def razorpay_webhook(request: Request) -> dict[str, Any]:
-    from application.payments.inbound import enqueue_razorpay_event
+    from application.payments.inbound import accept_verified_razorpay_event
     from application.payments.registry import get_razorpay_adapter
+    from shared.exceptions import FeatureNotAvailable
 
     body = await request.body()
     adapter = get_razorpay_adapter()
     signature = request.headers.get("x-razorpay-signature", "")
     if not adapter.verify_webhook_signature(body=body, signature=signature):
         raise Forbidden("Signature verification failed.")
+    if not adapter.is_configured():
+        raise FeatureNotAvailable(
+            "Razorpay webhooks are disabled until payments are approved and configured.",
+            details=adapter.activation_status(),
+        )
     parsed = adapter.parse_webhook(await request.json())
-    accepted = await enqueue_razorpay_event(
+    receipt = await accept_verified_razorpay_event(
         parsed, correlation_id=getattr(request.state, "correlation_id", None)
     )
     return success(
-        {"accepted": accepted, "event": parsed["event"]},
+        {**receipt.to_dict(), "event": parsed["event"]},
         request_id=getattr(request.state, "correlation_id", None),
     )
 

@@ -51,6 +51,7 @@ class Payment(IdMixin, TimestampMixin, Base):
         CheckConstraint(f"method IN {PAYMENT_METHODS}", name="method_valid"),
         CheckConstraint("amount_minor > 0", name="amount_positive"),
         CheckConstraint("currency = 'INR'", name="currency_inr"),
+        UniqueConstraint("external_order_id", name="external_order_unique"),
         UniqueConstraint("external_payment_id", name="external_unique"),
         Index("ix_payments_tenant_status_created", "tenant_id", "status", "created_at"),
         {"schema": SCHEMA_APP},
