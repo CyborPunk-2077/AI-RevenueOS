@@ -55,6 +55,7 @@ fabricated, simulated or assumed.
 | 4.4 | GitHub OIDC federation role ARNs | CI deployment |
 | 4.5 | PagerDuty rotation and escalation policy | On-call |
 | 4.6 | Sentry and Langfuse production projects | Production telemetry |
+| 4.7 | Private S3 buckets, task-role policy and deployed ClamAV | File uploads; follow `docs/runbooks/storage-activation.md` |
 
 ## 5. Pilot and release evidence (M23 and M24)
 

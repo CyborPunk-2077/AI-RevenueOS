@@ -401,3 +401,36 @@ class TenantPatch(StrictModel):
 class OnboardingPatch(StrictModel):
     step: Literal["welcome", "tenant", "industry", "channels", "team", "billing"]
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+class FileUploadRequest(StrictModel):
+    """Declared metadata for a file the caller intends to upload.
+
+    The size and MIME type here are *claims*. They are checked again against the
+    stored object once object storage exists, which is why the field names say
+    "declared" downstream. Accepting them at this boundary only decides whether an
+    upload is worth authorising at all.
+    """
+
+    name: Annotated[str, Field(min_length=1, max_length=300)]
+    size_bytes: Annotated[int, Field(ge=1, le=100 * 1024 * 1024)]
+    mime_type: Annotated[str, Field(min_length=3, max_length=150)]
+    classification: Literal["P0", "P1", "P2", "P3"] = "P2"
+    entity_type: Literal["contact", "account", "deal"] | None = None
+    entity_id: UUID | None = None
+
+
+class DocumentCreate(StrictModel):
+    title: Annotated[str, Field(min_length=1, max_length=300)]
+    contact_id: UUID | None = None
+    deal_id: UUID | None = None
+    file_id: UUID | None = None
+
+
+class DocumentUpdate(StrictModel):
+    title: Annotated[str | None, Field(min_length=1, max_length=300)] = None
+    # Timestamps for these transitions are stamped server-side, never supplied.
+    status: Literal["draft", "generated", "sent", "viewed", "signed", "expired", "void"] | None = (
+        None
+    )
+    file_id: UUID | None = None

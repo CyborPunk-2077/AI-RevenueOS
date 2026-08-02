@@ -5,6 +5,12 @@ import { EditContactForm } from '@/features/crm/edit-contact-form';
 import { Timeline, type TimelineEntry } from '@/features/crm/timeline';
 import { TaskPanel, type TaskEntry } from '@/features/crm/task-panel';
 import { AppointmentPanel, type AppointmentEntry } from '@/features/crm/appointment-panel';
+import {
+  DocumentPanel,
+  type DocumentEntry,
+  type FileEntry,
+  type StorageStatus,
+} from '@/features/crm/document-panel';
 import type { AccountOption } from '@/features/crm/new-contact-form';
 
 export const dynamic = 'force-dynamic';
@@ -35,16 +41,36 @@ export default async function ContactDetailPage({
   if (!result.ok || !result.data) notFound();
   const contact = result.data;
 
-  const [accountResult, timelineResult, taskResult, appointmentResult] = await Promise.all([
+  const [
+    accountResult,
+    timelineResult,
+    taskResult,
+    appointmentResult,
+    documentResult,
+    fileResult,
+    storageResult,
+  ] = await Promise.all([
     apiFetch<{ accounts: AccountOption[] }>('/accounts?page_size=200'),
     apiFetch<{ timeline: TimelineEntry[] }>(`/contacts/${params.contactId}/timeline`),
     apiFetch<{ tasks: TaskEntry[] }>(`/contacts/${params.contactId}/tasks`),
     apiFetch<{ appointments: AppointmentEntry[] }>(`/contacts/${params.contactId}/appointments`),
+    apiFetch<{ documents: DocumentEntry[] }>(`/contacts/${params.contactId}/documents`),
+    apiFetch<{ files: FileEntry[] }>(`/contacts/${params.contactId}/files`),
+    apiFetch<StorageStatus>('/files/storage-status'),
   ]);
   const accounts = accountResult.data?.accounts ?? [];
   const timeline = timelineResult.data?.timeline ?? [];
   const tasks = taskResult.data?.tasks ?? [];
   const appointments = appointmentResult.data?.appointments ?? [];
+  const documents = documentResult.data?.documents ?? [];
+  const files = fileResult.data?.files ?? [];
+  // If the status call itself fails, assume unavailable. Guessing "configured"
+  // would put an upload control in front of storage that may not exist.
+  const storage: StorageStatus = storageResult.data ?? {
+    configured: false,
+    missing: [],
+    blocker: 'Storage availability could not be determined.',
+  };
 
   return (
     <div className="space-y-8">
@@ -99,6 +125,14 @@ export default async function ContactDetailPage({
       <TaskPanel parent="contacts" parentId={contact.id} tasks={tasks} />
 
       <AppointmentPanel appointments={appointments} contactId={contact.id} />
+
+      <DocumentPanel
+        parent="contacts"
+        parentId={contact.id}
+        documents={documents}
+        files={files}
+        storage={storage}
+      />
 
       <Timeline parent="contacts" parentId={contact.id} entries={timeline} />
     </div>

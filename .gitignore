@@ -25,6 +25,7 @@ coverage.xml
 .idea/
 .vscode/
 *.log
+*.tsbuildinfo
 .terraform/
 *.tfstate
 *.tfstate.*

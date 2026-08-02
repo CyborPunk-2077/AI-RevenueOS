@@ -37,8 +37,13 @@ CONVERSATION_MESSAGE_RECEIVED: Final = "conversation.message_received"
 CONVERSATION_CLOSED: Final = "conversation.closed"
 CONVERSATION_HANDOFF: Final = "conversation.handoff"
 DOCUMENT_UPLOADED: Final = "document.uploaded"
+DOCUMENT_CREATED: Final = "document.created"
+DOCUMENT_UPDATED: Final = "document.updated"
+DOCUMENT_DELETED: Final = "document.deleted"
 DOCUMENT_SIGNED: Final = "document.signed"
 DOCUMENT_SHARED: Final = "document.shared"
+FILE_UPLOAD_REQUESTED: Final = "file.upload_requested"
+FILE_DELETED: Final = "file.deleted"
 WORKFLOW_EXECUTION_STARTED: Final = "workflow.execution_started"
 WORKFLOW_EXECUTION_COMPLETED: Final = "workflow.execution_completed"
 WORKFLOW_EXECUTION_FAILED: Final = "workflow.execution_failed"
@@ -94,6 +99,9 @@ PUBLIC_EVENT_TYPES: Final[frozenset[str]] = frozenset(
         CONVERSATION_MESSAGE_RECEIVED,
         CONVERSATION_CLOSED,
         DOCUMENT_UPLOADED,
+        DOCUMENT_CREATED,
+        DOCUMENT_UPDATED,
+        DOCUMENT_DELETED,
         DOCUMENT_SIGNED,
         DOCUMENT_SHARED,
         WORKFLOW_EXECUTION_STARTED,
@@ -115,6 +123,8 @@ INTERNAL_EVENT_TYPES: Final[frozenset[str]] = frozenset(
         CONVERSATION_HANDOFF,
         CONSENT_GRANTED,
         CONSENT_REVOKED,
+        FILE_UPLOAD_REQUESTED,
+        FILE_DELETED,
     }
 )
 

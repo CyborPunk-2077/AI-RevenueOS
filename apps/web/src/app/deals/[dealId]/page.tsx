@@ -3,6 +3,12 @@ import { notFound } from 'next/navigation';
 import { apiFetch } from '@/lib/session';
 import { money } from '@/lib/money';
 import { TaskPanel, type TaskEntry } from '@/features/crm/task-panel';
+import {
+  DocumentPanel,
+  type DocumentEntry,
+  type FileEntry,
+  type StorageStatus,
+} from '@/features/crm/document-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,8 +37,21 @@ export default async function DealDetailPage({
   if (!result.ok || !result.data) notFound();
   const deal = result.data;
 
-  const taskResult = await apiFetch<{ tasks: TaskEntry[] }>(`/deals/${params.dealId}/tasks`);
+  const [taskResult, documentResult, fileResult, storageResult] = await Promise.all([
+    apiFetch<{ tasks: TaskEntry[] }>(`/deals/${params.dealId}/tasks`),
+    apiFetch<{ documents: DocumentEntry[] }>(`/deals/${params.dealId}/documents`),
+    apiFetch<{ files: FileEntry[] }>(`/deals/${params.dealId}/files`),
+    apiFetch<StorageStatus>('/files/storage-status'),
+  ]);
   const tasks = taskResult.data?.tasks ?? [];
+  const documents = documentResult.data?.documents ?? [];
+  const files = fileResult.data?.files ?? [];
+  // Unavailable unless the API positively says otherwise.
+  const storage: StorageStatus = storageResult.data ?? {
+    configured: false,
+    missing: [],
+    blocker: 'Storage availability could not be determined.',
+  };
 
   return (
     <div className="space-y-8">
@@ -89,6 +108,14 @@ export default async function DealDetailPage({
       </section>
 
       <TaskPanel parent="deals" parentId={deal.id} tasks={tasks} />
+
+      <DocumentPanel
+        parent="deals"
+        parentId={deal.id}
+        documents={documents}
+        files={files}
+        storage={storage}
+      />
     </div>
   );
 }

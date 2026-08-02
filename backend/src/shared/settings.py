@@ -31,6 +31,7 @@ class FeatureFlagDefaults(BaseSettings):
     n8n_authoring_enabled: bool = False  # gate: hosting/licensing owner
     calendar_sync_enabled: bool = False  # gate: OAuth verification scope
     signatures_enabled: bool = False  # gate: signature provider agreement
+    storage_enabled: bool = False  # gate: AWS + bucket policy + malware scanner verification
     pilot_cohort_enabled: bool = False
 
 
@@ -151,6 +152,33 @@ class Settings(BaseSettings):
     def sync_database_url(self) -> str:
         return self.database_url.replace("+asyncpg", "")
 
+    def storage_configuration_issues(self) -> list[str]:
+        """Return declarative storage gaps without contacting AWS.
+
+        This validates configuration only. Provider activation still requires the
+        live checks in the storage activation runbook; a bucket name is not proof
+        that the bucket exists or that the task role can use it.
+        """
+        issues: list[str] = []
+        buckets = {
+            "S3_BUCKET_UPLOADS": self.s3_bucket_uploads,
+            "S3_BUCKET_DOCUMENTS": self.s3_bucket_documents,
+            "S3_BUCKET_EXPORTS": self.s3_bucket_exports,
+        }
+        for name, value in buckets.items():
+            if not value or value.startswith("airevenueos-local-"):
+                issues.append(f"{name} must name a real private bucket")
+        values = [value for value in buckets.values() if value]
+        if len(set(values)) != len(values):
+            issues.append("storage buckets must be distinct")
+        if not self.s3_region.strip():
+            issues.append("S3_REGION is required")
+        if self.s3_endpoint_url and not self.s3_endpoint_url.startswith("https://"):
+            issues.append("S3_ENDPOINT_URL must use HTTPS")
+        if not self.clamav_host:
+            issues.append("CLAMAV_HOST is required before uploads can be enabled")
+        return issues
+
     def assert_production_safe(self) -> None:
         """Fail fast rather than boot production with a missing critical secret."""
         if not self.is_production:
@@ -170,6 +198,10 @@ class Settings(BaseSettings):
             raise RuntimeError("wildcard CORS origin is forbidden in production")
         if self.debug:
             raise RuntimeError("debug must be disabled in production")
+        if self.features.storage_enabled:
+            issues = self.storage_configuration_issues()
+            if issues:
+                raise RuntimeError(f"storage configuration incomplete: {'; '.join(issues)}")
 
 
 @lru_cache(maxsize=1)

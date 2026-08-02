@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from datetime import timedelta
@@ -183,6 +184,50 @@ class S3Storage(StoragePort):
         self._region = region
         self._client = client
         self._endpoint = endpoint_url
+
+    def is_configured(self) -> bool:
+        """Never claim configuration we do not have.
+
+        A bucket name in settings is not a bucket. Object storage is only usable
+        once AWS credentials resolve *and* the bucket is not the local
+        placeholder, so the caller can tell the difference between "configured"
+        and "someone typed a name into an env file".
+        """
+        if not self._bucket or self._bucket.startswith("airevenueos-local-"):
+            return False
+        if self._client is not None:
+            return True
+        # Do not ask boto3 to resolve credentials here: its provider chain may
+        # contact EC2/ECS metadata, making a harmless status endpoint perform
+        # network I/O. These markers cover static credentials, web identity,
+        # container roles and an explicitly selected local profile.
+        credential_markers = (
+            "AWS_ACCESS_KEY_ID",
+            "AWS_WEB_IDENTITY_TOKEN_FILE",
+            "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+            "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+            "AWS_PROFILE",
+        )
+        return any(os.environ.get(name) for name in credential_markers)
+
+    def activation_status(self) -> dict[str, Any]:
+        """What is missing, named precisely enough to act on."""
+        missing: list[str] = []
+        if not self._bucket or self._bucket.startswith("airevenueos-local-"):
+            missing.append("S3_BUCKET_UPLOADS (a real bucket, not the local placeholder)")
+        if self._client is None and not self.is_configured():
+            missing.append("AWS task-role or credential configuration")
+        return {
+            "provider": "s3",
+            "configured": self.is_configured(),
+            "missing": missing,
+            "blocker": (
+                None
+                if self.is_configured()
+                else "Object storage requires an AWS account (P0-5). Files are recorded "
+                "with their metadata; no upload URL is issued and nothing is stored."
+            ),
+        }
 
     def _s3(self) -> Any:
         if self._client is None:

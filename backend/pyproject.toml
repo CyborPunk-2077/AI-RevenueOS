@@ -27,6 +27,9 @@ dependencies = [
     "pgvector>=0.2.5",
     "boto3>=1.34",
     "pyotp>=2.9",
+    # MFA recovery codes call bcrypt directly; it must not rely on a developer's
+    # ambient environment to provide the runtime module.
+    "bcrypt>=4.1",
 ]
 
 [project.optional-dependencies]
@@ -129,6 +132,9 @@ ignore = [
     "F811",
 ]
 "tests/e2e/test_crm_appointments.py" = [
+    "F811",
+]
+"tests/e2e/test_crm_documents.py" = [
     "F811",
 ]
 

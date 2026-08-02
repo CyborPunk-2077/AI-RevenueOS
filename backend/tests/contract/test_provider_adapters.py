@@ -18,6 +18,7 @@ from infrastructure.integrations.storage import (
     APPROVED_EXCEPTION_LIMIT,
     PUBLIC_UPLOAD_LIMIT,
     ClamAvScanner,
+    S3Storage,
     archive_ratio_safe,
     assert_download_allowed,
     content_is_safe,
@@ -533,6 +534,16 @@ class TestVoiceIsHardDisabled:
 
 
 class TestFileSecurity:
+    def test_placeholder_bucket_never_counts_as_configured(self) -> None:
+        adapter = S3Storage(bucket="airevenueos-local-uploads", client=object())
+        assert adapter.is_configured() is False
+        assert adapter.activation_status()["configured"] is False
+
+    def test_injected_client_and_real_bucket_complete_the_adapter_configuration(self) -> None:
+        adapter = S3Storage(bucket="acme-private-uploads", client=object())
+        assert adapter.is_configured() is True
+        assert adapter.activation_status()["configured"] is True
+
     def test_object_keys_are_uuid_based_and_tenant_scoped(self) -> None:
         key = object_key(TENANT)
         assert str(TENANT) in key

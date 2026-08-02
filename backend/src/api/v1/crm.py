@@ -34,6 +34,9 @@ from api.v1.schemas import (
     DealCreate,
     DealStageMoveRequest,
     DealUpdate,
+    DocumentCreate,
+    DocumentUpdate,
+    FileUploadRequest,
     MessageCreate,
     NoteCreateRequest,
     NoteUpdateRequest,
@@ -733,3 +736,206 @@ async def contact_appointments(
     principal.require("appointment", "list")
     appointments = await _appointments(principal).for_contact(contact_id)
     return success({"appointments": appointments}, request_id=_request_id(request))
+
+
+# --- files and documents ----------------------------------------------------
+
+files_router = APIRouter(prefix="/files", tags=["crm"])
+documents_router = APIRouter(prefix="/documents", tags=["crm"])
+
+
+def _documents(principal: Any) -> Any:
+    from application.crm.documents import DocumentService
+
+    return DocumentService.for_principal(principal)
+
+
+@files_router.get("/storage-status", summary="Whether object storage is usable")
+async def file_storage_status(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    """Reports the real state. There is no AWS account, so `configured` is false.
+
+    The UI reads this to disable the upload control with an accurate reason,
+    instead of letting a user pick a file and fail at the last step.
+    """
+    principal.require("file", "list")
+    return success(_documents(principal).storage_status(), request_id=_request_id(request))
+
+
+@files_router.get("", summary="List files")
+async def list_files(
+    request: Request,
+    principal: CurrentPrincipal,
+    query: Annotated[ListQuery, Depends(list_query)],
+    entity_type: Annotated[str | None, Query(max_length=40)] = None,
+    entity_id: UUID | None = None,
+) -> dict[str, Any]:
+    principal.require("file", "list")
+    page = await _documents(principal).list_files(
+        query, entity_type=entity_type, entity_id=entity_id
+    )
+    return success({"files": page.items}, pagination=page.meta(), request_id=_request_id(request))
+
+
+@files_router.post("", status_code=status.HTTP_201_CREATED, summary="Register a file to upload")
+async def request_file_upload(
+    payload: FileUploadRequest, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    """Validates and records the file, and reports honestly that storage is absent.
+
+    A 201 here means "the metadata is accepted and recorded", not "the file is
+    stored". The body carries `storage_ready: false` and the exact blocker, and it
+    carries no upload URL at all -- there is nothing to upload to.
+    """
+    principal.require("file", "create")
+    record = await _documents(principal).request_upload(payload.model_dump())
+    return success(record, request_id=_request_id(request))
+
+
+@files_router.get("/{file_id}", summary="Read file metadata")
+async def read_file(file_id: UUID, request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    principal.require("file", "read")
+    return success(await _documents(principal).get_file(file_id), request_id=_request_id(request))
+
+
+@files_router.get("/{file_id}/download", summary="Get a download URL")
+async def download_file(
+    file_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    """422 until the file is stored and scanned clean. It never returns a fake URL."""
+    principal.require("file", "read")
+    return success(
+        await _documents(principal).download_url(file_id), request_id=_request_id(request)
+    )
+
+
+@files_router.delete("/{file_id}", summary="Delete a file")
+async def delete_file(
+    file_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("file", "delete")
+    return success(
+        await _documents(principal).delete_file(file_id), request_id=_request_id(request)
+    )
+
+
+@documents_router.get("", summary="List documents")
+async def list_documents(
+    request: Request,
+    principal: CurrentPrincipal,
+    query: Annotated[ListQuery, Depends(list_query)],
+    doc_status: Annotated[str | None, Query(max_length=20, alias="status")] = None,
+    contact_id: UUID | None = None,
+    deal_id: UUID | None = None,
+) -> dict[str, Any]:
+    principal.require("document", "list")
+    page = await _documents(principal).list_documents(
+        query, status=doc_status, contact_id=contact_id, deal_id=deal_id
+    )
+    return success(
+        {"documents": page.items}, pagination=page.meta(), request_id=_request_id(request)
+    )
+
+
+@documents_router.post("", status_code=status.HTTP_201_CREATED, summary="Create a document")
+async def create_document(
+    payload: DocumentCreate, request: Request, response: Response, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("document", "create")
+    document = await _documents(principal).create_document(payload.model_dump())
+    response.headers["ETag"] = f'W/"{document["version"]}"'
+    return success(document, request_id=_request_id(request))
+
+
+@documents_router.get("/{document_id}", summary="Read a document")
+async def read_document(
+    document_id: UUID, request: Request, response: Response, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("document", "read")
+    document = await _documents(principal).get_document(document_id)
+    response.headers["ETag"] = f'W/"{document["version"]}"'
+    return success(document, request_id=_request_id(request))
+
+
+@documents_router.patch("/{document_id}", summary="Update a document")
+async def update_document(
+    document_id: UUID,
+    payload: DocumentUpdate,
+    request: Request,
+    response: Response,
+    principal: CurrentPrincipal,
+    if_match: Annotated[int | None, Depends(parse_if_match)] = None,
+) -> dict[str, Any]:
+    principal.require("document", "update")
+    document = await _documents(principal).update_document(
+        document_id, payload.model_dump(exclude_unset=True), expected_version=if_match
+    )
+    response.headers["ETag"] = f'W/"{document["version"]}"'
+    return success(document, request_id=_request_id(request))
+
+
+@documents_router.delete("/{document_id}", summary="Delete a document")
+async def delete_document(
+    document_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("document", "delete")
+    return success(
+        await _documents(principal).delete_document(document_id), request_id=_request_id(request)
+    )
+
+
+@contacts_router.get("/{contact_id}/files", summary="Files attached to a contact")
+async def contact_files(
+    contact_id: UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    query: Annotated[ListQuery, Depends(list_query)],
+) -> dict[str, Any]:
+    principal.require("contact", "read")
+    principal.require("file", "list")
+    page = await _documents(principal).list_files(
+        query, entity_type="contact", entity_id=contact_id
+    )
+    return success({"files": page.items}, pagination=page.meta(), request_id=_request_id(request))
+
+
+@contacts_router.get("/{contact_id}/documents", summary="Documents for a contact")
+async def contact_documents(
+    contact_id: UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    query: Annotated[ListQuery, Depends(list_query)],
+) -> dict[str, Any]:
+    principal.require("contact", "read")
+    principal.require("document", "list")
+    page = await _documents(principal).list_documents(query, contact_id=contact_id)
+    return success(
+        {"documents": page.items}, pagination=page.meta(), request_id=_request_id(request)
+    )
+
+
+@deals_router.get("/{deal_id}/files", summary="Files attached to a deal")
+async def deal_files(
+    deal_id: UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    query: Annotated[ListQuery, Depends(list_query)],
+) -> dict[str, Any]:
+    principal.require("deal", "read")
+    principal.require("file", "list")
+    page = await _documents(principal).list_files(query, entity_type="deal", entity_id=deal_id)
+    return success({"files": page.items}, pagination=page.meta(), request_id=_request_id(request))
+
+
+@deals_router.get("/{deal_id}/documents", summary="Documents for a deal")
+async def deal_documents(
+    deal_id: UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    query: Annotated[ListQuery, Depends(list_query)],
+) -> dict[str, Any]:
+    principal.require("deal", "read")
+    principal.require("document", "list")
+    page = await _documents(principal).list_documents(query, deal_id=deal_id)
+    return success(
+        {"documents": page.items}, pagination=page.meta(), request_id=_request_id(request)
+    )
