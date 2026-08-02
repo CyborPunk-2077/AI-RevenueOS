@@ -19,6 +19,7 @@ async def claim_public_slot(
     """A second concurrent claim on the same slot raises 409, never a double booking."""
     from sqlalchemy.exc import IntegrityError
 
+    from application.audit.recorder import AuditRecorder
     from infrastructure.database.models.appointments import Appointment, SlotLock
     from infrastructure.uow.sqlalchemy_uow import SqlAlchemyUnitOfWork
 
@@ -63,6 +64,22 @@ async def claim_public_slot(
                 )
             )
             await uow.flush()
+            AuditRecorder(uow.session).record(
+                action="appointment.create",
+                resource_type="appointment",
+                resource_id=appointment_id,
+                tenant_id=tenant_id,
+                actor_type="anonymous",
+                actor_label="public_booking",
+                new_values={
+                    "status": "scheduled",
+                    "resource_id": str(resource_id),
+                    "start_at": start_at.isoformat(),
+                    "end_at": end_at.isoformat(),
+                    "slot_index": int(body.get("slot_index", 0)),
+                },
+                metadata={"channel": "public_booking"},
+            )
     except IntegrityError as exc:
         raise Conflict(
             "That slot has just been taken. Please choose another time.",
