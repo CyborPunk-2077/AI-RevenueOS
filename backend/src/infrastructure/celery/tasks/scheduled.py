@@ -127,7 +127,7 @@ async def rollup_metrics(_context: TaskContext) -> dict[str, Any]:
     # to discover tenants with recent activity. Each materialization then binds
     # that tenant before reading business rows, so worker analytics receives the
     # same forced-RLS protection as HTTP reads.
-    from datetime import UTC, datetime
+    from datetime import datetime, timezone
     from zoneinfo import ZoneInfo
 
     from sqlalchemy import distinct
@@ -135,7 +135,7 @@ async def rollup_metrics(_context: TaskContext) -> dict[str, Any]:
     from application.analytics.service import RollupService
     from shared.settings import get_settings
 
-    today = datetime.now(UTC).astimezone(ZoneInfo(get_settings().default_timezone)).date()
+    today = datetime.now(timezone.utc).astimezone(ZoneInfo(get_settings().default_timezone)).date()
     async with unscoped_session() as session:
         tenant_ids = list(
             (
@@ -143,7 +143,9 @@ async def rollup_metrics(_context: TaskContext) -> dict[str, Any]:
                     select(distinct(EventOutbox.tenant_id)).where(
                         EventOutbox.tenant_id.is_not(None),
                         EventOutbox.occurred_at
-                        >= datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0),
+                        >= datetime.now(timezone.utc).replace(
+                            hour=0, minute=0, second=0, microsecond=0
+                        ),
                     )
                 )
             ).scalars()

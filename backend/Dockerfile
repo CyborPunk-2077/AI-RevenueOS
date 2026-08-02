@@ -9,11 +9,15 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends build-essential libpq-dev curl \
  && rm -rf /var/lib/apt/lists/*
 
-FROM base AS deps
-COPY pyproject.toml ./
-RUN pip install --upgrade pip && pip install ".[dev]"
+FROM base AS deps-runtime
+COPY requirements.lock ./
+RUN pip install --require-hashes --no-deps -r requirements.lock
 
-FROM deps AS development
+FROM base AS deps-development
+COPY requirements-dev.lock ./
+RUN pip install --require-hashes --no-deps -r requirements-dev.lock
+
+FROM deps-development AS development
 COPY . .
 EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--app-dir", "src"]
@@ -21,8 +25,8 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "
 FROM base AS production
 # Non-root by construction; the image carries no secret of any kind.
 RUN useradd --create-home --uid 10001 appuser
-COPY --from=deps /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=deps /usr/local/bin /usr/local/bin
+COPY --from=deps-runtime /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=deps-runtime /usr/local/bin /usr/local/bin
 COPY --chown=appuser:appuser . .
 USER appuser
 EXPOSE 8000

@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
-      - run: pip install -e "backend[dev]"
+      - run: pip install --require-hashes --no-deps -r backend/requirements-dev.lock
       - name: Ruff
         run: cd backend && ruff check src tests && ruff format --check src tests
       - name: mypy (strict)
@@ -37,7 +37,7 @@ jobs:
         with: {version: 9}
       - uses: actions/setup-node@v4
         with: {node-version: "${{ env.NODE_VERSION }}", cache: pnpm}
-      - run: pnpm install --frozen-lockfile || pnpm install
+      - run: pnpm install --frozen-lockfile
       - run: pnpm lint && pnpm typecheck
 
   # 2. unit / component -----------------------------------------------------
@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
-      - run: pip install -e "backend[dev]"
+      - run: pip install --require-hashes --no-deps -r backend/requirements-dev.lock
       - run: cd backend && pytest tests/unit --cov --cov-report=xml --cov-report=term
       - name: Enforce the coverage floor
         run: cd backend && coverage report --fail-under=80
@@ -86,7 +86,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "${{ env.PYTHON_VERSION }}", cache: pip}
-      - run: pip install -e "backend[dev]"
+      - run: pip install --require-hashes --no-deps -r backend/requirements-dev.lock
       - name: Migrations up and down (expand/contract reversibility)
         run: cd backend && alembic upgrade head && alembic downgrade base && alembic upgrade head
       - name: Integration, contract and E2E suites
@@ -103,7 +103,7 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-python@v5
         with: {python-version: "${{ env.PYTHON_VERSION }}"}
-      - run: pip install -e "backend[dev]" bandit pip-audit
+      - run: pip install --require-hashes --no-deps -r backend/requirements-dev.lock
       - name: Bandit (SAST)
         run: cd backend && bandit -r src -ll -f sarif -o bandit.sarif || true
       - name: pip-audit (SCA)
@@ -135,7 +135,7 @@ jobs:
         with: {version: 9}
       - uses: actions/setup-node@v4
         with: {node-version: "${{ env.NODE_VERSION }}", cache: pnpm}
-      - run: pnpm install --frozen-lockfile || pnpm install
+      - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - name: axe (zero critical or serious violations)
         run: pnpm a11y
