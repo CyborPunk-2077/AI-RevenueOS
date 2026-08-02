@@ -98,6 +98,7 @@ class LeadService:
 
     async def capture(self, payload: dict[str, Any], *, idempotency: Any = None) -> dict[str, Any]:
         """Dedupe is advisory: the source event is always preserved."""
+        from application.audit.recorder import AuditRecorder
         from infrastructure.database.models.leads import Lead, LeadSourceEvent
         from infrastructure.uow.sqlalchemy_uow import SqlAlchemyUnitOfWork
 
@@ -121,7 +122,10 @@ class LeadService:
                 utm=payload.get("utm", {}),
                 dedupe_key=key,
                 status="new",
-                assignee_id=payload.get("assignee_id"),
+                # A self-scoped member must be able to read the lead returned by
+                # their own create request. An unassigned row would disappear
+                # under the same scoped repository used by every later read.
+                assignee_id=payload.get("assignee_id") or self.user_id,
                 branch_id=payload.get("branch_id"),
                 team_id=payload.get("team_id"),
                 created_by=self.user_id,
@@ -143,6 +147,18 @@ class LeadService:
                     outcome="created",
                 )
             )
+            AuditRecorder(uow.session).record(
+                action="lead.create",
+                resource_type="lead",
+                resource_id=lead_id,
+                tenant_id=self.tenant_id,
+                actor_id=self.user_id,
+                new_values={
+                    "source": lead.source,
+                    "status": lead.status,
+                    "assignee_id": str(lead.assignee_id) if lead.assignee_id else None,
+                },
+            )
             uow.collect(
                 DomainEvent(
                     event_type=LEAD_CREATED,
@@ -158,6 +174,7 @@ class LeadService:
     async def update(
         self, lead_id: UUID, changes: dict[str, Any], *, expected_version: int | None = None
     ) -> dict[str, Any]:
+        from application.audit.recorder import AuditRecorder, diff_for_audit
         from infrastructure.database.models.leads import Lead
         from infrastructure.database.repositories.base import TenantRepository
         from infrastructure.uow.sqlalchemy_uow import SqlAlchemyUnitOfWork
@@ -168,6 +185,7 @@ class LeadService:
         async with SqlAlchemyUnitOfWork(self.tenant_id) as uow:
             repo = LeadRepository(uow.session, self.tenant_id)
             lead = await repo.get_scoped_or_404(lead_id, self.permissions_scope())
+            before = _serialize(lead)
             if changes.get("status"):
                 assert_transition(
                     lead.status, changes["status"], reason=changes.get("disqualify_reason")
@@ -177,6 +195,19 @@ class LeadService:
                     setattr(lead, field_name, value)
             await repo.bump_version(lead, expected_version)
             lead.updated_by = self.user_id
+            after = _serialize(lead)
+            old_values, new_values = diff_for_audit(
+                before, after, fields=set(changes) | {"version"}
+            )
+            AuditRecorder(uow.session).record(
+                action="lead.update",
+                resource_type="lead",
+                resource_id=lead_id,
+                tenant_id=self.tenant_id,
+                actor_id=self.user_id,
+                old_values=old_values,
+                new_values=new_values,
+            )
             uow.collect(
                 DomainEvent(
                     event_type=LEAD_UPDATED,
@@ -190,21 +221,24 @@ class LeadService:
         return await self.get(lead_id)
 
     async def duplicates(self, lead_id: UUID) -> list[dict[str, Any]]:
-        from sqlalchemy import select
-
         from infrastructure.database.models.leads import Lead
+        from infrastructure.database.repositories.base import TenantRepository
         from infrastructure.database.session import tenant_session
 
+        class LeadRepository(TenantRepository[Lead]):
+            model = Lead
+
         async with tenant_session(self.tenant_id) as session:
-            current = (
-                await session.execute(select(Lead).where(Lead.id == lead_id))
-            ).scalar_one_or_none()
+            repo = LeadRepository(session, self.tenant_id)
+            current = await repo.get_scoped(lead_id, self.permissions_scope())
             if current is None:
                 raise NotFound("Lead not found.")
             others = (
                 (
                     await session.execute(
-                        select(Lead).where(Lead.id != lead_id, Lead.deleted_at.is_(None)).limit(500)
+                        repo.scoped_query(self.permissions_scope())
+                        .where(Lead.id != lead_id)
+                        .limit(500)
                     )
                 )
                 .scalars()
@@ -260,7 +294,7 @@ class LeadService:
         else:
             result = score_from_rubric(criteria, lead.get("capture", {}))
 
-        await self._persist_qualification(lead_id, result)
+        await self._persist_qualification(lead_id, result, audit_action="lead.qualify")
         return {"lead_id": str(lead_id), "qualification": result.to_dict()}
 
     async def _qualify_with_ai(
@@ -313,7 +347,10 @@ class LeadService:
             provenance=response.to_metadata(),
         )
 
-    async def _persist_qualification(self, lead_id: UUID, result: QualificationResult) -> None:
+    async def _persist_qualification(
+        self, lead_id: UUID, result: QualificationResult, *, audit_action: str
+    ) -> None:
+        from application.audit.recorder import AuditRecorder
         from infrastructure.database.models.leads import Lead
         from infrastructure.database.repositories.base import TenantRepository
         from infrastructure.uow.sqlalchemy_uow import SqlAlchemyUnitOfWork
@@ -325,6 +362,11 @@ class LeadService:
         async with SqlAlchemyUnitOfWork(self.tenant_id) as uow:
             repo = LeadRepository(uow.session, self.tenant_id)
             lead = await repo.get_scoped_or_404(lead_id, self.permissions_scope())
+            old_values = {
+                "qualification_score": lead.qualification_score,
+                "category": lead.category,
+                "reviewer_state": lead.reviewer_state,
+            }
             lead.qualification_score = result.score
             lead.category = result.category.value
             lead.reasoning = result.to_dict()
@@ -332,6 +374,21 @@ class LeadService:
             lead.qualified_at = utcnow()
             lead.reviewer_state = result.review_state.value
             await repo.bump_version(lead, None)
+            AuditRecorder(uow.session).record(
+                action=audit_action,
+                resource_type="lead",
+                resource_id=lead_id,
+                tenant_id=self.tenant_id,
+                actor_id=self.user_id,
+                old_values=old_values,
+                new_values={
+                    "qualification_score": result.score,
+                    "category": result.category.value,
+                    "reviewer_state": result.review_state.value,
+                    "qualified_by": result.qualified_by,
+                    "degraded": result.degraded,
+                },
+            )
             uow.collect(
                 DomainEvent(
                     event_type=LEAD_QUALIFIED,
@@ -356,10 +413,11 @@ class LeadService:
             lead.get("capture", {}),
         )
         result = apply_human_decision(base, decision=decision, edited_score=edited_score, note=note)
-        await self._persist_qualification(lead_id, result)
+        await self._persist_qualification(lead_id, result, audit_action="lead.qualification_review")
         return {"lead_id": str(lead_id), "qualification": result.to_dict()}
 
     async def convert(self, lead_id: UUID) -> dict[str, Any]:
+        from application.audit.recorder import AuditRecorder
         from domain.events.catalog import LEAD_CONVERTED
         from infrastructure.database.models.crm import Contact
         from infrastructure.database.models.leads import Lead
@@ -375,6 +433,7 @@ class LeadService:
             repo = LeadRepository(uow.session, self.tenant_id)
             lead = await repo.get_scoped_or_404(lead_id, self.permissions_scope())
             assert_transition(lead.status, "converted")
+            old_status = lead.status
             uow.session.add(
                 Contact(
                     id=contact_id,
@@ -395,6 +454,15 @@ class LeadService:
             lead.converted_contact_id = contact_id
             lead.converted_at = utcnow()
             await repo.bump_version(lead, None)
+            AuditRecorder(uow.session).record(
+                action="lead.convert",
+                resource_type="lead",
+                resource_id=lead_id,
+                tenant_id=self.tenant_id,
+                actor_id=self.user_id,
+                old_values={"status": old_status},
+                new_values={"status": "converted", "contact_id": str(contact_id)},
+            )
             uow.collect(
                 DomainEvent(
                     event_type=LEAD_CONVERTED,
