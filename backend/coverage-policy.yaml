@@ -1,0 +1,40 @@
+version: 1
+default_target: 85
+critical_targets:
+  src/application/auth/: 90
+  src/application/idempotency.py: 90
+  src/application/payments/: 90
+  src/application/support/: 90
+  src/application/integrations/: 90
+ignore:
+  - src/application/ports.py
+exceptions:
+  src/application/ai/prompt_registry.py: {owner: ai-platform, expires: 2026-09-30, floor: 75, reason: Provider-free failure branches require additional fixtures.}
+  src/application/ai/service.py: {owner: ai-platform, expires: 2026-09-30, floor: 70, reason: Promoted and unpromoted runtime branches are split across suites.}
+  src/application/appointments/booking.py: {owner: scheduling, expires: 2026-09-30, floor: 78, reason: Conflict and rollback branches need focused expansion.}
+  src/application/auth/api_keys.py: {owner: security, expires: 2026-09-15, floor: 78, reason: Recovery and lookup failures need focused expansion.}
+  src/application/auth/mfa.py: {owner: security, expires: 2026-09-15, floor: 76, reason: Provider and clock failure branches need focused expansion.}
+  src/application/auth/oauth.py: {owner: security, expires: 2026-09-15, floor: 25, reason: Google remains disabled and callback provider branches are sandbox-only.}
+  src/application/auth/registration.py: {owner: security, expires: 2026-09-15, floor: 78, reason: Mail delivery remains externally disabled.}
+  src/application/auth/service.py: {owner: security, expires: 2026-09-15, floor: 66, reason: Lockout, reset, and session edge branches need expansion.}
+  src/application/auth/sessions.py: {owner: security, expires: 2026-09-15, floor: 74, reason: Concurrent session edge branches need expansion.}
+  src/application/communications/consents.py: {owner: communications, expires: 2026-09-30, floor: 54, reason: Historical evidence and conflict branches need expansion.}
+  src/application/communications/inbound.py: {owner: communications, expires: 2026-09-30, floor: 18, reason: Live-provider ingress remains disabled; adapter contracts are isolated elsewhere.}
+  src/application/crm/appointments.py: {owner: crm, expires: 2026-09-30, floor: 56, reason: Secondary recurrence and cancellation branches need expansion.}
+  src/application/crm/deals.py: {owner: crm, expires: 2026-09-30, floor: 46, reason: Pipeline conflict branches need expansion.}
+  src/application/crm/documents.py: {owner: documents, expires: 2026-09-30, floor: 65, reason: Activated storage branches remain externally gated.}
+  src/application/crm/handlers.py: {owner: crm, expires: 2026-09-30, floor: 62, reason: Event replay failure branches need expansion.}
+  src/application/crm/inbox.py: {owner: communications, expires: 2026-09-30, floor: 60, reason: Provider delivery branches remain disabled.}
+  src/application/crm/service.py: {owner: crm, expires: 2026-09-30, floor: 48, reason: Account/contact merge and delete branches need expansion.}
+  src/application/crm/tasks.py: {owner: crm, expires: 2026-09-30, floor: 60, reason: Assignment conflict branches need expansion.}
+  src/application/crm/timeline.py: {owner: crm, expires: 2026-09-30, floor: 61, reason: Secondary filter and pagination branches need expansion.}
+  src/application/documents/knowledge.py: {owner: documents, expires: 2026-09-30, floor: 0, reason: Embedding provider and activated object storage are externally gated.}
+  src/application/idempotency.py: {owner: platform, expires: 2026-09-15, floor: 78, reason: Concurrent in-progress reservation needs a dedicated contention harness.}
+  src/application/integrations/service.py: {owner: integrations, expires: 2026-09-30, floor: 82, reason: Live-ready branches remain externally gated.}
+  src/application/leads/forms.py: {owner: growth, expires: 2026-09-30, floor: 0, reason: Form publication module is the next product implementation gap.}
+  src/application/payments/inbound.py: {owner: payments, expires: 2026-09-15, floor: 76, reason: Provider error branches need additional signed fixtures.}
+  src/application/workflows/actions.py: {owner: automation, expires: 2026-09-30, floor: 44, reason: Disabled provider actions dominate unreachable live branches.}
+  src/application/workflows/approvals.py: {owner: automation, expires: 2026-09-30, floor: 78, reason: Concurrent quorum contention needs expansion.}
+  src/application/workflows/ingress.py: {owner: automation, expires: 2026-09-30, floor: 62, reason: Invalid external trigger variants need expansion.}
+  src/application/workflows/service.py: {owner: automation, expires: 2026-09-30, floor: 77, reason: Definition conflict branches need expansion.}
+  src/application/workflows/triggers.py: {owner: automation, expires: 2026-09-30, floor: 70, reason: Scheduler and event contention branches need expansion.}

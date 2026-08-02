@@ -450,7 +450,10 @@ class LeadService:
                 score=fallback.score,
                 category=fallback.category,
                 evidence=fallback.evidence,
-                reasons=[*fallback.reasons, "AI prompt is not promoted; rule fallback used"],
+                reasons=[
+                    *fallback.reasons,
+                    "AI is unavailable because its prompt is not promoted; rule fallback used",
+                ],
                 missing_fields=fallback.missing_fields,
                 qualified_by="rule",
                 degraded=True,

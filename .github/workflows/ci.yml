@@ -89,8 +89,14 @@ jobs:
       - run: pip install --require-hashes --no-deps -r backend/requirements-dev.lock
       - name: Migrations up and down (expand/contract reversibility)
         run: cd backend && alembic upgrade head && alembic downgrade base && alembic upgrade head
-      - name: Integration, contract and E2E suites
-        run: cd backend && pytest tests/integration tests/contract tests/e2e -q
+      - name: Full application coverage, integration, contract and E2E suites
+        run: >-
+          cd backend && pytest tests/unit tests/integration tests/contract tests/e2e
+          --cov=application --cov-report=term --cov-report=json:coverage-application.json -q
+      - name: Enforce module targets or owned expiring exceptions
+        run: >-
+          cd backend && python src/scripts/check_coverage_policy.py
+          --coverage-json coverage-application.json
       - name: Worker tier (real broker, real worker)
         run: cd backend && pytest tests/integration/test_worker_runtime.py -q
 

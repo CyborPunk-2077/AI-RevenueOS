@@ -94,6 +94,7 @@ async def test_support_grant_is_durable_idempotent_and_tenant_isolated(
                 .where(
                     IdempotencyRecord.tenant_id == tenant_a,
                     IdempotencyRecord.scope == "support.access.grant",
+                    IdempotencyRecord.idempotency_key == payload["idempotency_key"],
                 )
             )
             == 1

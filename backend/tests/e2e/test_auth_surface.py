@@ -12,6 +12,7 @@ real server with RLS forced, so cross-tenant assertions mean what they say.
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Iterator
 from typing import Any
@@ -43,25 +44,35 @@ def wired_engine(migrated_database: str, engine: Any) -> Iterator[Any]:
 
 
 @pytest.fixture(scope="session")
-def redis_socket() -> str:
-    """A real Redis 6.2.
+def redis_endpoint() -> str:
+    """A real Redis endpoint supplied by CI, or a local redislite fallback.
 
     `fakeredis` cannot run the limiter's sliding-window Lua script, so the rate
     limiter fails open against it and every limit assertion would silently pass
     for the wrong reason. `GETDEL`, which makes OAuth state and MFA challenges
     single use, likewise needs a real server.
     """
-    import tempfile
+    configured = os.environ.get("REDIS_URL")
+    if configured:
+        import redis
 
-    import redislite
+        server = redis.Redis.from_url(configured, decode_responses=True)
+        server.ping()
+        pytest._airev_auth_redis = server  # type: ignore[attr-defined]
+        return configured
+    try:
+        import tempfile
 
+        import redislite
+    except ImportError:
+        pytest.skip("A real Redis is required; set REDIS_URL on this platform.")
     server = redislite.Redis(tempfile.mktemp(suffix=".rdb"))
     pytest._airev_auth_redis = server  # type: ignore[attr-defined]
-    return str(server.socket_file)
+    return f"unix://{server.socket_file}"
 
 
 @pytest.fixture
-def fake_redis(redis_socket: str) -> Iterator[Any]:
+def fake_redis(redis_endpoint: str) -> Iterator[Any]:
     import redis.asyncio as aioredis
 
     from infrastructure.caching.redis import set_redis
@@ -71,7 +82,7 @@ def fake_redis(redis_socket: str) -> Iterator[Any]:
     # handle: the async client belongs to the TestClient's event loop, which is
     # already closed by the time a teardown would run.
     pytest._airev_auth_redis.flushall()  # type: ignore[attr-defined]
-    client = aioredis.from_url(f"unix://{redis_socket}", decode_responses=True)
+    client = aioredis.from_url(redis_endpoint, decode_responses=True)
     set_redis(client)
     yield client
     set_redis(None)
