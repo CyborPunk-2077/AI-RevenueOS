@@ -438,6 +438,12 @@ class ProviderConfigurationRequest(StrictModel):
         return value
 
 
+class SupportAccessRequest(StrictModel):
+    support_user_ref: Annotated[str, Field(min_length=3, max_length=200)]
+    purpose: Annotated[str, Field(min_length=10, max_length=500)]
+    duration_minutes: Annotated[int, Field(ge=5, le=60)] = 30
+
+
 class TenantPatch(StrictModel):
     name: Annotated[str | None, Field(min_length=1, max_length=200)] = None
     timezone: Annotated[str | None, Field(max_length=64)] = None

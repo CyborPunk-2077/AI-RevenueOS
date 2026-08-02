@@ -45,6 +45,7 @@ MANDATORY_AUDIT_ACTIONS = frozenset(
         "provider.configured",
         "secret.accessed",
         "support.access_granted",
+        "support.access_revoked",
         "export.created",
         "export.downloaded",
         "privacy.request",

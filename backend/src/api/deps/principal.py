@@ -159,6 +159,10 @@ async def get_principal(
     )
     request.state.principal = principal
     _assert_host_matches_tenant(request, principal)
+    if "support" in principal.roles or principal.actor_type == "support":
+        from application.support.service import assert_active_support_grant
+
+        await assert_active_support_grant(principal)
     return principal
 
 
