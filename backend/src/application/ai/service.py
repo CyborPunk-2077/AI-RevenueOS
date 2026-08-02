@@ -35,6 +35,15 @@ class AiService:
     async def chat(
         self, message: str, *, entity_type: str | None = None, entity_id: UUID | None = None
     ) -> dict[str, Any]:
+        from application.ai.prompt_registry import resolve_production_prompt
+        from domain.ai.guards import scan_input
+
+        if scan_input(message).blocked:
+            return _degraded_without_provider("reply", "input_guard_blocked")
+
+        prompt = await resolve_production_prompt(self.tenant_id, Task.CHAT)
+        if prompt is None:
+            return _degraded_without_provider("reply", "prompt_not_promoted")
         response = await get_gateway().complete(
             AIRequest(
                 task=Task.CHAT,
@@ -47,6 +56,7 @@ class AiService:
                 metadata={
                     "entity_type": entity_type,
                     "entity_id": str(entity_id) if entity_id else None,
+                    **prompt,
                 },
             )
         )
@@ -60,15 +70,33 @@ class AiService:
     async def run_task(
         self, task: str, text: str, *, options: dict[str, Any] | None = None
     ) -> dict[str, Any]:
+        from application.ai.prompt_registry import resolve_production_prompt
+        from domain.ai.guards import scan_input
+
+        resolved_task = TASK_MAP.get(task, Task.GENERATE)
+        if scan_input(text).blocked:
+            return {
+                "task": task,
+                **_degraded_without_provider("output", "input_guard_blocked"),
+                "structured": None,
+            }
+        prompt = await resolve_production_prompt(self.tenant_id, resolved_task)
+        if prompt is None:
+            return {
+                "task": task,
+                **_degraded_without_provider("output", "prompt_not_promoted"),
+                "structured": None,
+            }
         response = await get_gateway().complete(
             AIRequest(
-                task=TASK_MAP.get(task, Task.GENERATE),
+                task=resolved_task,
                 tenant_id=self.tenant_id,
                 user_id=self.user_id,
                 tier=self.tier,
                 industry_code=self.industry_code,
                 messages=[{"role": "user", "content": text}],
-                metadata=options or {},
+                response_schema=prompt["response_schema"] or None,
+                metadata={**(options or {}), **prompt},
             )
         )
         return {
@@ -126,3 +154,24 @@ def _manual_path(reason: str | None) -> str | None:
         "Continue manually: the record, its history and every action remain fully "
         "available without AI assistance."
     )
+
+
+def _degraded_without_provider(output_field: str, reason: str) -> dict[str, Any]:
+    message = {
+        "input_guard_blocked": "The request was blocked by the AI input safety policy.",
+        "prompt_not_promoted": "AI is unavailable until an evaluated prompt version is promoted.",
+    }[reason]
+    return {
+        output_field: message,
+        "degraded": True,
+        "requires_review": True,
+        "manual_path": _manual_path(reason),
+        "metadata": {
+            "provider": "",
+            "model": "",
+            "degraded": True,
+            "degraded_reason": reason,
+            "prompt_status": "not_promoted" if reason == "prompt_not_promoted" else "blocked",
+            "provider_called": False,
+        },
+    }

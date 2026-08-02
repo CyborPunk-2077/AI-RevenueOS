@@ -438,9 +438,24 @@ class LeadService:
         self, lead: dict[str, Any], criteria: list[Criterion]
     ) -> QualificationResult:
         """A provider or guard failure never blocks core CRM operation."""
+        from application.ai.prompt_registry import resolve_production_prompt
         from application.ai.registry import get_gateway
         from infrastructure.ai.gateway import AIRequest
         from infrastructure.ai.models import Task
+
+        prompt = await resolve_production_prompt(self.tenant_id, Task.QUALIFY_LEAD)
+        if prompt is None:
+            fallback = score_from_rubric(criteria, lead.get("capture", {}))
+            return QualificationResult(
+                score=fallback.score,
+                category=fallback.category,
+                evidence=fallback.evidence,
+                reasons=[*fallback.reasons, "AI prompt is not promoted; rule fallback used"],
+                missing_fields=fallback.missing_fields,
+                qualified_by="rule",
+                degraded=True,
+                provenance={"method": "rule_fallback", "ai_reason": "prompt_not_promoted"},
+            )
 
         gateway = get_gateway()
         response = await gateway.complete(
@@ -450,7 +465,8 @@ class LeadService:
                 user_id=self.user_id,
                 industry_code=self.industry_code,
                 messages=[{"role": "user", "content": str(lead.get("capture", {}))}],
-                response_schema={
+                response_schema=prompt["response_schema"]
+                or {
                     "type": "object",
                     "required": ["score", "reasons"],
                     "properties": {
@@ -458,6 +474,7 @@ class LeadService:
                         "reasons": {"type": "array"},
                     },
                 },
+                metadata=prompt,
             )
         )
         if not response.ok or response.structured is None:

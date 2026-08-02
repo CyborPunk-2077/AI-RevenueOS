@@ -52,6 +52,10 @@ MANDATORY_AUDIT_ACTIONS = frozenset(
         "file.downloaded",
         "message.sent",
         "bulk.operation",
+        "prompt.synced",
+        "prompt.evaluated",
+        "prompt.promoted",
+        "prompt.rolled_back",
     }
 )
 

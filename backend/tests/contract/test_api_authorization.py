@@ -328,7 +328,8 @@ class TestAiApiSafety:
         ).json()["data"]
         assert body["degraded"] is True
         assert body["manual_path"]
-        assert body["metadata"]["degraded_reason"] == "all_providers_unavailable"
+        assert body["metadata"]["degraded_reason"] == "prompt_not_promoted"
+        assert body["metadata"]["provider_called"] is False
 
     def test_prompt_injection_is_blocked_at_the_api_edge(
         self, client: TestClient, auth_headers: dict

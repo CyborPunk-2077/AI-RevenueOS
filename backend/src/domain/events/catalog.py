@@ -61,6 +61,10 @@ INTEGRATION_UPDATED: Final = "integration.updated"
 SUPPORT_ACCESS_GRANTED: Final = "support.access_granted"
 SUPPORT_ACCESS_REVOKED: Final = "support.access_revoked"
 BULK_OPERATION_COMPLETED: Final = "bulk.operation.completed"
+PROMPT_SYNCED: Final = "prompt.synced"
+PROMPT_EVALUATED: Final = "prompt.evaluated"
+PROMPT_PROMOTED: Final = "prompt.promoted"
+PROMPT_ROLLED_BACK: Final = "prompt.rolled_back"
 CONVERSATION_ASSIGNED: Final = "conversation.assigned"
 CONVERSATION_RESOLVED: Final = "conversation.resolved"
 MESSAGE_QUEUED: Final = "message.queued"
@@ -143,6 +147,10 @@ INTERNAL_EVENT_TYPES: Final[frozenset[str]] = frozenset(
         SUPPORT_ACCESS_GRANTED,
         SUPPORT_ACCESS_REVOKED,
         BULK_OPERATION_COMPLETED,
+        PROMPT_SYNCED,
+        PROMPT_EVALUATED,
+        PROMPT_PROMOTED,
+        PROMPT_ROLLED_BACK,
     }
 )
 

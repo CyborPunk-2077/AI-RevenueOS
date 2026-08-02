@@ -472,6 +472,27 @@ class SupportAccessRequest(StrictModel):
     duration_minutes: Annotated[int, Field(ge=5, le=60)] = 30
 
 
+class PromptEvaluationCaseResult(StrictModel):
+    case_id: Annotated[str, Field(min_length=1, max_length=120)]
+    passed: bool
+    detail: Annotated[str, Field(max_length=500)] = ""
+
+
+class PromptEvaluationRequest(StrictModel):
+    evaluation_set: Annotated[str, Field(min_length=1, max_length=120)] = "baseline"
+    evaluation_version: Annotated[int, Field(ge=1)] = 1
+    content_hash: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
+    results: Annotated[list[PromptEvaluationCaseResult], Field(min_length=1, max_length=500)]
+
+
+class PromptPromotionRequest(StrictModel):
+    evaluation_run_id: UUID
+
+
+class PromptRollbackRequest(StrictModel):
+    target_version: Annotated[int, Field(ge=1)]
+
+
 class TenantPatch(StrictModel):
     name: Annotated[str | None, Field(min_length=1, max_length=200)] = None
     timezone: Annotated[str | None, Field(max_length=64)] = None

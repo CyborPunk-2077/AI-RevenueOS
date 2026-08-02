@@ -399,7 +399,7 @@ signed-off copy and policy that the code enforces against.
 | ~~P1-5~~ | **RESOLVED 2026-08-02.** Eight concurrent public claims on one real-Postgres slot produce exactly one booking/lock/audit commit and seven domain conflicts; the audit is anonymous, PII-free and tenant-isolated (`2097ba2`). | criterion 12 | Complete | — |
 | P1-6 | **Engineering complete; live evidence externally blocked.** Presign → verified HEAD completion → SHA/magic/active-content inspection → clamd INSTREAM → clean/quarantine/reject → audited five-minute signed download is wired with durable outbox dispatch and retry-safe state. Real-Postgres lifecycle tests and a TCP clamd protocol test pass; no AWS bucket or deployed clamd exists on this host, so activation is not claimed. | M13, criterion 13 | Execute the storage activation runbook against private staging S3 and real clamd, including EICAR evidence | AWS gate |
 | ~~P1-7~~ | **RESOLVED 2026-08-02.** Runtime/dev Python graphs are fully pinned with hashes and used by CI/Docker; pnpm CI installs fail on lock drift (`784cbfc`). | M01, M21 | Complete | — |
-| P1-8 | **Prompt governance absent.** `prompts/` is empty though the spec mandates Git-backed `prompts/<task>/v<n>.yaml` with promote/rollback and evaluation. `run_ai_evals.py` is referenced by CI and missing. | M12, criterion 6 | Author prompt files, implement the registry endpoints and the eval runner with gold sets | 5 days |
+| ~~P1-8~~ | **RESOLVED 2026-08-02.** Every AI task has immutable Git-backed `prompts/<task>/v<n>.yaml` content and a versioned gold set. Platform-only, durably idempotent sync/evaluate/promote/rollback endpoints commit audit/outbox evidence atomically; runtime calls fail closed until a passing version is promoted. The CI runner executes deterministic prompt/guard contracts without contacting or claiming quality from a provider. | M12, criterion 6 | Complete; approved sandbox model-quality evaluation remains an external activation activity | — |
 | P1-9 | **Coverage below the stated bars** in `application/*` (0–92% against a 90/85 target); several modules at 0%. | M21 | Raise to bar or record a per-module exception with an owner | 3 days |
 | P1-10 | **Provider credentials absent** — WhatsApp BSP + template approval, email provider + domain, Razorpay commercial model. Adapters are complete and mock-tested; none has touched a live endpoint. | M15–M17, criteria 8, 15 | Follow `docs/runbooks/provider-activation.md` per provider | external |
 | P1-11 | **k6 and ZAP never executed**; `peak.js` missing. | M21, criterion 23 | Run against staging once P0-5 clears; add the peak and spike profiles | 2 days + AWS |
@@ -419,7 +419,7 @@ signed-off copy and policy that the code enforces against.
 | P2-7 | No tracing despite X-Ray in the stack table | Instrument with OpenTelemetry |
 | P2-8 | Storybook declared in the Makefile, absent | Add it or drop the claim |
 | P2-9 | Only `envs/prod` exists | Add dev/staging/sandbox stacks |
-| P2-10 | Missing referenced files: `run_ai_evals.py`, `generate_evidence.py`, `zap/rules.tsv`, `k6/peak.js` | Create them or remove the references from CI and the Makefile (`verify-restore.sh` is now implemented) |
+| P2-10 | Missing referenced files: `generate_evidence.py`, `zap/rules.tsv`, `k6/peak.js` | Create them or remove the references from CI and the Makefile (`verify-restore.sh` and `run_ai_evals.py` are now implemented) |
 
 ---
 
