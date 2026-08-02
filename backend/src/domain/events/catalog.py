@@ -56,6 +56,8 @@ APPROVAL_APPROVED: Final = "approval.approved"
 APPROVAL_REJECTED: Final = "approval.rejected"
 SYSTEM_QUOTA_WARNING: Final = "system.quota_warning"
 SYSTEM_INTEGRATION_DISCONNECTED: Final = "system.integration_disconnected"
+INTEGRATION_CONFIGURED: Final = "integration.configured"
+INTEGRATION_UPDATED: Final = "integration.updated"
 CONVERSATION_ASSIGNED: Final = "conversation.assigned"
 CONVERSATION_RESOLVED: Final = "conversation.resolved"
 MESSAGE_QUEUED: Final = "message.queued"
@@ -133,6 +135,8 @@ INTERNAL_EVENT_TYPES: Final[frozenset[str]] = frozenset(
         FILE_DELETED,
         ANALYTICS_EXPORT_REQUESTED,
         ANALYTICS_EVENT_EMITTED,
+        INTEGRATION_CONFIGURED,
+        INTEGRATION_UPDATED,
     }
 )
 

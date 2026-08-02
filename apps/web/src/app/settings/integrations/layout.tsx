@@ -1,0 +1,24 @@
+import { redirect } from 'next/navigation';
+import { WorkspaceShell } from '@/features/crm/workspace-shell';
+import { apiFetch } from '@/lib/session';
+
+export const dynamic = 'force-dynamic';
+
+interface MeResponse {
+  readonly email: string;
+  readonly tenant_slug: string;
+}
+
+export default async function IntegrationSettingsLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}): Promise<JSX.Element> {
+  const me = await apiFetch<MeResponse>('/auth/me');
+  if (!me.ok || !me.data) redirect('/login');
+  return (
+    <WorkspaceShell tenantSlug={me.data.tenant_slug} email={me.data.email} active="settings">
+      {children}
+    </WorkspaceShell>
+  );
+}

@@ -24,7 +24,8 @@ export function WorkspaceShell({
     | 'deals'
     | 'inbox'
     | 'appointments'
-    | 'analytics';
+    | 'analytics'
+    | 'settings';
   children: React.ReactNode;
 }): JSX.Element {
   const tabs = [
@@ -35,6 +36,7 @@ export function WorkspaceShell({
     { key: 'inbox', href: '/inbox', label: 'Inbox' },
     { key: 'appointments', href: '/appointments', label: 'Appointments' },
     { key: 'analytics', href: '/analytics', label: 'Analytics' },
+    { key: 'settings', href: '/settings/integrations', label: 'Settings' },
   ] as const;
 
   return (

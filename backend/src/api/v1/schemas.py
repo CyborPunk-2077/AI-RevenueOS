@@ -422,6 +422,22 @@ class ConsentWithdrawRequest(StrictModel):
     reason: Annotated[str, Field(min_length=1, max_length=500)]
 
 
+class ProviderConfigurationRequest(StrictModel):
+    identifier: Annotated[str, Field(min_length=1, max_length=200)] = "default"
+    display_name: Annotated[str, Field(max_length=150)] = ""
+    settings: dict[str, str | bool | int] = Field(default_factory=dict)
+    credentials: dict[str, Annotated[str, Field(min_length=1, max_length=8000)]] = Field(
+        default_factory=dict
+    )
+
+    @field_validator("settings", "credentials")
+    @classmethod
+    def _bounded_provider_map(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if len(value) > 30:
+            raise ValueError("provider configuration may contain at most 30 fields")
+        return value
+
+
 class TenantPatch(StrictModel):
     name: Annotated[str | None, Field(min_length=1, max_length=200)] = None
     timezone: Annotated[str | None, Field(max_length=64)] = None

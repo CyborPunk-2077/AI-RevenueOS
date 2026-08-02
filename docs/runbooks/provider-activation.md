@@ -10,6 +10,12 @@ configuration plus verification. No code change is required.
    state, CI log, issue or test fixture.
 3. The ECS task role has least-privilege read on that specific secret ARN only.
 
+`PUT /v1/integrations/channels/{channel}` and `PUT /v1/integrations/{provider}`
+record tenant configuration requests with tenant-bound envelope encryption. Their
+responses expose field names only, never values, and remain `pending_activation`.
+They do not replace deployment secrets or prove an external approval. Confirm the
+settings page still says `Live activation claimed: No` before beginning staging.
+
 Object storage has separate data-plane and malware-scanning gates. Follow
 `docs/runbooks/storage-activation.md`; credentials or bucket names alone never
 activate it.

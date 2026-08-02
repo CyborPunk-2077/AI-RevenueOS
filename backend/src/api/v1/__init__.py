@@ -11,6 +11,7 @@ from api.v1 import (
     auth,
     consents,
     crm,
+    integrations,
     leads,
     meta,
     public,
@@ -39,6 +40,7 @@ def build_v1_router(settings: Settings) -> APIRouter:
     router.include_router(ai.router)
     router.include_router(workflows.router)
     router.include_router(consents.router)
+    router.include_router(integrations.router)
     router.include_router(public.router)
     router.include_router(webhooks.router)
     return router
