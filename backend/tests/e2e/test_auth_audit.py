@@ -189,3 +189,64 @@ async def test_explicit_bulk_and_session_cap_revocations_are_audited(
     assert rows[1].new_values["sessions_revoked"] == 2
     assert rows[2].metadata_json["reason"] == "session_cap"
     assert rows[2].new_values["families_evicted"] == 1
+
+
+async def test_registration_verification_and_password_reset_are_audited(
+    wired_engine, session_factory
+) -> None:
+    from application.auth.registration import forgot_password, reset_password, signup, verify_email
+    from application.auth.service import login
+    from infrastructure.auth.tokens import TokenService, generate_keypair
+
+    suffix = uuid4().hex[:10]
+    email = f"registration-audit-{suffix}@example.in"
+    password = "VerySecure-Willow-2026!"
+    created = await signup(
+        email=email,
+        password=password,
+        full_name="Registration Audit",
+        organisation=f"Registration Audit {suffix}",
+    )
+    await verify_email(created.verification_token)
+
+    private_key, public_key = generate_keypair()
+    tokens = TokenService(
+        private_key=private_key,
+        public_key=public_key,
+        issuer="https://registration-audit.test",
+    )
+    opened = await login(email, password, tokens)
+
+    reset_token = await forgot_password(email)
+    assert reset_token is not None
+    await reset_password(reset_token, "Another-Maple-2026!Passphrase")
+
+    async with session_factory() as session, session.begin():
+        await session.execute(
+            text("SELECT set_config('app.tenant_id', :tid, true)"),
+            {"tid": str(created.tenant_id)},
+        )
+        rows = (
+            await session.execute(
+                text(
+                    "SELECT action, new_values, metadata_json FROM audit.audit_logs "
+                    "WHERE resource_id = :uid OR actor_id = :uid ORDER BY created_at"
+                ),
+                {"uid": created.user_id},
+            )
+        ).all()
+
+    assert [row.action for row in rows] == [
+        "user.created",
+        "auth.email_verified",
+        "auth.login",
+        "auth.password_reset_requested",
+        "auth.password_reset",
+    ]
+    assert rows[-1].new_values["sessions_revoked"] == 1
+
+    serialized = str(rows).lower()
+    assert password not in serialized
+    assert reset_token not in serialized
+    assert opened.refresh_token not in serialized
+    assert "token_hash" not in serialized

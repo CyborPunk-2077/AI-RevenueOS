@@ -124,6 +124,8 @@ async def signup(*, email: str, password: str, full_name: str, organisation: str
     so the RLS `WITH CHECK` clause governs it exactly as it governs ordinary
     traffic. There is no privileged path here.
     """
+    from application.audit.recorder import AuditRecorder
+
     normalized = normalize_email(email)
 
     check = validate_password(password, email=normalized, full_name=full_name)
@@ -203,6 +205,14 @@ async def signup(*, email: str, password: str, full_name: str, organisation: str
                 expires_at=utcnow() + VERIFICATION_TTL,
             )
         )
+        AuditRecorder(session).record(
+            action="user.created",
+            resource_type="user",
+            resource_id=user_id,
+            tenant_id=tenant_id,
+            actor_type="anonymous",
+            new_values={"status": "invited", "role": Role.OWNER.value},
+        )
 
     logger.info("auth_signup", tenant_id=str(tenant_id), user_id=str(user_id))
     return SignupResult(
@@ -216,6 +226,8 @@ async def signup(*, email: str, password: str, full_name: str, organisation: str
 
 async def verify_email(token: str) -> dict[str, Any]:
     """Redeem a confirmation token. Single use, and expiry is enforced."""
+    from application.audit.recorder import AuditRecorder
+
     tenant_id, token_hash = _split_token(token)
 
     async with tenant_session(tenant_id) as session:
@@ -237,6 +249,14 @@ async def verify_email(token: str) -> dict[str, Any]:
         if user.status == "invited":
             user.status = "active"
         email, status, user_id = user.email, user.status, user.id
+        AuditRecorder(session).record(
+            action="auth.email_verified",
+            resource_type="user",
+            resource_id=user_id,
+            tenant_id=tenant_id,
+            actor_type="anonymous",
+            new_values={"status": status, "email_verified": True},
+        )
 
     logger.info("auth_email_verified", user_id=str(user_id), tenant_id=str(tenant_id))
     return {"email": email, "status": status, "verified": True}
@@ -249,6 +269,8 @@ async def forgot_password(email: str) -> str | None:
     deliver it. The route never varies its response on this value: an unknown
     address and a known one are indistinguishable to the client.
     """
+    from application.audit.recorder import AuditRecorder
+
     try:
         normalized = normalize_email(email)
     except ValueError:
@@ -275,6 +297,13 @@ async def forgot_password(email: str) -> str | None:
                 expires_at=utcnow() + RESET_TTL,
             )
         )
+        AuditRecorder(session).record(
+            action="auth.password_reset_requested",
+            resource_type="user",
+            resource_id=user_id,
+            tenant_id=tenant_id,
+            actor_type="anonymous",
+        )
     logger.info("auth_reset_requested", user_id=str(user_id), tenant_id=str(tenant_id))
     return plaintext
 
@@ -286,6 +315,8 @@ async def reset_password(token: str, new_password: str) -> dict[str, Any]:
     suspected compromise, so leaving an attacker's refresh tokens alive would
     defeat it.
     """
+    from application.audit.recorder import AuditRecorder
+
     tenant_id, token_hash = _split_token(token)
 
     async with tenant_session(tenant_id) as session:
@@ -323,6 +354,7 @@ async def reset_password(token: str, new_password: str) -> dict[str, Any]:
             user.status = "active"
         user_id = user.id
 
+        revoked_count = 0
         for token_row in (
             (
                 await session.execute(
@@ -336,6 +368,15 @@ async def reset_password(token: str, new_password: str) -> dict[str, Any]:
         ):
             token_row.revoked_at = utcnow()
             token_row.revoked_reason = "password_reset"
+            revoked_count += 1
+        AuditRecorder(session).record(
+            action="auth.password_reset",
+            resource_type="user",
+            resource_id=user_id,
+            tenant_id=tenant_id,
+            actor_type="anonymous",
+            new_values={"sessions_revoked": revoked_count},
+        )
 
     logger.info("auth_password_reset", user_id=str(user_id), tenant_id=str(tenant_id))
     return {"reset": True, "sessions_revoked": True}
