@@ -4,7 +4,7 @@ Read this first when picking the project back up. Do not re-plan the project.
 
 ## Where things stand
 
-**Commit:** `2364605` — "P0-4: tenant-scoped analytics and gated exports"
+**Commit:** `0caa2e8` — "P1-2: audit AI usage tasks"
 **Branch:** `master` · **Working tree:** clean except the preserved pre-existing
 untracked empty file `_tmp_5_43bb29c7ce5ddd61b5e99cfa69f4daf1`
 
@@ -35,17 +35,26 @@ full backend/frontend gates, and Acme/Globex browser isolation. AWS storage is
 still disabled by configuration and the activation work is documented in
 `docs/runbooks/storage-activation.md`.
 
+**P1-2 audit commits (do not redo):** `09f38a2` leads, `d6c272d` auth session
+issuance/rotation/logout, `5bb870c` session revocations, `70dd416` registration
+and password recovery, `3488fa2` MFA, `7c2f414` API keys, and `0caa2e8` AI usage.
+Every entry is compact/redacted and is written in the same tenant transaction as
+its mutation. Focused real-Postgres coverage proves 15 lead lifecycle cases, 5
+auth audit scenarios, AI usage/audit atomicity, tenant isolation and audit
+immutability. Ruff/format now cover 228 files; focused mypy, import-linter 6/6,
+and the complete unit+contract suite are green.
+
 ## Exact next task
 
-P1-2 audit wiring, starting with the leads module. Repository evidence shows
-`application/leads/service.py` commits lead state and outbox events but does not
-write `AuditRecorder` rows. Add compact, redacted audit entries inside the same
-`SqlAlchemyUnitOfWork` for capture, update, qualification, human review,
-conversion, assignment and merge paths that actually exist. Preserve existing
-event semantics and scoped reads. Add real-Postgres assertions proving the audit
-row commits with the mutation and that tenant isolation/append-only guarantees
-remain intact. Commit leads audit wiring independently before inspecting the next
-pre-recorder module.
+P1-5 public-booking concurrency, coupled with its missing audit row.
+`application/appointments/booking.py::claim_public_slot` creates the `SlotLock`
+and `Appointment` in one `SqlAlchemyUnitOfWork`, but has no focused test and no
+audit entry. Add a compact anonymous `appointment.create` record inside that UoW
+(no intake/customer PII). Fire N concurrent claims at one slot on real Postgres;
+prove exactly one succeeds, N-1 raise `Conflict`, and exactly one appointment,
+slot lock and audit row commit. Also prove the audit row is tenant-isolated.
+Commit this module independently. Do not touch the already-audited admin
+appointment service.
 
 ## Blockers that engineering cannot clear
 
@@ -69,10 +78,19 @@ All built, gated off, returning "not configured" rather than faking success. See
    BFF as separate processes instead.
 2. Standalone Playwright browser installation remains unavailable, but the Codex
    in-app browser works and was used for the document and analytics checks.
-3. The reusable PostgreSQL 16 harness is the scheduled task
-   `AIRevenueOS-Codex-Postgres` on port 55432. The borrowed Python environment is
-   under the duplicate repository at `D:\passionn\PAISA HAI TO\...\backend\.venv`;
-   always set `PYTHONPATH` to this repository's `backend/src`.
+3. The old `AIRevenueOS-Codex-Postgres` task and borrowed duplicate-repository
+   venv are stale/missing. The recovered PostgreSQL 16 harness is currently the
+   `LOCAL SERVICE` scheduled task `AIRevenueOS-Codex-Postgres-Recovery`, port
+   55432, data at `C:\airevpg-recovery-20260802-1`. Its isolated Python 3.12
+   runtime is `C:\Users\Administrator\AppData\Local\Temp\airevenueos-recovery-venv`.
+   Always set `PYTHONPATH` to this repository's `backend/src`. The persistent test
+   database already has runtime roles and migrations: set `TEST_DATABASE_URL` to
+   `postgresql+asyncpg://airev_app_runtime@127.0.0.1:55432/airevenueos_test` and
+   `ALEMBIC_DATABASE_URL` to the matching `postgresql+psycopg://postgres@...`
+   URL; leave `ADMIN_DATABASE_URL` unset or the fixture will try to recreate roles.
+4. `tests/e2e/test_auth_surface.py` uses Unix-only `redislite`, so it was not
+   rerun on this Windows recovery. The new auth audit coverage runs the same
+   application services against real Postgres with the shared fakeredis fixture.
 
 `.git/config` contains a stale Linux `core.worktree`. Drive Git with the current
 directory as `GIT_WORK_TREE` and the preserved alternate index at
