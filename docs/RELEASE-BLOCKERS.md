@@ -389,9 +389,9 @@ signed-off copy and policy that the code enforces against.
 | # | Item | Blocks | Remediation | Effort |
 |---|---|---|---|---|
 | ~~P1-1~~ | **RESOLVED 2026-08-02.** Every public repository read requires `EffectivePermissions`; unscoped builders are private and architecture-tested (`1c07f0b`). | criteria 2, 4 | Complete | — |
-| P1-2 | **Partial.** Auth, leads, AI, CRM, analytics exports, tenant governance, workflow controls/execution, public booking and authorization denials are durably audited; payment, consent, provider/config, support, download and bulk paths remain. | criterion 22 | Finish every remaining `MANDATORY_AUDIT_ACTIONS` path and assert atomic audit rows in E2E | remaining product work |
+| P1-2 | **Partial.** Auth, leads, AI, CRM, analytics exports, tenant governance, workflow controls/execution, public booking, authorization denials and verified payment transitions are durably audited; consent, provider/config, support, download and bulk paths remain. | criterion 22 | Finish every remaining `MANDATORY_AUDIT_ACTIONS` path and assert atomic audit rows in E2E | remaining product work |
 | ~~P1-3~~ | **RESOLVED 2026-08-02.** Owned warning/critical Prometheus rules, AWS backup/WAF alarms, runbooks and deterministic validation are committed (`24676fe`). Live AWS firing remains correctly gated by P0-5. | M02, M21, criterion 27 | Complete | — |
-| P1-4 | **No restore drill.** `infra/scripts/verify-restore.sh` is referenced by the nightly workflow and does not exist. | M22, criterion 24 | Write the script (restore → `alembic current` → row-count reconciliation → **re-run the RLS suite against the restored instance**) and run it | 2 days + AWS |
+| P1-4 | **Engineering complete; live evidence externally blocked.** The fail-closed PITR orchestrator verifies migration head, reconciles counts, re-runs the RLS suite using a temporary NOBYPASSRLS role, enforces RPO/RTO, uploads evidence and tag-verifies cleanup. The private DR runner/account is not activated, so no drill is claimed. | M22, criterion 24 | Activate the documented AWS DR environment and execute the drill | AWS gate |
 | P1-12 | **Worker action handlers are stubs.** The workflow action dispatch and outbound webhook HTTP transport report `pending_handler`/`pending_transport`. Queues, retry, idempotency and DLQ around them are complete. | M18, criteria 16, 27 | Implement handlers per module as each service lands under P0-4 | folded into P0-4 |
 | ~~P1-5~~ | **RESOLVED 2026-08-02.** Eight concurrent public claims on one real-Postgres slot produce exactly one booking/lock/audit commit and seven domain conflicts; the audit is anonymous, PII-free and tenant-isolated (`2097ba2`). | criterion 12 | Complete | — |
 | P1-6 | **Storage lifecycle not wired**; `ClamAvScanner.scan` raises `NotImplementedError`. Policy helpers are tested but no file can complete the flow. | M13, criterion 13 | Implement presign → complete → scan → clean/quarantine → signed download; integration test with a real clamd | 4 days |
@@ -410,13 +410,13 @@ signed-off copy and policy that the code enforces against.
 | P2-1 | Python version deviation (spec 3.12, project `>=3.10` with a `StrEnum` shim) | Adopt 3.12 and delete `shared/compat.py`, or record the deviation |
 | P2-2 | Onboarding state machine missing (`GET/PATCH /onboarding/state`, `POST complete`) | Implement over the existing `tenants.onboarding_state` column |
 | ~~P2-3~~ | **RESOLVED 2026-08-02.** Kill switches persist on workflow definitions, survive Redis loss, and emit audit/outbox events (`9d2c8f2`). | Complete |
-| P2-4 | `provider_webhook_events` table exists but is never written; inbound dedupe is Redis-only | Write verified events durably so a Redis outage cannot cause reprocessing |
+| ~~P2-4~~ | **RESOLVED 2026-08-02.** Verified Razorpay events are durably persisted, tenant-derived from stored order/payment mappings, atomically transitioned/audited/outboxed, and duplicate-safe without Redis (`a2e45df`). | Complete |
 | P2-5 | Mutation testing absent despite a stated 75–85% target | Add `mutmut`/`cosmic-ray` for domain and auth |
 | P2-6 | `mypy` excludes `tests/` | Extend strict checking to tests |
 | P2-7 | No tracing despite X-Ray in the stack table | Instrument with OpenTelemetry |
 | P2-8 | Storybook declared in the Makefile, absent | Add it or drop the claim |
 | P2-9 | Only `envs/prod` exists | Add dev/staging/sandbox stacks |
-| P2-10 | Missing referenced files: `run_ai_evals.py`, `generate_evidence.py`, `verify-restore.sh`, `zap/rules.tsv`, `k6/peak.js` | Create them or remove the references from CI and the Makefile |
+| P2-10 | Missing referenced files: `run_ai_evals.py`, `generate_evidence.py`, `zap/rules.tsv`, `k6/peak.js` | Create them or remove the references from CI and the Makefile (`verify-restore.sh` is now implemented) |
 
 ---
 
@@ -425,8 +425,8 @@ signed-off copy and policy that the code enforces against.
 | Priority | Code gaps | External gates | Total |
 |---|---:|---:|---:|
 | P0 | 0 | 2 | 2 |
-| P1 | 5 | 2 | 7 |
-| P2 | 9 | 0 | 9 |
+| P1 | 4 | 3 | 7 |
+| P2 | 8 | 0 | 8 |
 
 **Critical path to a pilot:** P0-1 (workers) → P0-2 (auth) → P0-3 (frontend
 toolchain) → P0-4 (services, at least CRM + inbox) → P1-2 (audit wiring) →

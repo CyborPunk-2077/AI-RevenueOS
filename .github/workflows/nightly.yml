@@ -29,16 +29,37 @@ jobs:
 
   restore:
     name: Backup restore verification
-    runs-on: ubuntu-latest
+    if: vars.AWS_DR_ENABLED == 'true'
+    runs-on: [self-hosted, linux, dr]
+    timeout-minutes: 300
+    environment: production-dr
     permissions: {id-token: write, contents: read}
+    env:
+      SOURCE_DB_INSTANCE_ID: ${{ vars.SOURCE_DB_INSTANCE_ID }}
+      RESTORE_DB_SUBNET_GROUP: ${{ vars.RESTORE_DB_SUBNET_GROUP }}
+      RESTORE_DB_SECURITY_GROUP_IDS: ${{ vars.RESTORE_DB_SECURITY_GROUP_IDS }}
+      RESTORE_DATABASE_NAME: ${{ vars.RESTORE_DATABASE_NAME }}
+      SOURCE_DATABASE_SECRET_ARN: ${{ secrets.SOURCE_DATABASE_SECRET_ARN }}
+      DR_EVIDENCE_PATH: dr-evidence.json
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - run: pip install --require-hashes --no-deps -r backend/requirements-dev.lock
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DR_ROLE_ARN }}
           aws-region: ap-south-1
       - name: Restore the latest snapshot and verify RPO/RTO
         run: bash infra/scripts/verify-restore.sh
+      - name: Preserve drill evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dr-evidence-${{ github.run_id }}
+          path: dr-evidence.json
+          if-no-files-found: error
+          retention-days: 365
 
   ai-eval:
     name: AI gold-set evaluation
@@ -47,6 +68,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - run: pip install -e "backend[dev]"
+      - run: pip install --require-hashes --no-deps -r backend/requirements-dev.lock
       - name: Evaluate against the versioned gold sets
         run: cd backend && python src/scripts/run_ai_evals.py --fail-under 0.85

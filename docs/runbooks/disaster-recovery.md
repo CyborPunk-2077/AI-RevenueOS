@@ -22,7 +22,15 @@
 
 ## Quarterly restore verification (mandatory)
 
-Run `infra/scripts/verify-restore.sh`, which:
+Set `AWS_DR_ENABLED=true` only after an in-VPC runner carrying the `dr` label and
+the `production-dr` environment are approved. Configure
+`SOURCE_DB_INSTANCE_ID`, `RESTORE_DB_SUBNET_GROUP`,
+`RESTORE_DB_SECURITY_GROUP_IDS`, `RESTORE_DATABASE_NAME`, `AWS_DR_ROLE_ARN`, and
+`SOURCE_DATABASE_SECRET_ARN`; the role needs RDS PITR/describe/delete, tag-read,
+and source-secret read permissions. Then dispatch the nightly workflow. A hosted
+public runner cannot reach the private restore and is intentionally unsupported.
+
+`infra/scripts/verify-restore.sh` then:
 
 1. Restores the latest snapshot into an isolated VPC.
 2. Runs `alembic current` and confirms the schema matches head.
@@ -30,9 +38,16 @@ Run `infra/scripts/verify-restore.sh`, which:
    `consent_records` against the source within tolerance.
 4. Runs the RLS allow and deny suite against the restored instance - **isolation
    must hold after a restore, not only in production**.
-5. Records the measured RPO and RTO in `docs/evidence/dr-drills/`.
+5. Refuses recovery points older than 15 minutes or completion beyond four hours.
+6. Uploads `dr-evidence.json` as a one-year workflow artifact. The artifact is
+   created only by an actual run and contains timings/counts, never credentials or
+   endpoints.
+7. Deletes only a scratch instance whose `purpose=restore-verification` and
+   `run-id` tags exactly match this run. Set `KEEP_FAILED_RESTORE=true` only when
+   an incident owner accepts the retained-instance cost for investigation.
 
 A restore that has not been verified in the last quarter is a release blocker.
+The existence of this script or a skipped workflow is not restore evidence.
 
 ## Regional recovery
 
