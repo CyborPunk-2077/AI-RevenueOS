@@ -4,7 +4,7 @@ Read this first when picking the project back up. Do not re-plan the project.
 
 ## Where things stand
 
-**Latest implementation commit:** `784cbfc` — "P1-7: lock Python dependency graph"
+**Latest implementation commit:** `bd8ed03` — "P1-6: complete scan-gated file lifecycle"
 **Branch:** `master` · **Working tree:** clean except the preserved pre-existing
 untracked empty file `_tmp_5_43bb29c7ce5ddd61b5e99cfa69f4daf1`
 
@@ -66,20 +66,36 @@ strict mypy over 176 source files, import-linter 6/6, and a fresh hash-locked pi
 resolution are green. Docker and Terraform CLIs remain unavailable on this host;
 alert YAML and all Terraform HCL were validated statically.
 
+**Second recovery continuation (do not redo):** `a2e45df` makes verified Razorpay
+ingress tenant-derived, atomic and durable across Redis loss; `d6b6c03` delivers
+signed outbound webhooks; `55feae9` dispatches concrete workflow actions with
+current publisher authority and durable action receipts; `51ea5c0` matches durable
+domain events into idempotent executions and persists assignee-bound any/all/quorum
+approvals; `cd5df7c` implements immutable scoped consent grants/withdrawals that
+atomically audit/outbox, cancel queued delivery and block later sends; and `bd8ed03`
+implements the gated file path from presign and verified S3 completion through
+SHA/magic/active-content inspection, clamd INSTREAM, clean/quarantine/reject states
+and audited five-minute downloads. Provider features remain disabled without real
+credentials/infrastructure; no live provider effect is claimed.
+
+**Latest verification:** migration 0010 downgrade/upgrade; 90 focused workflow
+tests; 27 consent/inbox real-Postgres E2E tests; 100 storage/provider/document
+focused tests including real-Postgres lifecycle and a TCP clamd protocol server;
+complete unit+contract suites; Ruff/format over 266 files; strict mypy over 182
+source files; import-linter 6/6. The original untracked sentinel remains untouched.
+
 ## Exact next task
 
-P1-2 payments plus P2-4 durable inbound idempotency. Replace the Redis-only
-Razorpay receipt path in `application/payments/inbound.py` with an atomic verified
-`provider_webhook_events` insert, resolve the tenant from an existing provider
-order/payment mapping (never trust tenant identity in webhook metadata), apply the
-payment state machine, append `payment_transitions`, write compact
-`payment.captured`/`payment.refunded` audit and outbox rows in the same transaction,
-and mark the event processed only after business state commits. A duplicate event
-must be a durable no-op even after Redis loss; an unknown mapping must remain
-pending with a truthful error. Prove signature-before-persistence, duplicate and
-out-of-order behavior, tenant isolation, and atomic rollback on real PostgreSQL.
-Keep Razorpay disabled unless its external credentials and commercial approval
-are actually present.
+Continue P1-2 with provider/config mutation auditing. Build the tenant-scoped
+channel/integration configuration surface over the existing `Channel` and
+integration models: current RBAC/scope, encrypted secrets (never returned),
+provider-specific validation, `config.updated` / `provider.configured` audit rows
+in the same transaction, outbox events, idempotent updates, and truthful disabled
+readiness when credentials, DNS/template/commercial approval or feature flags are
+absent. Add real-Postgres tenant-isolation/atomic-rollback tests and disabled UX;
+do not contact or claim activation of WhatsApp, email, Razorpay, Google or AWS.
+Then finish P1-2 support-access and bulk-operation audit paths before P1-8 prompt
+governance and the remaining release blockers in order.
 
 ## Blockers that engineering cannot clear
 
@@ -103,16 +119,17 @@ All built, gated off, returning "not configured" rather than faking success. See
    BFF as separate processes instead.
 2. Standalone Playwright browser installation remains unavailable, but the Codex
    in-app browser works and was used for the document and analytics checks.
-3. The old `AIRevenueOS-Codex-Postgres` task and borrowed duplicate-repository
-   venv are stale/missing. The recovered PostgreSQL 16 harness is currently the
-   `LOCAL SERVICE` scheduled task `AIRevenueOS-Codex-Postgres-Recovery`, port
-   55432, data at `C:\airevpg-recovery-20260802-1`. Its isolated Python 3.12
-   runtime is `C:\Users\Administrator\AppData\Local\Temp\airevenueos-recovery-venv`.
-   Always set `PYTHONPATH` to this repository's `backend/src`. The persistent test
-   database already has runtime roles and migrations: set `TEST_DATABASE_URL` to
-   `postgresql+asyncpg://airev_app_runtime@127.0.0.1:55432/airevenueos_test` and
-   `ALEMBIC_DATABASE_URL` to the matching `postgresql+psycopg://postgres@...`
-   URL; leave `ADMIN_DATABASE_URL` unset or the fixture will try to recreate roles.
+3. The old scheduled recovery PostgreSQL on port 55432 stopped during this session.
+   A replacement PostgreSQL harness is running with cleanup disabled on port
+   **61174**, data at
+   `C:\Users\ADMINI~1\AppData\Local\Temp\airevenueos-pg-active-b3aa2681c5864136811b3f3cdc19c6fd`.
+   Its Python 3.12 runtime is
+   `C:\Users\Administrator\AppData\Local\Temp\airevenueos-recovery-venv`. Set
+   `PYTHONPATH` to this repository's `backend/src`. The database is at migration
+   0010 and already has runtime roles: use
+   `postgresql+asyncpg://airev_app_runtime@127.0.0.1:61174/airevenueos_test` and
+   `postgresql+psycopg://postgres@127.0.0.1:61174/airevenueos_test` for Alembic;
+   leave `ADMIN_DATABASE_URL` unset or fixtures will try to recreate roles.
 4. `tests/e2e/test_auth_surface.py` uses Unix-only `redislite`, so it was not
    rerun on this Windows recovery. The new auth audit coverage runs the same
    application services against real Postgres with the shared fakeredis fixture.
