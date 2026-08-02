@@ -1,7 +1,18 @@
-# Implementation audit — AI RevenueOS
+# Historical implementation audit — AI RevenueOS
+
+> **Status note, 2026-08-02:** This file preserves the 2026-08-01 audit baseline
+> and its point-in-time raw evidence; many detailed statements below are now
+> superseded. Current authority is the repository at
+> `0f8ea027a27e2ef877190506b4df3aa70df278e1`,
+> `docs/TRANSFER-HANDOFF.md`, and `docs/RELEASE-BLOCKERS.md`. In particular, later
+> commits delivered the full auth surface and frontend toolchain, alert rules,
+> verification assets, hash-locked dependencies, prompt governance, durable
+> workflows, consent, payments, storage, provider configuration, onboarding, and
+> a fail-closed mutation gate. External activation and live release evidence remain
+> unclaimed. Do not use historical missing-item prose below to redo landed work.
 
 **Audit date:** 2026-08-01
-**Source of truth:** `AI-REVENUEOS-IMPLEMENTATION-SPECIFICATION.md`
+**Source of truth:** `docs/AI-REVENUEOS-IMPLEMENTATION-SPECIFICATION.md`
 **Verdict: NOT GA-ready.** The backend domain, security, persistence and **worker**
 core is substantially real and independently verified. The frontend cannot be built,
 there are no authentication endpoints, six modules have no service layer, and every
@@ -427,7 +438,7 @@ signed by a key that changes on every restart. Recommend failing closed outside
 | D2 | pnpm 9 + Turborepo workspaces | Declared; no lockfile, no installed workspace | Generate and commit `pnpm-lock.yaml` |
 | D3 | Custom engine executes workflows on Celery | Executor is pure async Python; no Celery app exists | Implement `infrastructure/celery/app.py` with the 8 declared queues |
 | D4 | Prompts Git-backed at `prompts/<task>/v<n>.yaml` | Implemented for every declared AI task, with immutable hashes and versioned gold sets | Keep the offline evaluation gate mandatory; separately activate approved sandbox model-quality evaluation |
-| D5 | `mypy` strict over the whole tree | Passes, but `tests/` is excluded from the mypy `packages` list | Extend to tests or document |
+| D5 | `mypy` strict over the whole tree | **Current P2-6 work is in progress:** strict typing edits are preserved but uncommitted; tests are not yet green or in the normal CI gate. The last completed pre-later-edits measurement was 112 errors in 18 files, not a current count. | Finish the preserved edits, rerun the test tree, and add it to CI without weakening strictness |
 | D6 | Coverage bars per module (90/85 services, 95/90 AI+utilities) | 84% overall; AI guards 97%, utilities 87–98%, but `application/*` ranges 0–92% | Meet the bar or record an exception per module |
 | D7 | Exception names | `Unauthenticated`, `NotFound` etc. lack an `Error` suffix (ruff N818) | Kept deliberately: names mirror the public error codes one-to-one. Documented in `pyproject.toml` |
 

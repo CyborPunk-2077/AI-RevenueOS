@@ -1,6 +1,8 @@
 # Release blockers — AI RevenueOS
 
-**Status: NOT GA-ready.**
+**Status: NOT GA-ready.** Current implementation checkpoint:
+`0f8ea027a27e2ef877190506b4df3aa70df278e1`; see
+`docs/TRANSFER-HANDOFF.md` for the protected working tree and exact next task.
 **Audit date:** 2026-08-02 · **P0-1 closed:** 2026-08-01 · **P0-2 closed:** 2026-08-01 · **P0-3 closed:** 2026-08-01
 Full findings: `docs/IMPLEMENTATION-AUDIT.md` · P0-1 evidence: `docs/p0-1-gate-results.txt`
 
@@ -415,7 +417,7 @@ signed-off copy and policy that the code enforces against.
 | ~~P2-3~~ | **RESOLVED 2026-08-02.** Kill switches persist on workflow definitions, survive Redis loss, and emit audit/outbox events (`9d2c8f2`). | Complete |
 | ~~P2-4~~ | **RESOLVED 2026-08-02.** Verified Razorpay events are durably persisted, tenant-derived from stored order/payment mappings, atomically transitioned/audited/outboxed, and duplicate-safe without Redis (`a2e45df`). | Complete |
 | ~~P2-5~~ | **ENGINEERING RESOLVED 2026-08-02.** Pinned mutmut 3.6 runs nightly against the domain layer (including auth), exports raw CI statistics, and fails below 75% or on missing/incomplete/interrupted evidence. Untested and runtime-failed mutants count against the score. | The runner is Linux-only by upstream design; this Windows host cannot produce a truthful score. A completed nightly artifact is still required before GA and no score is claimed here. |
-| P2-6 | `mypy` excludes `tests/` | Extend strict checking to tests |
+| P2-6 | **IN PROGRESS, uncommitted work preserved.** Strict test-tree fixes exist in the working tree, but tests are not yet green under mypy or included in the normal CI gate. The last completed measurement before later edits was 112 errors in 18 files; the current count is unknown until rerun. | Finish the preserved edits, run `mypy tests --no-incremental`, and add the full test tree to the strict mypy/CI gate without weakening checks. |
 | P2-7 | No tracing despite X-Ray in the stack table | Instrument with OpenTelemetry |
 | P2-8 | Storybook declared in the Makefile, absent | Add it or drop the claim |
 | P2-9 | Only `envs/prod` exists | Add dev/staging/sandbox stacks |
