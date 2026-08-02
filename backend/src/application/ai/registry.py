@@ -39,28 +39,48 @@ def get_gateway(settings: Settings | None = None) -> AIGateway:
 
 
 async def _record_usage(row: dict[str, Any]) -> None:
+    from uuid import UUID
+
+    from application.audit.recorder import AuditRecorder
     from infrastructure.database.models.ai import AiUsageRecord
     from infrastructure.uow.sqlalchemy_uow import SqlAlchemyUnitOfWork
     from shared.utils.timeutil import utcnow
 
     async with SqlAlchemyUnitOfWork(row["tenant_id"]) as uow:
-        uow.session.add(
-            AiUsageRecord(
-                tenant_id=row["tenant_id"],
-                user_id=row.get("user_id"),
-                task=row["task"],
-                provider=row["provider"],
-                model=row["model"],
-                input_tokens=row["input_tokens"],
-                output_tokens=row["output_tokens"],
-                cache_tokens=row.get("cache_tokens", 0),
-                cost_micro_inr=row["cost_micro_inr"],
-                latency_ms=row["latency_ms"],
-                request_id=row["request_id"],
-                outcome=row["outcome"],
-                degraded=row.get("degraded", False),
-                usage_date=utcnow().date(),
-            )
+        usage = AiUsageRecord(
+            tenant_id=row["tenant_id"],
+            user_id=row.get("user_id"),
+            task=row["task"],
+            provider=row["provider"],
+            model=row["model"],
+            input_tokens=row["input_tokens"],
+            output_tokens=row["output_tokens"],
+            cache_tokens=row.get("cache_tokens", 0),
+            cost_micro_inr=row["cost_micro_inr"],
+            latency_ms=row["latency_ms"],
+            request_id=row["request_id"],
+            outcome=row["outcome"],
+            degraded=row.get("degraded", False),
+            usage_date=utcnow().date(),
+        )
+        uow.session.add(usage)
+        await uow.flush()
+        AuditRecorder(uow.session).record(
+            action="ai.task",
+            resource_type="ai_usage",
+            resource_id=usage.id,
+            tenant_id=UUID(str(row["tenant_id"])),
+            actor_id=UUID(str(row["user_id"])) if row.get("user_id") else None,
+            outcome=str(row["outcome"]),
+            new_values={
+                "task": row["task"],
+                "provider": row["provider"],
+                "model": row["model"],
+                "input_tokens": row["input_tokens"],
+                "output_tokens": row["output_tokens"],
+                "cost_micro_inr": row["cost_micro_inr"],
+                "degraded": row.get("degraded", False),
+            },
         )
 
 
