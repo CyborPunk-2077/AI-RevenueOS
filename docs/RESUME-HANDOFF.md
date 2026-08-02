@@ -4,59 +4,48 @@ Read this first when picking the project back up. Do not re-plan the project.
 
 ## Where things stand
 
-**Commit:** `c648207` — "P0-4: appointments (admin side)"
-**Branch:** `master` · **Working tree:** clean
+**Commit:** `2364605` — "P0-4: tenant-scoped analytics and gated exports"
+**Branch:** `master` · **Working tree:** clean except the preserved pre-existing
+untracked empty file `_tmp_5_43bb29c7ce5ddd61b5e99cfa69f4daf1`
 
 **Verified working** (by test or recorded execution, not assertion):
 
 - P0-1 worker tier — 34 integration tests, real Postgres + Redis + Celery.
 - P0-2 auth — 21 `/v1/auth` operations, 37 e2e tests.
 - P0-3 frontend toolchain — frozen-lockfile install, lint, strict typecheck,
-  production build (16 routes), 14 vitest tests.
+  production build (17 routes), 14 vitest tests.
 - Local runtime — nine-service stack through `RUN_DEMO.cmd`, bounded health
   waits, idempotent migrate/seed, data preserved across restarts, destructive
   reset behind `RESET_DEMO.cmd`.
 - CRM: contacts, accounts, activity/note timeline, deals and pipelines, tasks,
-  **conversations and messages (shared inbox)**, **appointments**. 125 CRM e2e
-  tests in total.
+  conversations/messages, appointments, and tenant-safe document/file metadata.
+- Analytics: scoped funnel/source/qualification/revenue/payment/appointment/
+  conversation/SLA/assignee dashboard, date-range API/UI, and tenant-bound daily
+  rollups. Private exports are step-up/RBAC checked and durably recorded as
+  blocked while AWS storage is unavailable; no file, key, or URL is fabricated.
 
-**Gates at that commit:** ruff, ruff-format, mypy (177 files), import-linter 6/6,
-unit + contract + integration + CRM e2e green, web lint/typecheck/build clean.
+**Verification for `2364605`:** ruff + format (226 files), focused strict mypy,
+import-linter 6/6, unit+contract green, 159 CRM+analytics E2E tests on real
+PostgreSQL with forced RLS, web lint/typecheck, 14 Vitest tests, and a clean
+production build. The in-app browser verified Acme's populated analytics,
+Globex's zero/isolated view, date trend, tenant badge, and the disabled export UI.
 
-**Browser path re-verified** through the real Next BFF with the API receiving
-`Host: api:8000`: inbox renders with the gated-channel warning, conversation
-opened, inbound recorded (partitioned write), reply shown as QUEUED with the
-"no provider credential" note, automation-paused notice, conversation resolved,
-appointment booked, double booking refused 409, cancel freeing the slot for
-rebooking, and globex getting 404 on acme's thread and appointment.
+**Documents commit `981b27b`:** 24 focused and 150 CRM real-Postgres tests,
+full backend/frontend gates, and Acme/Globex browser isolation. AWS storage is
+still disabled by configuration and the activation work is documented in
+`docs/runbooks/storage-activation.md`.
 
 ## Exact next task
 
-Documents and files (`P0-4`, the last unbuilt CRM module).
-
-Copy `application/crm/appointments.py` — the pattern is established six times and
-should not be re-derived:
-
-- `scoped_query` / `get_scoped` for every read; never a bare tenant filter.
-- `SqlAlchemyUnitOfWork` for state + outbox + audit in one transaction.
-- Pydantic boundary schemas in `api/v1/schemas.py`, routes in `api/v1/crm.py`.
-- ETag concurrency on anything editable.
-- Tests in `tests/e2e/`, including a cross-tenant 404 case. Reuse the fixtures
-  imported from `tests/e2e/test_crm_contacts_accounts.py` and add the module to
-  the `F811` per-file-ignore list in `pyproject.toml`.
-
-`Document` and related models are in
-`infrastructure/database/models/documents.py`, and
-`infrastructure/integrations/storage.py` already has an S3 adapter with
-`is_configured()`. **Object storage is gated** (no AWS account), so build metadata
-management — upload intent, listing, linking to a CRM record, soft delete — and
-have the upload path return a clearly-unavailable response rather than a fake
-presigned URL. Same discipline as the inbox: never claim a capability that has no
-credential behind it.
-
-After that, P0-4's six modules are done and the remaining code work is analytics
-and reporting (M20), plus P1-2 (audit wiring for the modules that predate the
-recorder — leads still writes no audit row).
+P1-2 audit wiring, starting with the leads module. Repository evidence shows
+`application/leads/service.py` commits lead state and outbox events but does not
+write `AuditRecorder` rows. Add compact, redacted audit entries inside the same
+`SqlAlchemyUnitOfWork` for capture, update, qualification, human review,
+conversion, assignment and merge paths that actually exist. Preserve existing
+event semantics and scoped reads. Add real-Postgres assertions proving the audit
+row commits with the mutation and that tenant isolation/append-only guarantees
+remain intact. Commit leads audit wiring independently before inspecting the next
+pre-recorder module.
 
 ## Blockers that engineering cannot clear
 
@@ -78,20 +67,21 @@ All built, gated off, returning "not configured" rather than faking success. See
 1. **No Docker daemon.** `docker compose build` and `up` are unrun. Everything is
    verified against a real API, real PostgreSQL, real Redis and the real Next.js
    BFF as separate processes instead.
-2. **Playwright browsers cannot be installed** (needs root; download blocked).
-   The specs exist and `make e2e` runs them.
-3. `/tmp` is wiped between sessions. Rebuild the pnpm workspace with
-   `corepack pnpm install --frozen-lockfile` in a scratch dir, and the live
-   PostgreSQL harness from scratch, before browser-path checks.
+2. Standalone Playwright browser installation remains unavailable, but the Codex
+   in-app browser works and was used for the document and analytics checks.
+3. The reusable PostgreSQL 16 harness is the scheduled task
+   `AIRevenueOS-Codex-Postgres` on port 55432. The borrowed Python environment is
+   under the duplicate repository at `D:\passionn\PAISA HAI TO\...\backend\.venv`;
+   always set `PYTHONPATH` to this repository's `backend/src`.
 
-The mounted filesystem refuses `unlink` on directories and on files inside
-`.git`. If git reports "Another git process seems to be running", move the stale
-lock aside rather than deleting it:
+`.git/config` contains a stale Linux `core.worktree`. Drive Git with the current
+directory as `GIT_WORK_TREE` and the preserved alternate index at
+`$env:TEMP\airevenueos-codex-index`; normal Git commands otherwise report an
+invalid `/sessions/...` path. If Git reports a stale lock, move it aside rather
+than deleting it. The earlier `HEAD.lock` is preserved as
+`.git/discarded-HEAD-lock-1785642136`.
 
-```bash
-mv .git/index.lock .git/discarded-index-$(date +%s)
+```powershell
+$env:GIT_WORK_TREE = (Get-Location).Path
+$env:GIT_INDEX_FILE = Join-Path $env:TEMP 'airevenueos-codex-index'
 ```
-
-and drive git with `GIT_INDEX_FILE=/tmp/airev-index` so a stale default index
-cannot silently commit the wrong tree. That mistake happened once and reverted a
-commit; it was caught and fixed.
