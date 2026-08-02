@@ -10,7 +10,13 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from api.app.envelope import success
 from api.deps.idempotency import IdempotencyContext, idempotency, parse_if_match
 from api.deps.principal import CurrentPrincipal, ListQuery, list_query, rate_limit
-from api.v1.schemas import LeadCreate, LeadQualifyRequest, LeadReviewRequest, LeadUpdate
+from api.v1.schemas import (
+    LeadBulkUpdateRequest,
+    LeadCreate,
+    LeadQualifyRequest,
+    LeadReviewRequest,
+    LeadUpdate,
+)
 from domain.leads.lifecycle import (
     duplicate_resolution,
 )
@@ -53,6 +59,29 @@ async def create_lead(
         payload.model_dump(), idempotency=idem
     )
     response.headers["ETag"] = f'W/"{result["version"]}"'
+    return success(result, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.post(
+    "/bulk",
+    summary="Atomically update up to 100 scoped leads",
+    dependencies=[Depends(rate_limit("lead_bulk_tenant", per="tenant"))],
+)
+async def bulk_update_leads(
+    payload: LeadBulkUpdateRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+    idem: Annotated[IdempotencyContext, Depends(idempotency)],
+) -> dict[str, Any]:
+    principal.require("lead", "update")
+    changes = payload.changes.model_dump(exclude_unset=True)
+    if "assignee_id" in changes:
+        principal.require("lead", "assign")
+    from application.leads.service import LeadService
+
+    result = await LeadService.for_principal(principal).bulk_update(
+        payload.lead_ids, changes, idempotency_key=idem.key
+    )
     return success(result, request_id=getattr(request.state, "correlation_id", None))
 
 

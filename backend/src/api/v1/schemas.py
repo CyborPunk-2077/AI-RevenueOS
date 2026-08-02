@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from shared.utils.phone import InvalidPhone, normalize_phone
 from shared.utils.text import normalize_email
@@ -320,6 +320,34 @@ class LeadUpdate(StrictModel):
     assignee_id: UUID | None = None
     capture: dict[str, Any] | None = None
     disqualify_reason: Annotated[str | None, Field(max_length=200)] = None
+
+
+class LeadBulkChanges(StrictModel):
+    status: (
+        Literal["new", "qualified", "contacted", "nurturing", "disqualified", "archived"] | None
+    ) = None
+    assignee_id: UUID | None = None
+    disqualify_reason: Annotated[str | None, Field(max_length=200)] = None
+
+    @model_validator(mode="after")
+    def _has_mutation(self) -> LeadBulkChanges:
+        if not ({"status", "assignee_id"} & self.model_fields_set):
+            raise ValueError("bulk changes require status or assignee_id")
+        if self.status == "disqualified" and not self.disqualify_reason:
+            raise ValueError("disqualify_reason is required when disqualifying leads")
+        return self
+
+
+class LeadBulkUpdateRequest(StrictModel):
+    lead_ids: Annotated[list[UUID], Field(min_length=1, max_length=100)]
+    changes: LeadBulkChanges
+
+    @field_validator("lead_ids")
+    @classmethod
+    def _unique_lead_ids(cls, value: list[UUID]) -> list[UUID]:
+        if len(set(value)) != len(value):
+            raise ValueError("lead_ids must be unique")
+        return value
 
 
 class LeadQualifyRequest(StrictModel):

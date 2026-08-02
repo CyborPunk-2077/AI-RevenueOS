@@ -221,6 +221,142 @@ class LeadService:
             )
         return await self.get(lead_id)
 
+    async def bulk_update(
+        self,
+        lead_ids: list[UUID],
+        changes: dict[str, Any],
+        *,
+        idempotency_key: str | None,
+    ) -> dict[str, Any]:
+        """Atomically mutate a bounded, role-scoped lead set with durable replay."""
+        if "lead:update" not in self.permissions:
+            from shared.exceptions import Forbidden
+
+            raise Forbidden("You do not have permission to update leads.")
+        if "assignee_id" in changes and "lead:assign" not in self.permissions:
+            from shared.exceptions import Forbidden
+
+            raise Forbidden("You do not have permission to assign leads.")
+
+        from application.audit.recorder import AuditRecorder
+        from application.idempotency import hash_payload, reserve_idempotency
+        from domain.events.catalog import BULK_OPERATION_COMPLETED
+        from infrastructure.database.models.leads import Lead
+        from infrastructure.database.repositories.base import TenantRepository
+        from infrastructure.uow.sqlalchemy_uow import SqlAlchemyUnitOfWork
+
+        class LeadRepository(TenantRepository[Lead]):
+            model = Lead
+
+        normalized_ids = sorted(set(lead_ids), key=str)
+        operation_id = uuid7()
+        request_payload = {
+            "lead_ids": [str(item) for item in normalized_ids],
+            "changes": _json_safe(changes),
+        }
+        async with SqlAlchemyUnitOfWork(self.tenant_id) as uow:
+            reservation = await reserve_idempotency(
+                uow.session,
+                tenant_id=self.tenant_id,
+                scope="lead.bulk.update",
+                key=idempotency_key,
+                request_hash=hash_payload(request_payload),
+            )
+            if reservation.replay is not None:
+                return reservation.replay
+            repo = LeadRepository(uow.session, self.tenant_id)
+            rows = (
+                (
+                    await uow.session.execute(
+                        repo.scoped_query(self.permissions_scope())
+                        .where(Lead.id.in_(normalized_ids))
+                        .order_by(Lead.id)
+                        .with_for_update()
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if len(rows) != len(normalized_ids):
+                raise NotFound(
+                    "One or more leads were not found in your access scope.",
+                    details={"requested_count": len(normalized_ids), "matched_count": len(rows)},
+                )
+
+            changed_ids: list[str] = []
+            changed_fields = sorted(set(changes) - {"disqualify_reason"})
+            for lead in rows:
+                row_changed = False
+                if "status" in changes and changes["status"] is not None:
+                    target_status = str(changes["status"])
+                    assert_transition(
+                        lead.status,
+                        target_status,
+                        reason=changes.get("disqualify_reason"),
+                    )
+                    if lead.status != target_status:
+                        lead.status = target_status
+                        row_changed = True
+                if "assignee_id" in changes and lead.assignee_id != changes["assignee_id"]:
+                    lead.assignee_id = changes["assignee_id"]
+                    row_changed = True
+                if row_changed:
+                    await repo.bump_version(lead, None)
+                    lead.updated_by = self.user_id
+                    changed_ids.append(str(lead.id))
+                    uow.collect(
+                        DomainEvent(
+                            event_type=LEAD_UPDATED,
+                            tenant_id=self.tenant_id,
+                            resource_type="lead",
+                            resource_id=lead.id,
+                            actor_id=self.user_id,
+                            payload={
+                                "changed": changed_fields,
+                                "bulk_operation_id": str(operation_id),
+                            },
+                        )
+                    )
+
+            result = {
+                "operation_id": str(operation_id),
+                "status": "completed",
+                "requested_count": len(normalized_ids),
+                "changed_count": len(changed_ids),
+                "changed_lead_ids": changed_ids,
+                "changed_fields": changed_fields,
+            }
+            AuditRecorder(uow.session).record(
+                action="bulk.operation",
+                resource_type="lead_bulk_update",
+                resource_id=operation_id,
+                tenant_id=self.tenant_id,
+                actor_id=self.user_id,
+                new_values={
+                    "status": "completed",
+                    "requested_count": len(normalized_ids),
+                    "changed_count": len(changed_ids),
+                    "changed_fields": changed_fields,
+                },
+                metadata={"lead_ids": [str(item) for item in normalized_ids]},
+            )
+            uow.collect(
+                DomainEvent(
+                    event_type=BULK_OPERATION_COMPLETED,
+                    tenant_id=self.tenant_id,
+                    resource_type="lead_bulk_update",
+                    resource_id=operation_id,
+                    actor_id=self.user_id,
+                    payload={
+                        "requested_count": len(normalized_ids),
+                        "changed_count": len(changed_ids),
+                        "changed_fields": changed_fields,
+                    },
+                )
+            )
+            reservation.complete(status=200, body=result)
+        return result
+
     async def duplicates(self, lead_id: UUID) -> list[dict[str, Any]]:
         from infrastructure.database.models.leads import Lead
         from infrastructure.database.repositories.base import TenantRepository

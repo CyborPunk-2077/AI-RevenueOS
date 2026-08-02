@@ -60,6 +60,7 @@ INTEGRATION_CONFIGURED: Final = "integration.configured"
 INTEGRATION_UPDATED: Final = "integration.updated"
 SUPPORT_ACCESS_GRANTED: Final = "support.access_granted"
 SUPPORT_ACCESS_REVOKED: Final = "support.access_revoked"
+BULK_OPERATION_COMPLETED: Final = "bulk.operation.completed"
 CONVERSATION_ASSIGNED: Final = "conversation.assigned"
 CONVERSATION_RESOLVED: Final = "conversation.resolved"
 MESSAGE_QUEUED: Final = "message.queued"
@@ -141,6 +142,7 @@ INTERNAL_EVENT_TYPES: Final[frozenset[str]] = frozenset(
         INTEGRATION_UPDATED,
         SUPPORT_ACCESS_GRANTED,
         SUPPORT_ACCESS_REVOKED,
+        BULK_OPERATION_COMPLETED,
     }
 )
 
