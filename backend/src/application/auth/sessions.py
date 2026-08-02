@@ -86,6 +86,8 @@ async def list_sessions(
 
 async def revoke_session(*, tenant_id: UUID, user_id: UUID, family_id: str) -> dict[str, Any]:
     """Revoke one family. Scoped to the caller's own user id, so this is not an IDOR."""
+    from application.audit.recorder import AuditRecorder
+
     try:
         family = UUID(family_id)
     except ValueError as exc:
@@ -115,6 +117,15 @@ async def revoke_session(*, tenant_id: UUID, user_id: UUID, family_id: str) -> d
             row.revoked_at = utcnow()
             row.revoked_reason = "user_revoked"
             revoked_jtis.append(row.jti)
+        AuditRecorder(session).record(
+            action="auth.session_revoked",
+            resource_type="auth_session",
+            resource_id=family,
+            tenant_id=tenant_id,
+            actor_id=user_id,
+            new_values={"tokens_revoked": len(revoked_jtis)},
+            metadata={"reason": "user_revoked"},
+        )
 
     await revoke_access_jtis(revoked_jtis)
     logger.info("auth_session_revoked", user_id=str(user_id), family_id=family_id)
@@ -125,6 +136,8 @@ async def revoke_all(
     *, tenant_id: UUID, user_id: UUID, reason: str = "logout_all", keep_family: str = ""
 ) -> dict[str, Any]:
     """Drop every session for the user, optionally sparing the current one."""
+    from application.audit.recorder import AuditRecorder
+
     revoked_jtis: list[str] = []
     async with tenant_session(tenant_id) as session:
         rows = (
@@ -144,6 +157,15 @@ async def revoke_all(
             row.revoked_at = utcnow()
             row.revoked_reason = reason
             revoked_jtis.append(row.jti)
+        AuditRecorder(session).record(
+            action="auth.logout",
+            resource_type="user",
+            resource_id=user_id,
+            tenant_id=tenant_id,
+            actor_id=user_id,
+            new_values={"sessions_revoked": len(revoked_jtis)},
+            metadata={"reason": reason, "kept_current_family": bool(keep_family)},
+        )
 
     await revoke_access_jtis(revoked_jtis)
     logger.info("auth_logout_all", user_id=str(user_id), revoked=len(revoked_jtis))
@@ -158,6 +180,8 @@ async def enforce_session_cap(*, tenant_id: UUID, user_id: UUID) -> int:
     family; the helper's contract is "return what to drop to make room for one
     more", which is why it is invoked before the insert.
     """
+    from application.audit.recorder import AuditRecorder
+
     evicted_jtis: list[str] = []
     async with tenant_session(tenant_id) as session:
         rows = (
@@ -191,6 +215,15 @@ async def enforce_session_cap(*, tenant_id: UUID, user_id: UUID) -> int:
                 row.revoked_at = utcnow()
                 row.revoked_reason = "session_cap"
                 evicted_jtis.append(row.jti)
+        AuditRecorder(session).record(
+            action="auth.session_revoked",
+            resource_type="user",
+            resource_id=user_id,
+            tenant_id=tenant_id,
+            actor_type="system",
+            new_values={"families_evicted": len(doomed)},
+            metadata={"reason": "session_cap"},
+        )
 
     await revoke_access_jtis(evicted_jtis)
     logger.info("auth_session_cap_evicted", user_id=str(user_id), families=len(doomed))
