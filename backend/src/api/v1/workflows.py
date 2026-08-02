@@ -10,8 +10,7 @@ from fastapi import APIRouter, Request
 from api.app.envelope import success
 from api.deps.principal import CurrentPrincipal
 from api.v1.schemas import WorkflowPublishRequest, WorkflowValidateRequest
-from domain.workflows.dsl import DslValidationError, compile_workflow, validate_workflow
-from shared.exceptions import ValidationError
+from domain.workflows.dsl import validate_workflow
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
@@ -30,22 +29,16 @@ async def publish(
     payload: WorkflowPublishRequest, request: Request, principal: CurrentPrincipal
 ) -> dict[str, Any]:
     principal.require("workflow", "update")
-    try:
-        plan = compile_workflow(payload.document)
-    except DslValidationError as exc:
-        raise ValidationError(
-            "The workflow document failed validation.",
-            details={"problems": exc.problems},
-        ) from exc
+    from application.workflows.service import publish_workflow
+
+    published = await publish_workflow(
+        document=payload.document,
+        changelog=payload.changelog,
+        tenant_id=principal.tenant_id,
+        actor_id=principal.user_id,
+    )
     return success(
-        {
-            "content_hash": plan["content_hash"],
-            "entry_nodes": plan["entry_nodes"],
-            "external_effect_nodes": plan["external_effect_nodes"],
-            "global_policy": plan["global_policy"],
-            "status": "published",
-            "changelog": payload.changelog,
-        },
+        published,
         request_id=getattr(request.state, "correlation_id", None),
     )
 

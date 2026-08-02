@@ -106,6 +106,22 @@ async def execute_workflow(
         execution.error = result.error
         if result.state in (ExecutionState.COMPLETED, ExecutionState.FAILED):
             execution.finished_at = utcnow()
+        from application.audit.recorder import AuditRecorder
+
+        AuditRecorder(session).record(
+            action="workflow.executed",
+            resource_type="workflow_execution",
+            resource_id=execution.id,
+            tenant_id=tenant_id,
+            actor_type="worker",
+            outcome=result.state.value,
+            new_values={
+                "workflow_id": str(execution.workflow_id),
+                "version_id": str(execution.version_id),
+                "state": result.state.value,
+                "is_dry_run": execution.is_dry_run,
+            },
+        )
 
     payload: dict[str, Any] = result.to_dict()
     return payload

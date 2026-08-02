@@ -211,8 +211,23 @@ class TestWorkflowApiSafety:
         assert response.json()["error"]["details"]["problems"]
 
     def test_publishing_returns_a_pinned_content_hash(
-        self, client: TestClient, auth_headers: dict
+        self,
+        client: TestClient,
+        auth_headers: dict,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        from domain.workflows.dsl import compile_workflow
+
+        async def publish(**kwargs: object) -> dict[str, object]:
+            plan = compile_workflow(kwargs["document"])  # type: ignore[arg-type]
+            return {
+                "status": "published",
+                "content_hash": plan["content_hash"],
+                "workflow_id": "workflow-1",
+                "version_id": "version-1",
+            }
+
+        monkeypatch.setattr("application.workflows.service.publish_workflow", publish)
         body = client.post(
             "/v1/workflows/publish",
             headers=auth_headers,
