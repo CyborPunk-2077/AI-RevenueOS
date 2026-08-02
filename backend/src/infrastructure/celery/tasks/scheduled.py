@@ -105,7 +105,7 @@ async def process_due_work(_context: TaskContext) -> dict[str, Any]:
 
 @airev_task("scheduled.rollup_metrics", tenant_scoped=False, max_attempts=2)
 async def rollup_metrics(_context: TaskContext) -> dict[str, Any]:
-    """Refresh queue gauges every 15 minutes so alerts have current signal."""
+    """Refresh queue gauges and tenant analytics materializations."""
     from sqlalchemy import func, select
 
     from infrastructure.database.models.audit import EventOutbox
@@ -122,7 +122,43 @@ async def rollup_metrics(_context: TaskContext) -> dict[str, Any]:
     outbox_pending.set(float(pending))
 
     depths = await queue_depths()
-    return {"outbox_pending": int(pending), "queue_depths": depths}
+
+    # The outbox is intentionally platform-readable and is therefore a safe way
+    # to discover tenants with recent activity. Each materialization then binds
+    # that tenant before reading business rows, so worker analytics receives the
+    # same forced-RLS protection as HTTP reads.
+    from datetime import UTC, datetime
+    from zoneinfo import ZoneInfo
+
+    from sqlalchemy import distinct
+
+    from application.analytics.service import RollupService
+    from shared.settings import get_settings
+
+    today = datetime.now(UTC).astimezone(ZoneInfo(get_settings().default_timezone)).date()
+    async with unscoped_session() as session:
+        tenant_ids = list(
+            (
+                await session.execute(
+                    select(distinct(EventOutbox.tenant_id)).where(
+                        EventOutbox.tenant_id.is_not(None),
+                        EventOutbox.occurred_at
+                        >= datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0),
+                    )
+                )
+            ).scalars()
+        )
+    refreshed = 0
+    for tenant_id in tenant_ids:
+        if tenant_id is None:  # narrowed for the type checker; SQL already excludes it
+            continue
+        await RollupService(tenant_id).refresh_day(today)
+        refreshed += 1
+    return {
+        "outbox_pending": int(pending),
+        "queue_depths": depths,
+        "analytics_tenants_refreshed": refreshed,
+    }
 
 
 async def queue_depths() -> dict[str, int]:

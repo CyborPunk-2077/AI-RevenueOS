@@ -331,8 +331,10 @@ cancelled slot that stays locked can never be rebooked); rescheduling moves it.
 Calendar sync stays gated on Google OAuth verification and `calendar_event_id`
 stays null.
 
-**Still open under P0-4:** documents and files, analytics. Two modules, and the
-pattern to copy is now established six times over.
+**P0-4 is complete:** documents/files and analytics now follow the same scoped
+service, permission, RLS, audit/outbox and real-Postgres proof pattern. Storage-
+backed upload and export transports remain external P0-5 activation gates; their
+disabled paths never return placeholder files, keys or URLs.
 
 ---
 

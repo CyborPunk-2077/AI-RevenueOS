@@ -17,7 +17,14 @@ export function WorkspaceShell({
 }: {
   tenantSlug: string;
   email: string;
-  active: 'leads' | 'contacts' | 'accounts' | 'deals' | 'inbox' | 'appointments';
+  active:
+    | 'leads'
+    | 'contacts'
+    | 'accounts'
+    | 'deals'
+    | 'inbox'
+    | 'appointments'
+    | 'analytics';
   children: React.ReactNode;
 }): JSX.Element {
   const tabs = [
@@ -27,6 +34,7 @@ export function WorkspaceShell({
     { key: 'deals', href: '/deals', label: 'Deals' },
     { key: 'inbox', href: '/inbox', label: 'Inbox' },
     { key: 'appointments', href: '/appointments', label: 'Appointments' },
+    { key: 'analytics', href: '/analytics', label: 'Analytics' },
   ] as const;
 
   return (
@@ -37,7 +45,7 @@ export function WorkspaceShell({
             <Link href="/leads" className="font-semibold">
               AI RevenueOS
             </Link>
-            <nav aria-label="Sections" className="flex gap-4 text-sm">
+            <nav aria-label="Sections" className="flex flex-wrap gap-4 text-sm">
               {tabs.map((tab) => (
                 <Link
                   key={tab.key}

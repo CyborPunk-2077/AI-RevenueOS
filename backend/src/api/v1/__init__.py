@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.app.settings import Settings
-from api.v1 import ai, auth, crm, leads, meta, public, tenant, webhooks, workflows
+from api.v1 import ai, analytics, auth, crm, leads, meta, public, tenant, webhooks, workflows
 
 
 def build_v1_router(settings: Settings) -> APIRouter:
@@ -20,6 +20,7 @@ def build_v1_router(settings: Settings) -> APIRouter:
     router.include_router(crm.appointments_router)
     router.include_router(crm.files_router)
     router.include_router(crm.documents_router)
+    router.include_router(analytics.router)
     router.include_router(meta.router)
     router.include_router(tenant.router)
     router.include_router(leads.router)
