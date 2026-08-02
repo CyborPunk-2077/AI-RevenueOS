@@ -1,0 +1,100 @@
+groups:
+  - name: airevenueos-api
+    rules:
+      - alert: AirevApiP95LatencyWarning
+        expr: histogram_quantile(0.95, sum by (le) (rate(airev_http_request_seconds_bucket[5m]))) > 0.5
+        for: 10m
+        labels: {severity: warning, owner: platform-team}
+        annotations:
+          summary: API P95 latency exceeds 500 ms
+          runbook: docs/runbooks/alerts.md#api-latency-or-error-rate
+      - alert: AirevApiP95LatencyCritical
+        expr: histogram_quantile(0.95, sum by (le) (rate(airev_http_request_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: {severity: critical, owner: platform-team}
+        annotations:
+          summary: API P95 latency exceeds 1 second
+          runbook: docs/runbooks/alerts.md#api-latency-or-error-rate
+      - alert: AirevApiErrorRateHigh
+        expr: sum(rate(airev_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(airev_http_requests_total[5m])), 1) > 0.02
+        for: 5m
+        labels: {severity: critical, owner: platform-team}
+        annotations:
+          summary: API 5xx rate exceeds 2 percent
+          runbook: docs/runbooks/alerts.md#api-latency-or-error-rate
+
+  - name: airevenueos-workers
+    rules:
+      - alert: AirevQueueDepthWarning
+        expr: airev_queue_depth > 100
+        for: 10m
+        labels: {severity: warning, owner: platform-team}
+        annotations:
+          summary: Worker queue depth exceeds 100 tasks
+          runbook: docs/runbooks/alerts.md#queue-depth-or-age
+      - alert: AirevQueueDepthCritical
+        expr: airev_queue_depth > 1000
+        for: 5m
+        labels: {severity: critical, owner: platform-team}
+        annotations:
+          summary: Worker queue depth exceeds 1000 tasks
+          runbook: docs/runbooks/alerts.md#queue-depth-or-age
+      - alert: AirevQueueAgeWarning
+        expr: airev_queue_age_seconds > 60
+        for: 5m
+        labels: {severity: warning, owner: platform-team}
+        annotations:
+          summary: Oldest queued task is more than 60 seconds old
+          runbook: docs/runbooks/alerts.md#queue-depth-or-age
+      - alert: AirevQueueAgeCritical
+        expr: airev_queue_age_seconds > 300
+        for: 5m
+        labels: {severity: critical, owner: platform-team}
+        annotations:
+          summary: Oldest queued task is more than five minutes old
+          runbook: docs/runbooks/alerts.md#queue-depth-or-age
+      - alert: AirevDeadLettersPresent
+        expr: airev_dlq_size > 0
+        for: 5m
+        labels: {severity: critical, owner: platform-team}
+        annotations:
+          summary: A worker queue contains dead letters
+          runbook: docs/runbooks/alerts.md#dead-letters
+      - alert: AirevWorkerHeartbeatMissing
+        expr: time() - airev_worker_heartbeat_timestamp > 60
+        for: 2m
+        labels: {severity: critical, owner: platform-team}
+        annotations:
+          summary: Worker heartbeat is more than 60 seconds old
+          runbook: docs/runbooks/alerts.md#worker-heartbeat
+
+  - name: airevenueos-providers-and-security
+    rules:
+      - alert: AirevProviderCircuitOpen
+        expr: airev_circuit_state >= 2
+        for: 5m
+        labels: {severity: warning, owner: integrations-team}
+        annotations:
+          summary: Provider circuit breaker is open
+          runbook: docs/runbooks/alerts.md#provider-circuit-or-ai-errors
+      - alert: AirevAiProviderErrorRateHigh
+        expr: sum(rate(airev_provider_calls_total{outcome="error"}[10m])) / clamp_min(sum(rate(airev_provider_calls_total[10m])), 1) > 0.02
+        for: 10m
+        labels: {severity: warning, owner: ai-team}
+        annotations:
+          summary: AI provider error rate exceeds 2 percent
+          runbook: docs/runbooks/alerts.md#provider-circuit-or-ai-errors
+      - alert: AirevAiBudgetAtEightyPercent
+        expr: airev_ai_budget_utilization_ratio >= 0.8
+        for: 15m
+        labels: {severity: warning, owner: ai-team}
+        annotations:
+          summary: Tenant AI token budget is at least 80 percent consumed
+          runbook: docs/runbooks/alerts.md#ai-budget
+      - alert: AirevTenantIsolationViolation
+        expr: increase(airev_tenant_isolation_violations_total[5m]) > 0
+        for: 0m
+        labels: {severity: critical, owner: security-team}
+        annotations:
+          summary: A tenant-isolation enforcement violation occurred
+          runbook: docs/runbooks/alerts.md#tenant-isolation

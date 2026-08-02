@@ -34,6 +34,10 @@ variable "image_digest" {
 
 variable "certificate_arn" { type = string }
 
+resource "aws_sns_topic" "alerts" {
+  name = "airevenueos-prod-alerts"
+}
+
 module "network" {
   source      = "../../modules/network"
   environment = "prod"
@@ -47,6 +51,7 @@ module "data" {
   data_security_group_id = module.network.data_security_group_id
   instance_class         = "db.r6g.xlarge"
   multi_az               = true
+  alarm_topic_arn        = aws_sns_topic.alerts.arn
 }
 
 module "edge" {
@@ -56,6 +61,7 @@ module "edge" {
   public_subnet_ids     = module.network.public_subnet_ids
   alb_security_group_id = module.network.alb_security_group_id
   certificate_arn       = var.certificate_arn
+  alarm_topic_arn       = aws_sns_topic.alerts.arn
 }
 
 # Cost guardrails.
@@ -71,9 +77,16 @@ resource "aws_budgets_budget" "monthly" {
     threshold                  = 80
     threshold_type             = "PERCENTAGE"
     notification_type          = "FORECASTED"
-    subscriber_email_addresses = ["platform@airevenueos.io"]
+    subscriber_sns_topic_arns = [aws_sns_topic.alerts.arn]
   }
 }
 
 output "alb_dns_name" { value = module.edge.alb_dns_name }
-output "db_endpoint" { value = module.data.db_endpoint, sensitive = true }
+output "db_endpoint" {
+  value     = module.data.db_endpoint
+  sensitive = true
+}
+output "alert_topic_arn" {
+  description = "Subscribe the production PagerDuty/SNS integration during activation."
+  value       = aws_sns_topic.alerts.arn
+}

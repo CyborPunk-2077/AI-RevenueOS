@@ -91,6 +91,7 @@ async def _check_budget(tenant_id: Any, tokens: int) -> tuple[bool, int]:
     from domain.tenants.entitlements import PLANS, PlanCode
     from infrastructure.database.models.ai import AiUsageRecord
     from infrastructure.database.session import tenant_session
+    from infrastructure.monitoring.metrics import ai_budget_utilization_ratio
     from shared.utils.timeutil import utcnow
 
     budget = PLANS[PlanCode.STARTER].ai_token_budget_monthly
@@ -108,4 +109,6 @@ async def _check_budget(tenant_id: Any, tokens: int) -> tuple[bool, int]:
             ).scalar_one()
     except Exception:
         return True, budget
-    return int(used) < budget, max(0, budget - int(used))
+    used_tokens = int(used) + max(0, tokens)
+    ai_budget_utilization_ratio.labels(tenant_id=str(tenant_id)).set(min(1.0, used_tokens / budget))
+    return used_tokens < budget, max(0, budget - used_tokens)

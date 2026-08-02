@@ -7,8 +7,14 @@ terraform {
 }
 
 variable "environment" { type = string }
-variable "cidr_block" { type = string, default = "10.0.0.0/16" }
-variable "azs" { type = list(string), default = ["ap-south-1a", "ap-south-1b", "ap-south-1c"] }
+variable "cidr_block" {
+  type    = string
+  default = "10.0.0.0/16"
+}
+variable "azs" {
+  type    = list(string)
+  default = ["ap-south-1a", "ap-south-1b", "ap-south-1c"]
+}
 
 locals {
   name = "airevenueos-${var.environment}"

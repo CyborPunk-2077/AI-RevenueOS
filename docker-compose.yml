@@ -55,6 +55,9 @@ services:
       # `assert_production_safe` refuses to boot outside `local` without a real
       # one from KMS or Secrets Manager.
       ENCRYPTION_MASTER_KEY: local_development_only_master_key_32_bytes_min
+      # Prometheus runs only under the optional `monitoring` profile. Compose
+      # networks use RFC1918 ranges; the endpoint remains unavailable publicly.
+      METRICS_ALLOWED_CIDRS: 127.0.0.1/32,10.0.0.0/8,172.16.0.0/12
     ports: ["8000:8000"]
     volumes: ["./backend:/app"]
     depends_on:
@@ -179,6 +182,19 @@ services:
       NODES_EXCLUDE: '["n8n-nodes-base.executeCommand","n8n-nodes-base.readWriteFile","n8n-nodes-base.postgres","n8n-nodes-base.mySql","n8n-nodes-base.ssh","n8n-nodes-base.httpRequest"]'
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "true"
     ports: ["5678:5678"]
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    profiles: ["monitoring"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports: ["9090:9090"]
+    depends_on:
+      api: {condition: service_healthy}
 
 volumes:
   pgdata:

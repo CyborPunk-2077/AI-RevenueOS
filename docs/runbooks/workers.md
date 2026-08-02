@@ -131,6 +131,6 @@ on a cache outage would be worse than a rare duplicate an idempotent consumer ab
 `airev_queue_depth{queue}`, `airev_dlq_size{queue}`,
 `airev_outbox_pending`, `airev_tenant_isolation_violations{surface}`.
 
-Alert rules are **not yet defined** — see P1-3 in `docs/RELEASE-BLOCKERS.md`.
-At minimum, alert on: `tenant_isolation_violations` above zero (P1, always),
-queue age, DLQ growth rate, and a heartbeat older than 60 s.
+Executable rules are in `infra/monitoring/alerts.yml`; response steps are in
+`docs/runbooks/alerts.md`. Tenant-isolation violations page immediately, while
+queue age, DLQ presence and a heartbeat older than 60 seconds identify the pool.

@@ -67,6 +67,12 @@ ai_cost_micro_inr = Counter(
 ai_guard_blocks = Counter(
     "airev_ai_guard_blocks_total", "AI guard blocks", ["guard", "reason"], registry=REGISTRY
 )
+ai_budget_utilization_ratio = Gauge(
+    "airev_ai_budget_utilization_ratio",
+    "Tenant monthly AI token budget utilization from 0 to 1",
+    ["tenant_id"],
+    registry=REGISTRY,
+)
 
 workflow_executions = Counter(
     "airev_workflow_executions_total", "Workflow executions", ["outcome"], registry=REGISTRY
