@@ -141,6 +141,7 @@ class WorkflowApproval(IdMixin, TimestampMixin, Base):
     __tablename__ = "workflow_approvals"
     __table_args__ = (
         CheckConstraint(f"state IN {APPROVAL_STATES}", name="state_valid"),
+        UniqueConstraint("execution_id", "node_id", name="execution_node_approval"),
         {"schema": SCHEMA_APP},
     )
 

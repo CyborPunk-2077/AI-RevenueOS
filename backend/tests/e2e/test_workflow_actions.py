@@ -3,13 +3,15 @@ from __future__ import annotations
 from datetime import timedelta
 from types import SimpleNamespace
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import func, select
 
 from application.workflows.actions import action_correlation
+from application.workflows.approvals import decide_approval, list_pending_approvals
 from application.workflows.executor import TerminalActionError
+from application.workflows.triggers import handle_domain_event
 from domain.workflows.dsl import compile_workflow
 from infrastructure.celery.context import TaskContext
 from infrastructure.celery.tasks.workflow import (
@@ -27,6 +29,7 @@ from infrastructure.database.models.users import (
     UserRole,
 )
 from infrastructure.database.models.workflows import (
+    WorkflowApproval,
     WorkflowDefinition,
     WorkflowExecution,
     WorkflowNodeExecution,
@@ -296,3 +299,208 @@ async def test_delay_resumes_from_durable_successors_and_persists_nodes(
             ("wait", "completed"),
             ("create-task", "completed"),
         }
+
+
+@pytest.mark.postgres
+async def test_domain_event_creates_one_durable_matching_execution(
+    wired_engine: Any, seeded_tenants: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tenant_a, tenant_b = seeded_tenants
+    workflow_id, _ = await _authority(tenant_a, "task:create")
+    document = {
+        "name": f"Contact trigger {uuid4().hex}",
+        "category": "custom",
+        "trigger": {"type": "entity.created", "entity": "contact"},
+        "nodes": [
+            {
+                "id": "create-task",
+                "type": "action",
+                "action": "task.create",
+                "inputs": {"title": "Triggered task"},
+            }
+        ],
+        "edges": [],
+    }
+    plan = compile_workflow(document)
+    version_id = uuid7()
+    async with tenant_session(tenant_a) as session:
+        definition = await session.get(WorkflowDefinition, workflow_id)
+        assert definition is not None
+        definition.active_version_id = version_id
+        session.add(
+            WorkflowVersion(
+                id=version_id,
+                tenant_id=tenant_a,
+                workflow_id=workflow_id,
+                version=1,
+                content=document,
+                content_hash=plan["content_hash"],
+                status="published",
+                published_at=utcnow(),
+                created_by=definition.created_by,
+            )
+        )
+
+    dispatched: list[tuple[list[str], dict[str, Any]]] = []
+
+    def capture(*, args: list[str], headers: dict[str, Any]) -> None:
+        dispatched.append((args, headers))
+
+    from infrastructure.celery.tasks.workflow import execute_workflow
+
+    monkeypatch.setattr(execute_workflow, "apply_async", capture)
+    event_id = uuid7()
+    payload = {
+        "event_id": str(event_id),
+        "event_type": "contact.created",
+        "tenant_id": str(tenant_a),
+        "correlation_id": "trigger-test",
+        "resource": {"type": "contact", "id": str(uuid7())},
+        "data": {"first_name": "Triggered"},
+    }
+    await handle_domain_event(payload)
+    await handle_domain_event(payload)
+    await handle_domain_event(
+        {
+            **payload,
+            "event_id": str(uuid7()),
+            "event_type": "lead.created",
+            "resource": {"type": "lead", "id": str(uuid7())},
+        }
+    )
+
+    async with tenant_session(tenant_a) as session:
+        executions = list(
+            (
+                await session.execute(
+                    select(WorkflowExecution).where(WorkflowExecution.workflow_id == workflow_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        starts = await session.scalar(
+            select(func.count())
+            .select_from(EventOutbox)
+            .where(EventOutbox.event_type == "workflow.execution_started")
+            .where(EventOutbox.resource_id == executions[0].id)
+        )
+        assert len(executions) == starts == 1
+        assert executions[0].trigger_event_id == event_id
+        assert executions[0].context["entity"]["first_name"] == "Triggered"
+    async with tenant_session(tenant_b) as session:
+        assert await session.scalar(select(func.count()).select_from(WorkflowExecution)) == 0
+    ours = [item for item in dispatched if item[0] == [str(executions[0].id)]]
+    assert len(ours) == 2
+    assert all(item[1]["airev_tenant_id"] == str(tenant_a) for item in ours)
+
+
+@pytest.mark.postgres
+async def test_approval_is_durable_assignee_bound_and_resumes_once(
+    wired_engine: Any, seeded_tenants: Any
+) -> None:
+    tenant_a, tenant_b = seeded_tenants
+    workflow_id, _ = await _authority(tenant_a, "task:create")
+    title = f"Approved task {uuid4().hex}"
+    document = {
+        "name": f"Approval {uuid4().hex}",
+        "category": "custom",
+        "trigger": {"type": "manual"},
+        "nodes": [
+            {
+                "id": "manager-approval",
+                "type": "approval",
+                "strategy": "any",
+                "assignees": ["role:manager"],
+                "summary": "Approve the task",
+            },
+            {
+                "id": "create-task",
+                "type": "action",
+                "action": "task.create",
+                "inputs": {"title": title},
+            },
+        ],
+        "edges": [{"source": "manager-approval", "target": "create-task"}],
+    }
+    plan = compile_workflow(document)
+    version_id, execution_id = uuid7(), uuid7()
+    async with tenant_session(tenant_a) as session:
+        definition = await session.get(WorkflowDefinition, workflow_id)
+        assert definition is not None
+        definition.active_version_id = version_id
+        session.add(
+            WorkflowVersion(
+                id=version_id,
+                tenant_id=tenant_a,
+                workflow_id=workflow_id,
+                version=1,
+                content=document,
+                content_hash=plan["content_hash"],
+                status="published",
+                published_at=utcnow(),
+                created_by=definition.created_by,
+            )
+        )
+        session.add(
+            WorkflowExecution(
+                id=execution_id,
+                tenant_id=tenant_a,
+                workflow_id=workflow_id,
+                version_id=version_id,
+                content_hash=plan["content_hash"],
+                trigger_type="manual",
+                trigger_payload={},
+                context={},
+                state="pending",
+                idempotency_key=f"manual:{execution_id}",
+            )
+        )
+
+    context = TaskContext(tenant_a, "approval-test", None, "scheduler")
+    waiting = await _execute_workflow_once(context, str(execution_id))
+    assert waiting["state"] == "waiting"
+    assert await _resume_execution_once(context, str(execution_id)) == {
+        "resumed": False,
+        "reason": "approval is not approved",
+    }
+
+    actor_id = uuid7()
+    principal = SimpleNamespace(tenant_id=tenant_a, user_id=actor_id, roles=("manager",))
+    other = SimpleNamespace(tenant_id=tenant_a, user_id=uuid7(), roles=("member",))
+    assigned = await list_pending_approvals(principal)
+    assert len(assigned) == 1
+    assert await list_pending_approvals(other) == []
+
+    result = await decide_approval(
+        approval_id=UUID(assigned[0]["id"]),
+        decision="approved",
+        comment="Approved in test",
+        principal=principal,
+    )
+    duplicate = await decide_approval(
+        approval_id=UUID(assigned[0]["id"]),
+        decision="approved",
+        comment="Approved in test",
+        principal=principal,
+    )
+    assert result["resume"] is True and result["state"] == "approved"
+    assert duplicate["duplicate"] is True
+
+    completed = await _resume_execution_once(context, str(execution_id))
+    assert completed["state"] == "completed"
+    async with tenant_session(tenant_a) as session:
+        assert (
+            await session.scalar(select(func.count()).select_from(Task).where(Task.title == title))
+            == 1
+        )
+        approval = await session.get(WorkflowApproval, UUID(assigned[0]["id"]))
+        assert approval is not None and approval.resolved_at is not None
+        approval_events = await session.scalar(
+            select(func.count())
+            .select_from(EventOutbox)
+            .where(EventOutbox.resource_id == approval.id)
+        )
+        assert approval_events == 2
+    async with tenant_session(tenant_b) as session:
+        assert await session.get(WorkflowApproval, UUID(assigned[0]["id"])) is None

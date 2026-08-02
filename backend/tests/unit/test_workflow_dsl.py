@@ -206,6 +206,29 @@ class TestNodeTypeRules:
         doc = wf(nodes=[{"id": "n1", "type": "approval"}], edges=[])
         assert validate_workflow(doc).valid is False
 
+    @pytest.mark.parametrize(
+        "node",
+        [
+            {"id": "n1", "type": "approval", "assignees": ["role:owner"], "strategy": "veto"},
+            {
+                "id": "n1",
+                "type": "approval",
+                "assignees": ["role:owner"],
+                "strategy": "quorum",
+                "quorum": 2,
+            },
+            {
+                "id": "n1",
+                "type": "approval",
+                "assignees": ["role:owner"],
+                "strategy": "quorum",
+                "quorum": 0,
+            },
+        ],
+    )
+    def test_approval_strategy_and_quorum_are_validated(self, node: dict[str, object]) -> None:
+        assert validate_workflow(wf(nodes=[node], edges=[])).valid is False
+
     def test_condition_operator_validation(self) -> None:
         good = wf(
             nodes=[

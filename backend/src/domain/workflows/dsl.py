@@ -385,8 +385,20 @@ def validate_workflow(doc: dict[str, Any]) -> ValidationReport:
                 problems.append(f"{path}: unsupported parallel join '{join}'")
         elif node_type is NodeType.APPROVAL:
             approvals.append(node_id)
-            if not node.get("assignees"):
+            assignees = node.get("assignees")
+            if not isinstance(assignees, list) or not assignees:
                 problems.append(f"{path}: approval node requires assignees")
+            strategy = str(node.get("strategy") or "any")
+            if strategy not in {"any", "all", "quorum"}:
+                problems.append(f"{path}: unsupported approval strategy '{strategy}'")
+            quorum = node.get("quorum", 1)
+            if strategy == "quorum" and (
+                not isinstance(quorum, int)
+                or quorum < 1
+                or not isinstance(assignees, list)
+                or quorum > len(assignees)
+            ):
+                problems.append(f"{path}: approval quorum must fit the assignee count")
 
         for key, value in (node.get("inputs") or {}).items():
             if isinstance(value, str) and "{{" in value:

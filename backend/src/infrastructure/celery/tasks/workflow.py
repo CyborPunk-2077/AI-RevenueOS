@@ -64,7 +64,7 @@ async def _execute_workflow_once(
         ).scalar_one_or_none()
         if execution is None:
             raise NotFound("Workflow execution not found.")
-        if execution.state in ("completed", "cancelled"):
+        if execution.state in ("completed", "failed", "cancelled"):
             return {"state": execution.state, "duplicate": True}
 
         version = (
@@ -152,6 +152,14 @@ async def _execute_workflow_once(
             },
         )
         await _persist_nodes(session, tenant_id, UUID(execution_id), plan_source, result.nodes)
+        await _persist_approval(
+            session,
+            tenant_id,
+            UUID(execution_id),
+            plan_source,
+            result.waiting_on,
+            correlation,
+        )
 
     payload: dict[str, Any] = result.to_dict()
     return payload
@@ -178,6 +186,20 @@ async def _resume_execution_once(context: TaskContext, execution_id: str) -> dic
         ).scalar_one_or_none()
         if execution is None or execution.state != "waiting":
             return {"resumed": False}
+        waiting_on = str((execution.context or {}).get("waiting_on") or "")
+        if waiting_on:
+            from infrastructure.database.models.workflows import WorkflowApproval
+
+            approval = (
+                await session.execute(
+                    select(WorkflowApproval).where(
+                        WorkflowApproval.execution_id == execution.id,
+                        WorkflowApproval.node_id == waiting_on,
+                    )
+                )
+            ).scalar_one_or_none()
+            if approval is not None and approval.state != "approved":
+                return {"resumed": False, "reason": "approval is not approved"}
         resume_from = list((execution.context or {}).get("resume_nodes") or [])
         if not resume_from:
             return {"resumed": False, "reason": "no durable continuation"}
@@ -236,6 +258,91 @@ async def _persist_nodes(
                 },
             )
         )
+
+
+async def _persist_approval(
+    session: Any,
+    tenant_id: UUID,
+    execution_id: UUID,
+    plan_source: dict[str, Any],
+    waiting_on: str | None,
+    correlation_id: str | None,
+) -> None:
+    if not waiting_on:
+        return
+    node = next(
+        (item for item in plan_source.get("nodes", []) if str(item.get("id")) == waiting_on),
+        None,
+    )
+    if not isinstance(node, dict) or node.get("type") != "approval":
+        return
+
+    from datetime import timedelta
+
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from application.audit.recorder import AuditRecorder
+    from domain.base import DomainEvent
+    from domain.events.catalog import APPROVAL_REQUESTED
+    from infrastructure.database.models.audit import EventOutbox
+    from infrastructure.database.models.workflows import WorkflowApproval
+    from shared.utils.ids import uuid7
+    from shared.utils.timeutil import utcnow
+
+    approval_id = uuid7()
+    due_seconds = int(node.get("due_seconds") or 0)
+    inserted = await session.execute(
+        pg_insert(WorkflowApproval)
+        .values(
+            id=approval_id,
+            tenant_id=tenant_id,
+            execution_id=execution_id,
+            node_id=waiting_on,
+            state="requested",
+            strategy=str(node.get("strategy") or "any"),
+            quorum=int(node.get("quorum") or 1),
+            assignees=[str(value) for value in node.get("assignees", [])],
+            decisions=[],
+            summary=str(node.get("summary") or "Workflow approval required")[:1000],
+            due_at=utcnow() + timedelta(seconds=due_seconds) if due_seconds > 0 else None,
+            timeout_path=node.get("timeout_path"),
+        )
+        .on_conflict_do_nothing(index_elements=["execution_id", "node_id"])
+        .returning(WorkflowApproval.id)
+    )
+    created_id = inserted.scalar_one_or_none()
+    if created_id is None:
+        return
+    AuditRecorder(session).record(
+        action="workflow.approval_requested",
+        resource_type="workflow_approval",
+        resource_id=created_id,
+        tenant_id=tenant_id,
+        actor_type="workflow",
+        new_values={"execution_id": str(execution_id), "node_id": waiting_on},
+    )
+    event = DomainEvent(
+        event_type=APPROVAL_REQUESTED,
+        tenant_id=tenant_id,
+        resource_type="workflow_approval",
+        resource_id=created_id,
+        actor_type="workflow",
+        correlation_id=correlation_id,
+        payload={"execution_id": str(execution_id), "node_id": waiting_on},
+    )
+    session.add(
+        EventOutbox(
+            occurred_at=event.occurred_at,
+            event_id=event.event_id,
+            event_type=event.event_type,
+            tenant_id=event.tenant_id,
+            resource_type=event.resource_type,
+            resource_id=event.resource_id,
+            payload=event.to_outbox_payload(),
+            correlation_id=event.correlation_id,
+            attempts=0,
+        )
+    )
 
 
 async def _run_action(

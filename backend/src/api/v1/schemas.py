@@ -389,6 +389,11 @@ class WorkflowPublishRequest(StrictModel):
     changelog: Annotated[str, Field(max_length=2000)] = ""
 
 
+class WorkflowApprovalDecisionRequest(StrictModel):
+    decision: Literal["approved", "rejected"]
+    comment: Annotated[str, Field(max_length=1000)] = ""
+
+
 class TenantPatch(StrictModel):
     name: Annotated[str | None, Field(min_length=1, max_length=200)] = None
     timezone: Annotated[str | None, Field(max_length=64)] = None
