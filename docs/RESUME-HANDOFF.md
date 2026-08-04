@@ -21,8 +21,15 @@ Repository evidence overrides prior chat claims. Read
 recorded in `docs/IMPLEMENTATION-LOG.md`; the externally gated parts of P2-7 and
 P2-9 stay unclaimed until real access exists.
 
+**M06 team invitations is done** (migration `0011`, `application/auth/invitations.py`,
+`api/v1/users.py`, 28 tests). M05 app-shell route groups are still open: the web app
+has flat routes under `src/app/` rather than the `(auth)` / `(onboarding)` /
+`(dashboard)/[tenantSlug]` / `(fullscreen)` groups the specification describes, and
+no invitation UI exists yet.
+
 Next is the remaining specification gaps, in dependency order, inspecting current
-code before assuming anything is missing: app-shell and invitation gaps (M05-M06);
+code before assuming anything is missing: the M05 app-shell route tree and the
+invitation views;
 forms, import, dedupe and assignment gaps (M08); webchat (M11); extraction and RAG
 (M13); calendar and reminders (M14); gated channel providers (M15-M16); invoice and
 payment UX (M17); the workflow builder, schedules and logs (M18); reporting and

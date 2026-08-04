@@ -32,6 +32,26 @@ class RefreshRequest(StrictModel):
     refresh_token: Annotated[str, Field(min_length=8, max_length=512)]
 
 
+class InviteUserRequest(StrictModel):
+    email: Annotated[str, Field(min_length=3, max_length=320)]
+    # Not a free string: an unknown role would otherwise reach the service and be
+    # rejected there, one layer further from the caller than necessary.
+    role: Literal["owner", "admin", "manager", "member", "viewer"]
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return normalize_email(v)
+
+
+class AcceptInvitationRequest(StrictModel):
+    token: Annotated[str, Field(min_length=8, max_length=512)]
+    full_name: Annotated[str, Field(min_length=1, max_length=200)]
+    # The policy floor is 12; refusing an obviously short password here means it is
+    # never hashed.
+    password: Annotated[str, Field(min_length=12, max_length=256)]
+
+
 class SignupRequest(StrictModel):
     email: Annotated[str, Field(min_length=3, max_length=320)]
     # The policy floor is 12; enforcing a minimum here too means an obviously

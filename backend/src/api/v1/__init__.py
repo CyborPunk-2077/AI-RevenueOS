@@ -17,6 +17,7 @@ from api.v1 import (
     public,
     support,
     tenant,
+    users,
     webhooks,
     workflows,
 )
@@ -37,6 +38,7 @@ def build_v1_router(settings: Settings) -> APIRouter:
     router.include_router(analytics.router)
     router.include_router(meta.router)
     router.include_router(tenant.router)
+    router.include_router(users.router)
     router.include_router(leads.router)
     router.include_router(ai.router)
     router.include_router(workflows.router)

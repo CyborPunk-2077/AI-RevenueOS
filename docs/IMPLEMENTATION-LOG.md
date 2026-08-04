@@ -221,3 +221,37 @@ which could not fail.
 No AWS account exists, nothing has been applied, and no state bucket has been
 created. Gates 4.1 to 4.8 remain open.
 
+### M06 - team invitations (2026-08-04)
+
+`app.invitations` had been a SQLAlchemy model since 0001 with **no migration**, so
+a database built by `Base.metadata.create_all` had the table and a database
+upgraded through the revision chain did not. Nothing failed, because nothing wrote
+to it: there was no invitation service. Migration `0011` creates it with the
+tenant policy, a partial unique index over live rows, and the runtime grant.
+
+Three decisions worth recording:
+
+- **An invitation is not a membership.** Inviting writes a token row and nothing
+  else; the `users` row and its `user_roles` grant are written in the same
+  transaction as the acceptance. An abandoned invitation leaves no half-member
+  and consumes no seat.
+- **The inviter cannot exceed their own authority.** `ASSIGNABLE_ROLES` is the
+  single source of that rule, so an admin cannot mint an owner - otherwise one
+  request makes an admin a peer of the account holder.
+- **Acceptance happens before authentication**, so the token carries its tenant
+  (`<tenant_id>.<secret>`, the shape the verification and reset tokens already
+  use) and the lookup runs inside `tenant_session(...)` under the ordinary
+  isolation policy rather than through an elevated credential. Only the SHA-256 is
+  stored, and the row is found by hashing the whole string, so a forged tenant
+  prefix matches nothing.
+
+The two unauthenticated routes are rate limited by IP and answer identically for
+wrong, expired and already-used links: distinguishing them turns the endpoint into
+an oracle for enumerating invitations. Delivery is reported as `not_sent` because
+email remains externally gated (gate 1.4); the link is surfaced in local and test
+environments only.
+
+Coverage: 8 unit tests over the privilege ceiling, 13 real-Postgres E2E tests
+(durability, single-use, revocation, expiry and reissue, cross-tenant invisibility,
+forged prefix, audit rows), and 7 contract tests over RBAC and the open routes.
+
