@@ -49,7 +49,7 @@ class TestMerge:
         loser = await _lead(tenant_a)
 
         await lifecycle_ops.merge_leads(
-            tenant_id=tenant_a, _actor_id=uuid4(), survivor_id=survivor, loser_id=loser
+            tenant_id=tenant_a, actor_id=uuid4(), survivor_id=survivor, loser_id=loser
         )
 
         merged = await _get(tenant_a, loser)
@@ -66,7 +66,7 @@ class TestMerge:
         loser = await _lead(tenant_a, phone="+919812345678", last_name="Menonn")
 
         result = await lifecycle_ops.merge_leads(
-            tenant_id=tenant_a, _actor_id=uuid4(), survivor_id=survivor, loser_id=loser
+            tenant_id=tenant_a, actor_id=uuid4(), survivor_id=survivor, loser_id=loser
         )
 
         kept = await _get(tenant_a, survivor)
@@ -95,7 +95,7 @@ class TestMerge:
             )
 
         await lifecycle_ops.merge_leads(
-            tenant_id=tenant_a, _actor_id=uuid4(), survivor_id=survivor, loser_id=loser
+            tenant_id=tenant_a, actor_id=uuid4(), survivor_id=survivor, loser_id=loser
         )
 
         async with tenant_session(tenant_a) as session:
@@ -117,7 +117,7 @@ class TestMerge:
 
         with pytest.raises(Conflict):
             await lifecycle_ops.merge_leads(
-                tenant_id=tenant_a, _actor_id=uuid4(), survivor_id=survivor, loser_id=converted
+                tenant_id=tenant_a, actor_id=uuid4(), survivor_id=survivor, loser_id=converted
             )
 
     async def test_a_lead_cannot_be_merged_into_itself(
@@ -127,7 +127,7 @@ class TestMerge:
         lead = await _lead(tenant_a)
         with pytest.raises(ValidationError):
             await lifecycle_ops.merge_leads(
-                tenant_id=tenant_a, _actor_id=uuid4(), survivor_id=lead, loser_id=lead
+                tenant_id=tenant_a, actor_id=uuid4(), survivor_id=lead, loser_id=lead
             )
 
     async def test_merging_across_tenants_is_impossible(
@@ -139,7 +139,7 @@ class TestMerge:
 
         with pytest.raises(NotFound):
             await lifecycle_ops.merge_leads(
-                tenant_id=tenant_a, _actor_id=uuid4(), survivor_id=mine, loser_id=theirs
+                tenant_id=tenant_a, actor_id=uuid4(), survivor_id=mine, loser_id=theirs
             )
 
 
@@ -151,7 +151,7 @@ class TestDisqualifyAndRestore:
         lead = await _lead(tenant_a)
 
         result = await lifecycle_ops.disqualify_lead(
-            tenant_id=tenant_a, _actor_id=uuid4(), lead_id=lead, reason="Budget under 50k"
+            tenant_id=tenant_a, actor_id=uuid4(), lead_id=lead, reason="Budget under 50k"
         )
 
         assert result["status"] == "disqualified"
@@ -163,7 +163,7 @@ class TestDisqualifyAndRestore:
         lead = await _lead(tenant_a)
         with pytest.raises(ValidationError):
             await lifecycle_ops.disqualify_lead(
-                tenant_id=tenant_a, _actor_id=uuid4(), lead_id=lead, reason="  "
+                tenant_id=tenant_a, actor_id=uuid4(), lead_id=lead, reason="  "
             )
 
     async def test_restore_reopens_and_clears_the_reason(
@@ -172,11 +172,11 @@ class TestDisqualifyAndRestore:
         tenant_a, _ = seeded_tenants
         lead = await _lead(tenant_a)
         await lifecycle_ops.disqualify_lead(
-            tenant_id=tenant_a, _actor_id=uuid4(), lead_id=lead, reason="Not now"
+            tenant_id=tenant_a, actor_id=uuid4(), lead_id=lead, reason="Not now"
         )
 
         result = await lifecycle_ops.restore_lead(
-            tenant_id=tenant_a, _actor_id=uuid4(), lead_id=lead
+            tenant_id=tenant_a, actor_id=uuid4(), lead_id=lead
         )
 
         assert result["status"] == "new"
@@ -189,7 +189,7 @@ class TestDisqualifyAndRestore:
         tenant_a, _ = seeded_tenants
         lead = await _lead(tenant_a, status="converted")
         with pytest.raises(Conflict):
-            await lifecycle_ops.restore_lead(tenant_id=tenant_a, _actor_id=uuid4(), lead_id=lead)
+            await lifecycle_ops.restore_lead(tenant_id=tenant_a, actor_id=uuid4(), lead_id=lead)
 
     async def test_an_open_lead_cannot_be_restored(
         self, wired_engine: Any, seeded_tenants: Any
@@ -197,7 +197,7 @@ class TestDisqualifyAndRestore:
         tenant_a, _ = seeded_tenants
         lead = await _lead(tenant_a)
         with pytest.raises(Conflict):
-            await lifecycle_ops.restore_lead(tenant_id=tenant_a, _actor_id=uuid4(), lead_id=lead)
+            await lifecycle_ops.restore_lead(tenant_id=tenant_a, actor_id=uuid4(), lead_id=lead)
 
     async def test_a_merged_lead_points_at_its_survivor_instead_of_restoring(
         self, wired_engine: Any, seeded_tenants: Any
@@ -206,11 +206,11 @@ class TestDisqualifyAndRestore:
         survivor = await _lead(tenant_a)
         loser = await _lead(tenant_a)
         await lifecycle_ops.merge_leads(
-            tenant_id=tenant_a, _actor_id=uuid4(), survivor_id=survivor, loser_id=loser
+            tenant_id=tenant_a, actor_id=uuid4(), survivor_id=survivor, loser_id=loser
         )
 
         with pytest.raises(Conflict) as excinfo:
-            await lifecycle_ops.restore_lead(tenant_id=tenant_a, _actor_id=uuid4(), lead_id=loser)
+            await lifecycle_ops.restore_lead(tenant_id=tenant_a, actor_id=uuid4(), lead_id=loser)
         assert excinfo.value.details["survivor_id"] == str(survivor)
 
 
@@ -225,7 +225,7 @@ class TestDeduplicate:
         await _lead(tenant_a, email=shared)
 
         result = await lifecycle_ops.deduplicate(
-            tenant_id=tenant_a, _actor_id=uuid4(), lead_id=first
+            tenant_id=tenant_a, actor_id=uuid4(), lead_id=first
         )
 
         assert result["candidates"], "an exact email twin must be found"
@@ -256,7 +256,5 @@ class TestDeduplicate:
         mine = await _lead(tenant_a, email=shared)
         await _lead(tenant_b, email=shared)
 
-        result = await lifecycle_ops.deduplicate(
-            tenant_id=tenant_a, _actor_id=uuid4(), lead_id=mine
-        )
+        result = await lifecycle_ops.deduplicate(tenant_id=tenant_a, _actor_id=uuid4(), lead_id=mine)
         assert result["candidates"] == []

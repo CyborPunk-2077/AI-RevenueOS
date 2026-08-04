@@ -123,9 +123,7 @@ def _serialize_widget(widget: WebchatWidget, *, include_key: bool) -> dict[str, 
 async def get_widget(*, tenant_id: UUID) -> dict[str, Any] | None:
     async with tenant_session(tenant_id) as session:
         widget: WebchatWidget | None = (
-            await session.execute(
-                select(WebchatWidget).where(WebchatWidget.tenant_id == tenant_id)
-            )
+            await session.execute(select(WebchatWidget).where(WebchatWidget.tenant_id == tenant_id))
         ).scalar_one_or_none()
         return _serialize_widget(widget, include_key=True) if widget else None
 
@@ -151,9 +149,7 @@ async def configure_widget(
 
     async with tenant_session(tenant_id) as session:
         widget: WebchatWidget | None = (
-            await session.execute(
-                select(WebchatWidget).where(WebchatWidget.tenant_id == tenant_id)
-            )
+            await session.execute(select(WebchatWidget).where(WebchatWidget.tenant_id == tenant_id))
         ).scalar_one_or_none()
 
         created = widget is None
@@ -212,9 +208,7 @@ async def rotate_public_key(*, tenant_id: UUID, actor_id: UUID) -> dict[str, Any
     """Issue a new key. Every embedded snippet must be updated after this."""
     async with tenant_session(tenant_id) as session:
         widget: WebchatWidget | None = (
-            await session.execute(
-                select(WebchatWidget).where(WebchatWidget.tenant_id == tenant_id)
-            )
+            await session.execute(select(WebchatWidget).where(WebchatWidget.tenant_id == tenant_id))
         ).scalar_one_or_none()
         if widget is None:
             raise NotFound("This organisation has no webchat widget.")

@@ -163,9 +163,7 @@ class TestVisitorSessions:
         with pytest.raises(NotFound):
             await webchat.post_visitor_message(token=opened.token, body="still there?", origin=SITE)
 
-    async def test_ending_a_session_closes_it(
-        self, wired_engine: Any, seeded_tenants: Any
-    ) -> None:
+    async def test_ending_a_session_closes_it(self, wired_engine: Any, seeded_tenants: Any) -> None:
         tenant_a, _ = seeded_tenants
         widget = await _widget(tenant_a)
         opened = await webchat.start_session(public_key=widget["public_key"], origin=SITE)

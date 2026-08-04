@@ -241,7 +241,7 @@ async def merge_leads(
 
 
 async def disqualify_lead(
-    *, tenant_id: UUID, actor_id: UUID, lead_id: UUID, reason: str
+    *, tenant_id: UUID, _actor_id: UUID, lead_id: UUID, reason: str
 ) -> dict[str, Any]:
     """Close a lead with a stated reason. Reversible by `restore_lead`."""
     cleaned = reason.strip()
@@ -277,7 +277,7 @@ async def disqualify_lead(
         }
 
 
-async def restore_lead(*, tenant_id: UUID, actor_id: UUID, lead_id: UUID) -> dict[str, Any]:
+async def restore_lead(*, tenant_id: UUID, _actor_id: UUID, lead_id: UUID) -> dict[str, Any]:
     """Reopen a disqualified or archived lead.
 
     A converted lead is not restorable: a contact and possibly a deal already

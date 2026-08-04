@@ -256,6 +256,7 @@ _MEMBER = _expand(
         "form": _RU,
         "conversation": ("read", "update", "list", "send"),
         "message": ("create", "read", "list", "send"),
+        "channel": _RU,
         "consent": ("read", "list"),
         "appointment": ("create", "read", "update", "list"),
         "appointment_type": _RU,
