@@ -38,8 +38,9 @@ def _blocks(document: dict[str, Any], kind: str) -> list[dict[str, Any]]:
 def _module(environment: str, name: str) -> dict[str, Any]:
     for block in _blocks(_document(environment), "module"):
         if name in block:
-            body: dict[str, Any] = block[name]
-            return body
+            return block[name]
+        elif f'"{name}"' in block:
+            return block[f'"{name}"']
     raise AssertionError(f"{environment} declares no module {name!r}")
 
 
@@ -66,11 +67,12 @@ class TestIsolation:
         buckets: set[str] = set()
         for environment in ALL_ENVIRONMENTS:
             backend = _blocks(_document(environment), "terraform")[0]["backend"]
-            settings = backend[0]["s3"] if isinstance(backend, list) else backend["s3"]
-            keys.add(settings["key"])
-            buckets.add(settings["bucket"])
-            assert settings["encrypt"] is True
-            assert settings["dynamodb_table"], f"{environment} has no state lock table"
+            backend_dict = backend[0] if isinstance(backend, list) else backend
+            settings = backend_dict.get("s3") or backend_dict.get('"s3"')
+            keys.add(settings.get("key", settings.get('"key"')))
+            buckets.add(settings.get("bucket", settings.get('"bucket"')))
+            assert settings.get("encrypt", settings.get('"encrypt"')) is True
+            assert settings.get("dynamodb_table", settings.get('"dynamodb_table"')), f"{environment} has no state lock table"
         assert len(keys) == len(ALL_ENVIRONMENTS)
         assert len(buckets) == len(ALL_ENVIRONMENTS)
 
