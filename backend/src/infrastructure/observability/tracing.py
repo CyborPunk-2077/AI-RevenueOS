@@ -34,7 +34,7 @@ from opentelemetry import trace
 from opentelemetry.context import Context
 from opentelemetry.trace import Span, SpanKind, StatusCode, Tracer
 
-from infrastructure.logging.redaction import PII_KEYS, SECRET_KEYS, scrub_text
+from infrastructure.logging.redaction import _EMAIL, PII_KEYS, SECRET_KEYS, scrub_text
 
 _LOG = logging.getLogger("infrastructure.observability")
 
@@ -111,7 +111,10 @@ def safe_attributes(attributes: Mapping[str, Any]) -> dict[str, str | bool | int
                 safe[key] = value
             continue
         if isinstance(value, str):
-            safe[key] = scrub_text(value)[:MAX_ATTRIBUTE_CHARS]
+            if key in ("tenant.id", "user.id", "workflow.id", "correlation.id"):
+                safe[key] = value
+            else:
+                safe[key] = _EMAIL.sub("[EMAIL]", scrub_text(value))[:MAX_ATTRIBUTE_CHARS]
             continue
         # Mappings, sequences and arbitrary objects are exactly how payloads leak.
     return safe
@@ -217,7 +220,13 @@ def start_span(
     **attributes: Any,
 ) -> Iterator[Span]:
     """Open a span whose attributes are filtered and whose errors carry no message."""
-    with tracer().start_as_current_span(name, kind=kind, context=context) as span:
+    with tracer().start_as_current_span(
+        name,
+        kind=kind,
+        context=context,
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
         for key, value in safe_attributes(attributes).items():
             span.set_attribute(key, value)
         try:

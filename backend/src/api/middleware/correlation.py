@@ -59,6 +59,9 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
                 route = request.scope.get("route")
                 template = getattr(route, "path", None)
                 if template:
+                    if not template.startswith("/v1") and request.url.path.startswith("/v1"):
+                        is_abs = template.startswith("/")
+                        template = f"/v1{template}" if is_abs else f"/v1/{template}"
                     span.update_name(f"{request.method} {template}")
                 set_attributes(
                     **{"http.route": template or "", "http.response.status_code": status}

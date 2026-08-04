@@ -288,8 +288,8 @@ class AIGateway:
                 **{
                     "ai.provider": spec.provider.value,
                     "ai.model": model_name,
-                    "ai.tokens_input": usage.get("input_tokens"),
-                    "ai.tokens_output": usage.get("output_tokens"),
+                    "ai.tokens_input": getattr(usage, "input_tokens", None),
+                    "ai.tokens_output": getattr(usage, "output_tokens", None),
                 }
             )
 

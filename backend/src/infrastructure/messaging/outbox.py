@@ -17,8 +17,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from infrastructure.logging.setup import get_logger
-from infrastructure.observability.tracing import start_span
 from infrastructure.monitoring.metrics import outbox_dispatched, outbox_pending
+from infrastructure.observability.tracing import start_span
 from shared.utils.timeutil import utcnow
 
 logger = get_logger("infra.outbox")
