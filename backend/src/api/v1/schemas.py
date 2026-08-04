@@ -32,6 +32,25 @@ class RefreshRequest(StrictModel):
     refresh_token: Annotated[str, Field(min_length=8, max_length=512)]
 
 
+class FormCreateRequest(StrictModel):
+    name: Annotated[str, Field(min_length=1, max_length=150)]
+    type: Literal["embedded", "hosted", "popup"] = "embedded"
+    # `schema` shadows a BaseModel attribute, so the field is `schema_` and the
+    # JSON name stays `schema`.
+    schema_: Annotated[dict[str, Any], Field(alias="schema")]
+    allowed_origins: list[str] = Field(default_factory=list)
+    source: Annotated[str | None, Field(max_length=80)] = None
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+class FormUpdateRequest(StrictModel):
+    name: Annotated[str | None, Field(min_length=1, max_length=150)] = None
+    schema_: Annotated[dict[str, Any] | None, Field(alias="schema")] = None
+    allowed_origins: list[str] | None = None
+    source: Annotated[str | None, Field(max_length=80)] = None
+    settings: dict[str, Any] | None = None
+
+
 class InviteUserRequest(StrictModel):
     email: Annotated[str, Field(min_length=3, max_length=320)]
     # Not a free string: an unknown role would otherwise reach the service and be
