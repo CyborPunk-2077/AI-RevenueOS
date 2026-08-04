@@ -63,6 +63,29 @@ class ReorderRulesRequest(StrictModel):
     rule_ids: Annotated[list[UUID], Field(min_length=1, max_length=100)]
 
 
+class WebchatWidgetRequest(StrictModel):
+    allowed_origins: list[str] | None = None
+    greeting: Annotated[str | None, Field(max_length=500)] = None
+    consent_copy: Annotated[str | None, Field(max_length=1000)] = None
+    branding: dict[str, Any] | None = None
+    handoff_enabled: bool | None = None
+    ai_suggestions_enabled: bool | None = None
+    is_active: bool | None = None
+
+
+class WebchatSessionRequest(StrictModel):
+    public_key: Annotated[str, Field(min_length=8, max_length=64)]
+    # Stitches a returning visitor's tabs together. Untrusted, and never used to
+    # identify anyone.
+    visitor_ref: Annotated[str | None, Field(max_length=64)] = None
+    consent_granted: bool = False
+
+
+class WebchatMessageRequest(StrictModel):
+    session_token: Annotated[str, Field(min_length=8, max_length=512)]
+    body: Annotated[str, Field(max_length=2000)] = ""
+
+
 class FormCreateRequest(StrictModel):
     name: Annotated[str, Field(min_length=1, max_length=150)]
     type: Literal["embedded", "hosted", "popup"] = "embedded"

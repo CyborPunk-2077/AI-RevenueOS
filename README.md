@@ -23,6 +23,9 @@ Current post-audit hardening track:
 | P2-7 OpenTelemetry tracing | **Implemented, externally gated.** Spans at five boundaries with allow-listed attributes; off until a collector exists. See `docs/runbooks/tracing.md` |
 | P2-8 Storybook and a11y | **Done.** Storybook 8 over the component surface; `pnpm a11y` scans every story with axe in Chromium against WCAG 2.1 AA |
 | P2-9 dev/staging/sandbox Terraform | **Done, unapplied.** Four environments, isolated state and address space, contract-tested differences; no AWS account exists yet |
+| M05/M06 app shell and invitations | **Done.** Route groups, invitation flow end to end |
+| M08 forms, import, dedupe, assignment | **Done.** Builder with publish snapshot, CSV import, rules, merge/disqualify/restore |
+| M11 webchat | **Done.** Origin-authenticated widget, visitor sessions, hosted UI |
 
 `docs/RESUME-HANDOFF.md` states the exact next task and the toolchain to run it.
 

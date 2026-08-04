@@ -310,3 +310,44 @@ settings page with the invite form and invitation list. The invite form reports
 `delivery: not_sent` honestly rather than implying an email went out, because
 email remains gated.
 
+### M11 - webchat (2026-08-04)
+
+The models (`webchat_widgets`, `webchat_sessions`) existed from 0001; the service,
+the public surface and the UI did not. This is the only place in the product where
+an anonymous stranger writes rows into a tenant's database, so four constraints
+shape it.
+
+**The origin is the authentication.** A widget is named by a public key that is
+visible in the page source of every site embedding it - that is what a public key
+is. The key says which tenant; the browser-set `Origin` header decides whether
+that page may speak for them. `Referer` is deliberately not a fallback: the page
+controls it, which is the thing the check exists to prevent. An empty allow-list
+denies everyone, and activating a widget without one is refused, because an empty
+list is what a half-finished configuration looks like.
+
+**A session token is not a login.** Opaque, stored only as a SHA-256, scoped to
+one conversation, expiring in two hours, and pinned to the origin it was opened
+from. It never becomes a `Principal`. A token replayed from another site is
+refused even when that site is separately allow-listed, because it is either a
+leak or an embed nobody authorised.
+
+**Isolation is unchanged.** Exactly one query is not tenant-scoped - resolving the
+public key to its tenant, which is the operation that cannot be, since the caller
+is anonymous. It reads one row by a unique indexed column, and everything after it
+runs inside `tenant_session` under RLS.
+
+**The visitor sees the conversation, not the company.** Replies are attributed to
+"agent"; the tenant's staffing is not the visitor's business and naming a person
+invites contact outside the channel.
+
+Configuration is `channel:configure`, which member, manager and viewer do not
+hold. The front end is a `ChatWidget` panel with the transcript as a polite live
+region, plus a `ChatHost` that polls every five seconds - a websocket per idle
+visitor is a connection held open for a mostly abandoned page - and keeps the
+token in component state rather than localStorage, where it would outlive the tab.
+
+Coverage: 16 unit tests over origin normalisation and the allow-list, 13 contract
+tests over RBAC and what the public routes refuse, and 15 real-Postgres E2E tests
+covering rotation, expiry, cross-origin replay, forged tenant prefixes and
+cross-tenant invisibility.
+

@@ -20,6 +20,7 @@ from api.v1 import (
     support,
     tenant,
     users,
+    webchat,
     webhooks,
     workflows,
 )
@@ -49,6 +50,8 @@ def build_v1_router(settings: Settings) -> APIRouter:
     router.include_router(consents.router)
     router.include_router(integrations.router)
     router.include_router(support.router)
+    router.include_router(webchat.router)
+    router.include_router(webchat.public_router)
     router.include_router(public.router)
     router.include_router(webhooks.router)
     return router
