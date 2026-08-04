@@ -31,7 +31,10 @@ coverage.xml
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+terraform.tfvars
+*.auto.tfvars
 playwright-report/
+storybook-static/
 test-results/
 backend/mutants/
 

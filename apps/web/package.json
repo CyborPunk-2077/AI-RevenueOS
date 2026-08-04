@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "storybook": "storybook dev -p 6006 --no-open",
+    "build-storybook": "storybook build --quiet",
+    "a11y": "pnpm run build-storybook && concurrently -k -s first -n SB,A11Y \"http-server storybook-static -p 6006 --silent\" \"wait-on tcp:127.0.0.1:6006 && test-storybook --url http://127.0.0.1:6006 --maxWorkers 2\""
   },
   "dependencies": {
     "@tanstack/react-query": "5.51.23",
@@ -22,6 +25,12 @@
   },
   "devDependencies": {
     "@playwright/test": "1.46.0",
+    "@storybook/addon-a11y": "8.3.6",
+    "@storybook/addon-essentials": "8.3.6",
+    "@storybook/addon-interactions": "8.3.6",
+    "@storybook/nextjs": "8.3.6",
+    "@storybook/react": "8.3.6",
+    "@storybook/test-runner": "0.19.1",
     "@testing-library/jest-dom": "6.4.8",
     "@testing-library/react": "16.0.0",
     "@testing-library/user-event": "14.5.2",
@@ -30,12 +39,17 @@
     "@types/react-dom": "18.3.0",
     "@vitejs/plugin-react": "4.3.1",
     "autoprefixer": "10.4.20",
+    "axe-playwright": "2.0.3",
+    "concurrently": "9.0.1",
     "eslint": "8.57.0",
     "eslint-config-next": "14.2.5",
+    "http-server": "14.1.1",
     "jsdom": "24.1.1",
     "postcss": "8.4.41",
+    "storybook": "8.3.6",
     "tailwindcss": "3.4.9",
     "typescript": "5.5.4",
-    "vitest": "2.0.5"
+    "vitest": "2.0.5",
+    "wait-on": "8.0.1"
   }
 }
