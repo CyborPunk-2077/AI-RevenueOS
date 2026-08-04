@@ -125,10 +125,20 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: "1"
           ignore-unfixed: true
-      - name: Terraform format and validate
+      - uses: hashicorp/setup-terraform@v3
+        with: {terraform_version: "1.9.5", terraform_wrapper: false}
+      - name: Terraform format
+        run: terraform fmt -check -recursive infra/terraform
+      - name: Terraform validate (every environment)
         run: |
-          cd infra/terraform
-          terraform fmt -check -recursive || true
+          set -euo pipefail
+          for env in prod staging dev sandbox; do
+            echo "::group::validate $env"
+            # -backend=false: validation must not need credentials or a state bucket.
+            terraform -chdir="infra/terraform/envs/$env" init -backend=false -input=false
+            terraform -chdir="infra/terraform/envs/$env" validate
+            echo "::endgroup::"
+          done
 
   # 5. accessibility --------------------------------------------------------
   accessibility:

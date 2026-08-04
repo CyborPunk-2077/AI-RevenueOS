@@ -20,6 +20,54 @@ variable "multi_az" {
 }
 variable "alarm_topic_arn" { type = string }
 
+# Sizing and retention. Defaults are the production values, so an environment that
+# does not override them gets production behaviour rather than a cheap surprise.
+variable "allocated_storage" {
+  type    = number
+  default = 500
+}
+variable "max_allocated_storage" {
+  type    = number
+  default = 2000
+}
+variable "backup_retention_days" {
+  type    = number
+  default = 30
+}
+variable "deletion_protection" {
+  type    = bool
+  default = true
+}
+variable "skip_final_snapshot" {
+  type    = bool
+  default = false
+}
+variable "performance_insights_enabled" {
+  type    = bool
+  default = true
+}
+variable "redis_node_type" {
+  type    = string
+  default = "cache.r7g.large"
+}
+variable "redis_shards" {
+  type    = number
+  default = 3
+}
+variable "redis_replicas_per_shard" {
+  type    = number
+  default = 1
+}
+variable "redis_multi_az" {
+  type    = bool
+  default = true
+}
+variable "aws_backup_enabled" {
+  type        = bool
+  default     = true
+  description = "The independent AWS Backup stream. Native PITR still applies when this is off."
+}
+
 locals {
   name = "airevenueos-${var.environment}"
   tags = {
@@ -74,8 +122,8 @@ resource "aws_db_instance" "primary" {
   engine_version = "16.4"
   instance_class = var.instance_class
 
-  allocated_storage     = 500
-  max_allocated_storage = 2000
+  allocated_storage     = var.allocated_storage
+  max_allocated_storage = var.max_allocated_storage
   storage_type          = "gp3"
   storage_encrypted     = true
   kms_key_id            = aws_kms_key.data.arn
@@ -87,16 +135,16 @@ resource "aws_db_instance" "primary" {
   publicly_accessible    = false
 
   # PITR target RPO is 5 minutes; product acceptance permits no worse than 15.
-  backup_retention_period   = 30
+  backup_retention_period   = var.backup_retention_days
   backup_window             = "18:00-19:00"   # 23:30 IST
   maintenance_window         = "sun:19:30-sun:20:30"
   copy_tags_to_snapshot      = true
-  deletion_protection        = true
-  skip_final_snapshot        = false
+  deletion_protection        = var.deletion_protection
+  skip_final_snapshot        = var.skip_final_snapshot
   final_snapshot_identifier  = "${local.name}-final"
   auto_minor_version_upgrade = true
 
-  performance_insights_enabled          = true
+  performance_insights_enabled          = var.performance_insights_enabled
   performance_insights_retention_period = 7
   monitoring_interval                   = 30
   enabled_cloudwatch_logs_exports       = ["postgresql", "upgrade"]
@@ -113,12 +161,14 @@ resource "aws_db_instance" "primary" {
 # AWS Backup provides an independently monitored continuous recovery stream in
 # addition to the database's native 30-day PITR configuration.
 resource "aws_backup_vault" "database" {
+  count = var.aws_backup_enabled ? 1 : 0
   name        = "${local.name}-database"
   kms_key_arn = aws_kms_key.data.arn
   tags        = local.tags
 }
 
 resource "aws_iam_role" "backup" {
+  count = var.aws_backup_enabled ? 1 : 0
   name = "${local.name}-backup"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -132,16 +182,18 @@ resource "aws_iam_role" "backup" {
 }
 
 resource "aws_iam_role_policy_attachment" "backup" {
-  role       = aws_iam_role.backup.name
+  count = var.aws_backup_enabled ? 1 : 0
+  role       = aws_iam_role.backup[0].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup"
 }
 
 resource "aws_backup_plan" "database" {
+  count = var.aws_backup_enabled ? 1 : 0
   name = "${local.name}-database"
 
   rule {
     rule_name                = "continuous-rds-pitr"
-    target_vault_name        = aws_backup_vault.database.name
+    target_vault_name        = aws_backup_vault.database[0].name
     schedule                 = "cron(0 20 * * ? *)"
     start_window             = 60
     completion_window        = 180
@@ -152,13 +204,15 @@ resource "aws_backup_plan" "database" {
 }
 
 resource "aws_backup_selection" "database" {
-  iam_role_arn = aws_iam_role.backup.arn
+  count = var.aws_backup_enabled ? 1 : 0
+  iam_role_arn = aws_iam_role.backup[0].arn
   name         = "${local.name}-database"
-  plan_id      = aws_backup_plan.database.id
+  plan_id      = aws_backup_plan.database[0].id
   resources    = [aws_db_instance.primary.arn]
 }
 
 resource "aws_cloudwatch_metric_alarm" "backup_failed" {
+  count = var.aws_backup_enabled ? 1 : 0
   alarm_name          = "${local.name}-backup-job-failed"
   alarm_description   = "Critical; owner=platform-team; runbook=docs/runbooks/alerts.md#backup-failure-or-rpo"
   namespace           = "AWS/Backup"
@@ -171,7 +225,7 @@ resource "aws_cloudwatch_metric_alarm" "backup_failed" {
   treat_missing_data  = "notBreaching"
   dimensions = {
     ResourceType = "RDS"
-    VaultName    = aws_backup_vault.database.name
+    VaultName    = aws_backup_vault.database[0].name
   }
   alarm_actions = [var.alarm_topic_arn]
   ok_actions    = [var.alarm_topic_arn]
@@ -179,6 +233,7 @@ resource "aws_cloudwatch_metric_alarm" "backup_failed" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "recovery_point_partial" {
+  count = var.aws_backup_enabled ? 1 : 0
   alarm_name          = "${local.name}-recovery-point-partial"
   alarm_description   = "Critical; owner=platform-team; runbook=docs/runbooks/alerts.md#backup-failure-or-rpo"
   namespace           = "AWS/Backup"
@@ -191,7 +246,7 @@ resource "aws_cloudwatch_metric_alarm" "recovery_point_partial" {
   treat_missing_data  = "notBreaching"
   dimensions = {
     ResourceType = "RDS"
-    VaultName    = aws_backup_vault.database.name
+    VaultName    = aws_backup_vault.database[0].name
   }
   alarm_actions = [var.alarm_topic_arn]
   ok_actions    = [var.alarm_topic_arn]
@@ -203,13 +258,16 @@ resource "aws_elasticache_replication_group" "redis" {
   description          = "${local.name} cache, coordination and Celery transport"
   engine               = "redis"
   engine_version       = "7.1"
-  node_type            = "cache.r7g.large"
+  node_type            = var.redis_node_type
   port                 = 6379
 
-  num_node_groups         = 3          # 3 shards
-  replicas_per_node_group = 1          # 6 nodes total
-  automatic_failover_enabled = true
-  multi_az_enabled           = true
+  num_node_groups         = var.redis_shards
+  replicas_per_node_group = var.redis_replicas_per_shard
+
+  # Failover needs a replica to fail over to. A single-node non-production cache
+  # would otherwise fail `terraform apply` with an unhelpful API error.
+  automatic_failover_enabled = var.redis_replicas_per_shard > 0
+  multi_az_enabled           = var.redis_multi_az && var.redis_replicas_per_shard > 0
 
   at_rest_encryption_enabled = true
   transit_encryption_enabled = true

@@ -160,3 +160,64 @@ fail-closed: without both `OTEL_ENABLED` and an endpoint, no provider is install
 No collector is deployed and no production tracing is claimed. Trace retention and
 access approval remain open in `docs/RELEASE-BLOCKERS.md`.
 
+### P2-8 - Storybook surface and accessibility gate (2026-08-04)
+
+The Makefile and the root `package.json` both declared `storybook` and `a11y`
+turbo tasks, and `.github/workflows/ci.yml` ran `pnpm a11y` in a job called
+"Accessibility (axe)". No package declared either task, so turbo matched nothing
+and the job passed by doing nothing. `@axe-core/playwright` sat in the root
+devDependencies, imported by no file. That is the specific failure the blocker
+recorded, and a green check mark for an unrun check is worse than no check.
+
+Now: Storybook 8 on `@storybook/nextjs`, because the components import
+`next/navigation` and the plain React builder would need it stubbed per story.
+Fourteen stories over five features - `DegradedState`, `QualificationReview`,
+`DealBoard`, `TaskPanel`, `Timeline` - chosen to include the states normally
+skipped in manual review: empty columns, read-only variants, and the AI degraded
+path.
+
+The gate is `@storybook/test-runner` with `axe-playwright`, scanning every story
+in Chromium against `wcag2a`, `wcag2aa`, `wcag21a` and `wcag21aa`. It runs against
+a *static* build served locally rather than `storybook dev`, so CI cannot pass
+against a half-compiled dev server. Colour contrast is left enabled deliberately:
+it needs computed styles, so a jsdom-based assertion cannot see it, and it is both
+the most commonly disabled rule and the one users notice first. A story that must
+skip the scan sets `parameters: { a11y: { disable: true } }`, which is visible in
+review rather than buried in configuration.
+
+### P2-9 - dev, staging and sandbox environments (2026-08-04)
+
+`envs/prod` was the only stack. Three environments now sit beside it, each in its
+own AWS account with its own state bucket, lock table, KMS keys and a
+non-overlapping CIDR (prod 10.0, dev 10.10, staging 10.20, sandbox 10.30) so a
+later peering or transit gateway attachment cannot collide.
+
+**A defect found while doing it.** The network module created NAT gateways, an
+internet gateway and three tiers of subnet, and no route tables at all. Nothing
+was routed: the NAT gateways were attached to nothing and every subnet would have
+fallen back to the VPC's main route table. Production has never been applied, so
+this had not surfaced. Added: a public route table via the internet gateway, one
+application route table per AZ via NAT, and a data route table with no default
+route at all - PostgreSQL and Redis have no business making outbound calls, and
+the absence of a route says that more strongly than a security group rule.
+
+The module defaults are the production values. An environment that forgets to
+override a setting therefore gets the safe behaviour and a surprising bill, rather
+than a silent downgrade - the failure direction that matters.
+
+Staging mirrors production's topology rather than its size: Multi-AZ database, one
+NAT per AZ, a cache that can fail over, AWS Backup running, deletion protection on.
+The release gates run there, and evidence from a single-AZ, single-NAT environment
+does not transfer. Dev and sandbox are disposable on purpose - deletion protection
+off, final snapshots skipped - so `terraform destroy` completes.
+
+`backend/tests/contract/test_terraform_environments.py` pins each of those
+decisions, so quietly dropping Multi-AZ from staging or deletion protection from
+production fails the suite rather than review. CI now runs
+`terraform fmt -check -recursive` and `terraform init -backend=false && validate`
+per environment; it previously ran `terraform fmt -check -recursive || true`,
+which could not fail.
+
+No AWS account exists, nothing has been applied, and no state bucket has been
+created. Gates 4.1 to 4.8 remain open.
+

@@ -17,19 +17,29 @@ Repository evidence overrides prior chat claims. Read
 
 ## Exact next task
 
-**P2-7: end-to-end OpenTelemetry tracing and tests, without leaking tenant data or
-secrets.**
+**The P2 hardening track is complete.** P2-5 through P2-9 are implemented and
+recorded in `docs/IMPLEMENTATION-LOG.md`; the externally gated parts of P2-7 and
+P2-9 stay unclaimed until real access exists.
 
-P2-6 is finished: `mypy tests --no-incremental` measured 178 errors in 23 files and
-now reports zero, `tests` joined the `packages` list so bare `mypy` covers 264 source
-files, and the pre-existing `# type: ignore` suppressions in the test tree were
-removed rather than extended.
+Next is the remaining specification gaps, in dependency order, inspecting current
+code before assuming anything is missing: app-shell and invitation gaps (M05-M06);
+forms, import, dedupe and assignment gaps (M08); webchat (M11); extraction and RAG
+(M13); calendar and reminders (M14); gated channel providers (M15-M16); invoice and
+payment UX (M17); the workflow builder, schedules and logs (M18); reporting and
+export gaps (M20); hardening and evidence (M21); then the externally gated DR,
+pilots and GA work (M22-M24).
 
-Then proceed in dependency order through P2-8 Storybook,
-P2-9 non-production Terraform environments, and the remaining specification gaps
-listed in the transfer handoff and release blockers. External provider, AWS, DNS,
-payment, production, and legal work stays disabled until real access and approval
-exist.
+External provider, AWS, DNS, payment, production and legal work stays disabled
+until real access and approval exist.
+
+### What P2-8 and P2-9 changed, in one line each
+
+- **P2-8:** Storybook 8 over the component surface, and `pnpm a11y` now runs
+  `@storybook/test-runner` + axe over every story. The CI job of that name
+  previously matched no package task and passed by doing nothing.
+- **P2-9:** `envs/dev`, `envs/staging`, `envs/sandbox` beside `envs/prod`, with
+  isolated state and address space and contract-tested differences. The network
+  module had no route tables at all; that is fixed.
 
 ## Most recent verified gates
 
@@ -45,6 +55,15 @@ The repository was re-initialised on this host, so the old `GIT_WORK_TREE` /
 `GIT_INDEX_FILE` workaround is obsolete and plain Git is correct. Never reset, stash,
 clean, discard, or rewrite history.
 
-Python is CPython 3.12.13 (installed by `uv`) in
-`D:\PAISA HAI TO\AI-RevenueOS-master\.venv312`, built from
-`backend/requirements-dev.lock` with `--require-hashes --no-deps`.
+Python is CPython 3.12.13 (installed by `uv`), built from
+`backend/requirements-dev.lock` with `--require-hashes --no-deps`. The working tree
+is `D:\PAISA HAI TO\AI-RevenueOS\AI-RevenueOS`; `..\validate.ps1` finds or builds
+the venv and runs every gate - backend ruff, mypy and tests, then pnpm lint,
+typecheck, tests and the accessibility scan.
+
+Frontend toolchain is pnpm 9 with Node 20. The accessibility gate needs
+`pnpm exec playwright install --with-deps chromium` once per machine.
+
+Terraform is validated statically only: `terraform fmt -check -recursive` and
+`terraform init -backend=false && terraform validate` per environment. No AWS
+account exists and nothing has been applied.

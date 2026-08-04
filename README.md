@@ -21,8 +21,8 @@ Current post-audit hardening track:
 | P2-5 mutation testing gate | Configured, pinned, nightly, fail-closed at 75%. No score claimed; the runner is Linux-only |
 | P2-6 strict mypy over the test tree | **Done.** 178 errors in 23 files fixed to zero; `tests` is in the mypy `packages` list, so bare `mypy` covers 264 source files |
 | P2-7 OpenTelemetry tracing | **Implemented, externally gated.** Spans at five boundaries with allow-listed attributes; off until a collector exists. See `docs/runbooks/tracing.md` |
-| P2-8 Storybook | Open |
-| P2-9 dev/staging/sandbox Terraform | Open |
+| P2-8 Storybook and a11y | **Done.** Storybook 8 over the component surface; `pnpm a11y` scans every story with axe in Chromium against WCAG 2.1 AA |
+| P2-9 dev/staging/sandbox Terraform | **Done, unapplied.** Four environments, isolated state and address space, contract-tested differences; no AWS account exists yet |
 
 `docs/RESUME-HANDOFF.md` states the exact next task and the toolchain to run it.
 
@@ -101,6 +101,17 @@ make coverage          # against the per-module coverage bars
 make security          # SAST, dependency audit, secret scan
 ```
 
+Frontend components have a Storybook surface, and accessibility is a gate rather
+than a review step:
+
+```bash
+pnpm storybook          # component workshop on :6006, with the a11y panel
+pnpm a11y               # build it statically, scan every story with axe, fail on violations
+```
+
+`pnpm a11y` runs in CI. It checks WCAG 2.1 A and AA including colour contrast,
+which needs real layout - a jsdom assertion cannot see it.
+
 Integration tests run against a real PostgreSQL 16 with pgvector and connect as a
 non-superuser role, so RLS is genuinely exercised rather than bypassed.
 
@@ -127,6 +138,8 @@ recorded.
 | `docs/runbooks/database.md` | Migrations, partitions, append-only tables |
 | `docs/runbooks/workers.md` | Queues, pools, retries, dead letters, the three DB roles |
 | `docs/runbooks/tracing.md` | OpenTelemetry: switches, span inventory, what may never be recorded |
+| `docs/runbooks/frontend-quality.md` | Storybook, the accessibility gate, and how to fix a violation |
+| `infra/terraform/README.md` | Environment layout, what differs between them and why |
 | `docs/GA-ACTIVATION-CHECKLIST.md` | Every remaining external gate |
 | `docs/ACCEPTANCE-EVIDENCE.md` | The 30 global criteria mapped to evidence |
 | `docs/IMPLEMENTATION-LOG.md` | Milestone-by-milestone record |

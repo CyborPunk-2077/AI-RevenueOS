@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars and fill from the environment's own AWS account.
+# Never commit terraform.tfvars: it is gitignored, and these values are account
+# specific rather than secret-but-shared.
+
+# Digest of the image CI promoted. Not a tag - tags move, digests do not.
+image_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+# ACM certificate in ap-south-1 for this environment's hostname. Gate 4.2.
+certificate_arn = "arn:aws:acm:ap-south-1:000000000000:certificate/00000000-0000-0000-0000-000000000000"
+
+monthly_budget_usd = 300

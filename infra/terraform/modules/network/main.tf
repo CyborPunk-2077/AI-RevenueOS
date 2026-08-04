@@ -16,8 +16,20 @@ variable "azs" {
   default = ["ap-south-1a", "ap-south-1b", "ap-south-1c"]
 }
 
+variable "single_nat_gateway" {
+  type        = bool
+  default     = false
+  description = <<-EOT
+    Collapse egress onto one NAT gateway. A NAT gateway is billed hourly per AZ,
+    so three of them dominate the cost of an environment that carries no traffic.
+    Production keeps one per AZ: with a single gateway, losing that AZ takes
+    outbound connectivity with it.
+  EOT
+}
+
 locals {
-  name = "airevenueos-${var.environment}"
+  name              = "airevenueos-${var.environment}"
+  nat_gateway_count = var.single_nat_gateway ? 1 : length(var.azs)
   tags = {
     environment  = var.environment
     service      = "platform"
@@ -65,16 +77,73 @@ resource "aws_internet_gateway" "this" {
 }
 
 resource "aws_eip" "nat" {
-  count  = length(var.azs)
+  count  = local.nat_gateway_count
   domain = "vpc"
-  tags   = local.tags
+  tags   = merge(local.tags, { Name = "${local.name}-nat-${count.index}" })
 }
 
 resource "aws_nat_gateway" "this" {
-  count         = length(var.azs)
+  count         = local.nat_gateway_count
   allocation_id = aws_eip.nat[count.index].id
   subnet_id     = aws_subnet.public[count.index].id
-  tags          = local.tags
+  tags          = merge(local.tags, { Name = "${local.name}-nat-${count.index}" })
+
+  depends_on = [aws_internet_gateway.this]
+}
+
+# --- routing -----------------------------------------------------------------
+# Public subnets egress through the internet gateway. Application subnets egress
+# through NAT and are unreachable from the internet. Data subnets get no route off
+# the VPC at all: PostgreSQL and Redis have no business making outbound calls, and
+# the absence of a route is a stronger statement than a security group rule.
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.this.id
+  tags   = merge(local.tags, { Name = "${local.name}-public", tier = "public" })
+}
+
+resource "aws_route" "public_internet" {
+  route_table_id         = aws_route_table.public.id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.this.id
+}
+
+resource "aws_route_table_association" "public" {
+  count          = length(var.azs)
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table" "private_app" {
+  count  = length(var.azs)
+  vpc_id = aws_vpc.this.id
+  tags   = merge(local.tags, { Name = "${local.name}-app-${count.index}", tier = "application" })
+}
+
+resource "aws_route" "private_app_egress" {
+  count                  = length(var.azs)
+  route_table_id         = aws_route_table.private_app[count.index].id
+  destination_cidr_block = "0.0.0.0/0"
+
+  # With one NAT gateway every AZ shares it; with one per AZ each stays local, so
+  # cross-AZ data transfer is not paid for on every outbound byte.
+  nat_gateway_id = aws_nat_gateway.this[var.single_nat_gateway ? 0 : count.index].id
+}
+
+resource "aws_route_table_association" "private_app" {
+  count          = length(var.azs)
+  subnet_id      = aws_subnet.private_app[count.index].id
+  route_table_id = aws_route_table.private_app[count.index].id
+}
+
+resource "aws_route_table" "private_data" {
+  vpc_id = aws_vpc.this.id
+  tags   = merge(local.tags, { Name = "${local.name}-data", tier = "data" })
+}
+
+resource "aws_route_table_association" "private_data" {
+  count          = length(var.azs)
+  subnet_id      = aws_subnet.private_data[count.index].id
+  route_table_id = aws_route_table.private_data.id
 }
 
 # --- security groups: CloudFront/WAF -> ALB -> ECS -> RDS/Redis only ---------
@@ -161,3 +230,4 @@ output "public_subnet_ids" { value = aws_subnet.public[*].id }
 output "alb_security_group_id" { value = aws_security_group.alb.id }
 output "ecs_security_group_id" { value = aws_security_group.ecs.id }
 output "data_security_group_id" { value = aws_security_group.data.id }
+output "nat_gateway_ids" { value = aws_nat_gateway.this[*].id }
