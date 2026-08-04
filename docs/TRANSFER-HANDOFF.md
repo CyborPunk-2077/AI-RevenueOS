@@ -15,25 +15,16 @@ must be backed by real evidence before their status changes.
   `docs/AI-REVENUEOS-IMPLEMENTATION-SPECIFICATION.md`, SHA-256
   `61A52924B51792C632C2CA8A8909BBD9263D0F77EBB732F4C8F3F7685570F50F`.
 
-Preserve these uncommitted P2-6 edits exactly until that task is completed:
+Those previously uncommitted P2-6 edits are now committed as part of the completed
+P2-6 change; nothing is held back. Never reset, stash, discard, or rewrite existing
+work.
 
-```text
-backend/src/infrastructure/integrations/email.py
-backend/tests/conftest.py
-backend/tests/contract/test_api_authorization.py
-backend/tests/contract/test_provider_adapters.py
-backend/tests/integration/test_migrations.py
-backend/tests/integration/test_outbox.py
-backend/tests/integration/test_rls_isolation.py
-backend/tests/unit/test_coverage_policy.py
-backend/tests/unit/test_payments_domain.py
-backend/tests/unit/test_storage_configuration.py
-backend/tests/unit/test_workflow_dsl.py
-```
-
-The original untracked sentinel
-`_tmp_5_43bb29c7ce5ddd61b5e99cfa69f4daf1` is protected. Never modify, stage, remove,
-or clean it. Never reset, stash, discard, or rewrite existing work.
+**Host transfer note.** This tree was moved to a new Windows host as a portable copy
+without `.git`, without the `_tmp_5_43bb29c7ce5ddd61b5e99cfa69f4daf1` sentinel, and
+without the old recovery virtualenv. History before the transfer lives only on the
+previous host. The repository here was re-initialised on branch `master` with a
+single baseline commit, `baseline: transferred snapshot at 0f8ea02 plus preserved
+P2-6 typing WIP`, and work continues on top of it.
 
 ## Verified completed checkpoints
 
@@ -53,11 +44,10 @@ Earlier implementation and test evidence remains in Git history and
 
 ## Exact next task and dependency order
 
-1. **P2-6:** finish the preserved strict-mypy test-tree work. Re-run
-   `mypy tests --no-incremental`, fix remaining errors without suppressing useful
-   checks, include tests in the normal mypy/CI gate, validate, and commit. The last
-   completed pre-later-edits measurement was 112 errors in 18 files; the current
-   count is unknown and must be measured.
+1. ~~**P2-6:** strict mypy over the full test tree.~~ **Done.** Measured 178 errors
+   in 23 files, fixed to zero without weakening strictness (suppressions were removed,
+   not added), and `tests` was added to the `packages` list so bare `mypy` — what CI
+   and `make` run — covers it.
 2. **P2-7:** add end-to-end OpenTelemetry tracing and tests without leaking tenant
    data or secrets.
 3. **P2-8:** add the declared Storybook surface and accessibility checks, or remove
@@ -98,14 +88,14 @@ Backend checks on this Windows host:
 
 ```powershell
 $repo = (Get-Location).Path
-$py = 'C:\Users\Administrator\AppData\Local\Temp\airevenueos-recovery-venv\Scripts\python.exe'
+$py = 'D:\PAISA HAI TO\AI-RevenueOS-master\.venv312\Scripts\python.exe'
 $env:PYTHONPATH = Join-Path $repo 'backend\src'
 Push-Location backend
 & $py -m ruff check src tests alembic
 & $py -m ruff format --check src tests alembic
 & $py -m mypy src
 & $py -m mypy tests --no-incremental
-& 'C:\Users\Administrator\AppData\Local\Temp\airevenueos-recovery-venv\Scripts\lint-imports.exe'
+& 'D:\PAISA HAI TO\AI-RevenueOS-master\.venv312\Scripts\lint-imports.exe'
 & $py -m pytest tests/unit tests/contract -q
 Pop-Location
 ```
@@ -141,15 +131,12 @@ claiming any score.
   Redis path skips without a real `REDIS_URL`; CI provides a real service.
 - The in-app browser was previously used for browser checks; that does not replace
   standalone Playwright, staging, accessibility, performance, or DAST evidence.
-- `.git/config` contains a stale Linux `core.worktree`. Before every Git operation:
-
-```powershell
-$env:GIT_WORK_TREE = (Get-Location).Path
-$env:GIT_INDEX_FILE = Join-Path $env:TEMP 'airevenueos-codex-index'
-```
-
-If a Git lock is stale, preserve it by moving it aside; do not delete it. Stage
-only intended paths because the alternate index coexists with protected work.
+- The stale `core.worktree` workaround no longer applies: the repository was
+  re-initialised on this host, so plain Git works. If a Git lock is stale, preserve
+  it by moving it aside; do not delete it. Stage only intended paths.
+- The toolchain here is CPython 3.12.13 installed by `uv`, in a virtualenv at
+  `D:\PAISA HAI TO\AI-RevenueOS-master\.venv312`, built from
+  `backend/requirements-dev.lock` with `--require-hashes --no-deps`, exactly as CI does.
 
 ## External activation checklist — all disabled/unactivated
 

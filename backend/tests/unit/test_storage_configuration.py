@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from shared.settings import FeatureFlagDefaults, Settings
 
 
 def configured_storage_settings(**overrides: object) -> Settings:
-    values: dict[str, object] = {
+    values: dict[str, Any] = {
         "environment": "prod",
         "jwt_private_key": "private",
         "jwt_public_key": "public",

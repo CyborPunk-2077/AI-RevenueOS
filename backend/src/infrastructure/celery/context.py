@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
+from opentelemetry.propagate import inject
+
 from infrastructure.logging.context import bind_context, reset_context
 from infrastructure.monitoring.metrics import tenant_isolation_violations
 
@@ -63,12 +65,16 @@ def build_headers(
     """Headers to attach when enqueuing. Producers should always call this."""
     if tenant_id is not None:
         UUID(str(tenant_id))  # reject anything that is not a UUID at enqueue time
-    return {
+    headers: dict[str, Any] = {
         HEADER_TENANT: str(tenant_id) if tenant_id else None,
         HEADER_CORRELATION: correlation_id,
         HEADER_ACTOR: str(actor_id) if actor_id else None,
         HEADER_ACTOR_TYPE: actor_type,
     }
+    # W3C trace context, so the worker span joins the trace that enqueued the task.
+    # Writes nothing when no span is active, which is the default.
+    inject(headers)
+    return headers
 
 
 def headers_from_request(request: Any) -> TaskContext:

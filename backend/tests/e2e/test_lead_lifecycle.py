@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -12,7 +13,7 @@ pytestmark = pytest.mark.postgres
 
 
 async def test_capture_persists_lead_source_event_and_outbox_row(
-    wired_engine, principal_factory, session_factory
+    wired_engine: Any, principal_factory: Any, session_factory: Any
 ) -> None:
     from application.leads.service import LeadService
 
@@ -69,7 +70,7 @@ async def test_capture_persists_lead_source_event_and_outbox_row(
 
 
 async def test_every_lead_mutation_has_a_compact_audit_trail(
-    wired_engine, principal_factory, session_factory
+    wired_engine: Any, principal_factory: Any, session_factory: Any
 ) -> None:
     from application.leads.service import LeadService
 
@@ -118,7 +119,7 @@ async def test_every_lead_mutation_has_a_compact_audit_trail(
 
 
 async def test_lead_audit_is_tenant_scoped_and_immutable(
-    wired_engine, principal_factory, session_factory
+    wired_engine: Any, principal_factory: Any, session_factory: Any
 ) -> None:
     from application.leads.service import LeadService
 
@@ -178,7 +179,7 @@ async def test_lead_audit_is_tenant_scoped_and_immutable(
 
 
 async def test_member_capture_and_duplicate_checks_stay_self_scoped(
-    wired_engine, principal_factory
+    wired_engine: Any, principal_factory: Any
 ) -> None:
     from application.leads.service import LeadService
     from domain.auth.permissions import Role
@@ -206,7 +207,7 @@ async def test_member_capture_and_duplicate_checks_stay_self_scoped(
 
 
 async def test_duplicate_capture_preserves_both_source_events(
-    wired_engine, principal_factory, session_factory
+    wired_engine: Any, principal_factory: Any, session_factory: Any
 ) -> None:
     from application.leads.service import LeadService
 
@@ -222,7 +223,9 @@ async def test_duplicate_capture_preserves_both_source_events(
     assert candidates[0]["confidence"] >= 0.95
 
 
-async def test_qualification_scores_and_records_evidence(wired_engine, principal_factory) -> None:
+async def test_qualification_scores_and_records_evidence(
+    wired_engine: Any, principal_factory: Any
+) -> None:
     from application.leads.service import LeadService
 
     service = LeadService.for_principal(principal_factory())
@@ -252,7 +255,7 @@ async def test_qualification_scores_and_records_evidence(wired_engine, principal
 
 
 async def test_ai_qualification_degrades_to_the_rule_engine_without_credentials(
-    wired_engine, principal_factory
+    wired_engine: Any, principal_factory: Any
 ) -> None:
     from application.leads.service import LeadService
 
@@ -274,7 +277,9 @@ async def test_ai_qualification_degrades_to_the_rule_engine_without_credentials(
     assert any("unavailable" in r.lower() for r in qualification["reasons"])
 
 
-async def test_human_review_overrides_and_is_persisted(wired_engine, principal_factory) -> None:
+async def test_human_review_overrides_and_is_persisted(
+    wired_engine: Any, principal_factory: Any
+) -> None:
     from application.leads.service import LeadService
 
     service = LeadService.for_principal(principal_factory())
@@ -293,7 +298,7 @@ async def test_human_review_overrides_and_is_persisted(wired_engine, principal_f
 
 
 async def test_conversion_from_new_is_refused_before_qualification(
-    wired_engine, principal_factory
+    wired_engine: Any, principal_factory: Any
 ) -> None:
     from application.leads.service import LeadService
     from domain.base import InvalidTransition
@@ -305,7 +310,7 @@ async def test_conversion_from_new_is_refused_before_qualification(
 
 
 async def test_conversion_creates_a_contact_and_preserves_the_link(
-    wired_engine, principal_factory
+    wired_engine: Any, principal_factory: Any
 ) -> None:
     from application.leads.service import LeadService
 
@@ -328,7 +333,9 @@ async def test_conversion_creates_a_contact_and_preserves_the_link(
     assert refreshed["status"] == "converted"
 
 
-async def test_invalid_status_transition_is_refused(wired_engine, principal_factory) -> None:
+async def test_invalid_status_transition_is_refused(
+    wired_engine: Any, principal_factory: Any
+) -> None:
     from application.leads.service import LeadService
     from domain.base import InvalidTransition
 
@@ -342,7 +349,7 @@ async def test_invalid_status_transition_is_refused(wired_engine, principal_fact
 
 
 async def test_optimistic_concurrency_rejects_a_stale_write(
-    wired_engine, principal_factory
+    wired_engine: Any, principal_factory: Any
 ) -> None:
     from application.leads.service import LeadService
     from shared.exceptions import PreconditionFailed
@@ -355,7 +362,9 @@ async def test_optimistic_concurrency_rejects_a_stale_write(
         await service.update(lead["id"], {"last_name": "Stale"}, expected_version=lead["version"])
 
 
-async def test_a_lead_is_invisible_to_another_tenant(wired_engine, principal_factory) -> None:
+async def test_a_lead_is_invisible_to_another_tenant(
+    wired_engine: Any, principal_factory: Any
+) -> None:
     from application.leads.service import LeadService
     from shared.exceptions import NotFound
 
@@ -369,7 +378,9 @@ async def test_a_lead_is_invisible_to_another_tenant(wired_engine, principal_fac
         await intruder.get(lead["id"])
 
 
-async def test_listing_never_crosses_a_tenant_boundary(wired_engine, principal_factory) -> None:
+async def test_listing_never_crosses_a_tenant_boundary(
+    wired_engine: Any, principal_factory: Any
+) -> None:
     from api.deps.principal import ListQuery
     from application.leads.service import LeadService
 
@@ -387,7 +398,7 @@ async def test_listing_never_crosses_a_tenant_boundary(wired_engine, principal_f
 
 
 async def test_outbox_events_are_dispatched_exactly_once_per_handler(
-    wired_engine, principal_factory, session_factory
+    wired_engine: Any, principal_factory: Any, session_factory: Any
 ) -> None:
     from application.leads.service import LeadService
     from domain.events.catalog import LEAD_CREATED
@@ -396,9 +407,9 @@ async def test_outbox_events_are_dispatched_exactly_once_per_handler(
     service = LeadService.for_principal(principal_factory())
     lead = await service.capture({"first_name": "Outbox", "email": f"outbox-{uuid4()}@example.in"})
 
-    seen: list[dict] = []
+    seen: list[dict[str, Any]] = []
 
-    async def handler(payload: dict) -> None:
+    async def handler(payload: dict[str, Any]) -> None:
         seen.append(payload)
 
     dispatcher = OutboxDispatcher(session_factory)

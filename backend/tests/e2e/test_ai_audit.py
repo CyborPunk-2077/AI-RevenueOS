@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -11,7 +12,7 @@ pytestmark = pytest.mark.postgres
 
 
 async def test_ai_usage_commits_a_compact_tenant_scoped_audit_row(
-    wired_engine, seeded_tenants, session_factory
+    wired_engine: Any, seeded_tenants: Any, session_factory: Any
 ) -> None:
     from application.ai.registry import _record_usage
     from shared.utils.ids import uuid7

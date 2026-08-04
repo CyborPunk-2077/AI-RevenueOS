@@ -6,6 +6,9 @@ import functools
 from collections.abc import Callable
 from typing import Any
 
+from opentelemetry.propagate import extract
+from opentelemetry.trace import SpanKind
+
 from infrastructure.celery.app import TenantTask, app
 from infrastructure.celery.context import bound_context, headers_from_request
 from infrastructure.celery.queues import BY_NAME, DEFAULT_QUEUE, queue_for
@@ -19,6 +22,7 @@ from infrastructure.celery.reliability import (
     write_dead_letter,
 )
 from infrastructure.logging.setup import get_logger
+from infrastructure.observability.tracing import start_span
 
 logger = get_logger("celery.tasks")
 
@@ -55,7 +59,29 @@ def airev_task(
             context = headers_from_request(self.request)
             attempt = int(getattr(self.request, "retries", 0)) + 1
 
-            with bound_context(context):
+            raw_headers = getattr(self.request, "headers", None)
+            carrier = (
+                {k: v for k, v in raw_headers.items() if isinstance(v, str)}
+                if isinstance(raw_headers, dict)
+                else {}
+            )
+
+            with (
+                bound_context(context),
+                start_span(
+                    f"task {name}",
+                    kind=SpanKind.CONSUMER,
+                    context=extract(carrier),
+                    **{
+                        "task.name": name,
+                        "task.attempt": attempt,
+                        "messaging.operation": "process",
+                        "messaging.destination.name": resolved_queue,
+                        "tenant.id": str(context.tenant_id) if context.tenant_id else None,
+                        "correlation.id": context.correlation_id,
+                    },
+                ),
+            ):
                 if tenant_scoped:
                     # Fails closed: no tenant header means no RLS predicate.
                     context.require_tenant()

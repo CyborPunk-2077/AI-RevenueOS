@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -21,7 +22,7 @@ WORKFLOW = {
 
 
 async def test_publication_is_idempotent_and_kill_switch_survives_redis_flush(
-    wired_engine, seeded_tenants, session_factory
+    wired_engine: Any, seeded_tenants: Any, session_factory: Any
 ) -> None:
     from application.workflows.control import engage_kill_switch, is_killed, release_kill_switch
     from application.workflows.service import publish_workflow

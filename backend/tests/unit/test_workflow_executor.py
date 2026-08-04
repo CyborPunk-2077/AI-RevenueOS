@@ -312,7 +312,9 @@ class TestRetryAndFailure:
         )
 
         class FailFirst(Recorder):
-            async def __call__(self, action: str, inputs: dict, ctx: Any, key: str) -> dict:
+            async def __call__(
+                self, action: str, inputs: dict[str, Any], ctx: Any, key: str
+            ) -> dict[str, Any]:
                 self.calls.append((action, key))
                 if action == "tag.add":
                     raise TerminalActionError("nope")

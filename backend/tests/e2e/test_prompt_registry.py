@@ -129,28 +129,24 @@ async def test_prompt_lifecycle_is_evaluated_idempotent_and_audited(
             )
             == 2
         )
-        assert (
-            await session.scalar(
-                select(func.count())
-                .select_from(AuditLog)
-                .where(
-                    AuditLog.action.in_(("prompt.promoted", "prompt.rolled_back")),
-                    AuditLog.tenant_id == tenant_a,
-                )
+        audited = await session.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(
+                AuditLog.action.in_(("prompt.promoted", "prompt.rolled_back")),
+                AuditLog.tenant_id == tenant_a,
             )
-            >= 3
         )
-        assert (
-            await session.scalar(
-                select(func.count())
-                .select_from(EventOutbox)
-                .where(
-                    EventOutbox.event_type.in_(("prompt.promoted", "prompt.rolled_back")),
-                    EventOutbox.tenant_id == tenant_a,
-                )
+        assert audited is not None and audited >= 3
+        published = await session.scalar(
+            select(func.count())
+            .select_from(EventOutbox)
+            .where(
+                EventOutbox.event_type.in_(("prompt.promoted", "prompt.rolled_back")),
+                EventOutbox.tenant_id == tenant_a,
             )
-            >= 3
         )
+        assert published is not None and published >= 3
 
 
 async def test_prompt_mutations_reject_tenant_owners(

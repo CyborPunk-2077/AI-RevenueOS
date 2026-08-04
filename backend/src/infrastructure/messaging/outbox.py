@@ -12,10 +12,12 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
+from opentelemetry.trace import SpanKind
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from infrastructure.logging.setup import get_logger
+from infrastructure.observability.tracing import start_span
 from infrastructure.monitoring.metrics import outbox_dispatched, outbox_pending
 from shared.utils.timeutil import utcnow
 
@@ -91,9 +93,19 @@ class OutboxDispatcher:
     ) -> None:
         event_type = row["event_type"]
         handlers = self.handlers_for(event_type)
+        tenant_id = row.get("tenant_id")
         try:
-            for handler in handlers:
-                await handler(row["payload"])
+            with start_span(
+                f"outbox dispatch {event_type}",
+                kind=SpanKind.PRODUCER,
+                **{
+                    "outbox.event_type": event_type,
+                    "messaging.operation": "publish",
+                    "tenant.id": str(tenant_id) if tenant_id else None,
+                },
+            ):
+                for handler in handlers:
+                    await handler(row["payload"])
         except Exception as exc:
             attempts = int(row["attempts"]) + 1
             terminal = attempts >= MAX_ATTEMPTS

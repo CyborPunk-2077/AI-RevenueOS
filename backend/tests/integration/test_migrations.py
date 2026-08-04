@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 import pytest
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 pytestmark = pytest.mark.postgres
 
 
-async def test_all_schemas_exist(session_factory) -> None:
+async def test_all_schemas_exist(session_factory: async_sessionmaker[AsyncSession]) -> None:
     async with session_factory() as session:
         rows = (
             (
@@ -25,7 +28,9 @@ async def test_all_schemas_exist(session_factory) -> None:
     assert set(rows) == {"public", "app", "audit", "analytics"}
 
 
-async def test_pgvector_extension_is_installed(session_factory) -> None:
+async def test_pgvector_extension_is_installed(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
     async with session_factory() as session:
         found = (
             await session.execute(
@@ -39,7 +44,9 @@ async def test_pgvector_extension_is_installed(session_factory) -> None:
     ("schema", "table"),
     [("audit", "audit_logs"), ("audit", "event_outbox"), ("app", "messages")],
 )
-async def test_tables_are_partitioned_with_children(session_factory, schema, table) -> None:
+async def test_tables_are_partitioned_with_children(
+    session_factory: async_sessionmaker[AsyncSession], schema: str, table: str
+) -> None:
     async with session_factory() as session:
         strategy = (
             await session.execute(
@@ -66,7 +73,9 @@ async def test_tables_are_partitioned_with_children(session_factory, schema, tab
     assert children >= 2
 
 
-async def test_updated_at_trigger_fires(session_factory, seeded_tenants) -> None:
+async def test_updated_at_trigger_fires(
+    session_factory: async_sessionmaker[AsyncSession], seeded_tenants: tuple[UUID, UUID]
+) -> None:
     tenant_a, _ = seeded_tenants
     from shared.utils.ids import uuid7
 
@@ -98,7 +107,9 @@ async def test_updated_at_trigger_fires(session_factory, seeded_tenants) -> None
     assert fresh is True
 
 
-async def test_append_only_tables_reject_update_and_delete(session_factory, seeded_tenants) -> None:
+async def test_append_only_tables_reject_update_and_delete(
+    session_factory: async_sessionmaker[AsyncSession], seeded_tenants: tuple[UUID, UUID]
+) -> None:
     tenant_a, _ = seeded_tenants
     from shared.utils.ids import uuid7
 
@@ -130,7 +141,9 @@ async def test_append_only_tables_reject_update_and_delete(session_factory, seed
             assert "append-only" in str(exc.value)
 
 
-async def test_payment_amount_and_currency_constraints(session_factory, seeded_tenants) -> None:
+async def test_payment_amount_and_currency_constraints(
+    session_factory: async_sessionmaker[AsyncSession], seeded_tenants: tuple[UUID, UUID]
+) -> None:
     tenant_a, _ = seeded_tenants
     from shared.utils.ids import uuid7
 

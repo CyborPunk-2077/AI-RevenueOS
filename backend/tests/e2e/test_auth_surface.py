@@ -128,7 +128,7 @@ def client(
 
 
 @pytest.fixture(autouse=True)
-def _master_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def _master_key(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """`application.auth.mfa` reads the process settings, not the app's."""
     monkeypatch.setenv("ENCRYPTION_MASTER_KEY", MASTER_KEY)
     from shared.settings import get_settings

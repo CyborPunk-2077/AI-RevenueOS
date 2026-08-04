@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -13,7 +14,7 @@ pytestmark = pytest.mark.postgres
 
 
 async def test_export_and_deletion_requests_are_durable_audited_and_isolated(
-    wired_engine, seeded_tenants, session_factory
+    wired_engine: Any, seeded_tenants: Any, session_factory: Any
 ) -> None:
     from application.tenants.requests import request_tenant_deletion, request_tenant_export
 

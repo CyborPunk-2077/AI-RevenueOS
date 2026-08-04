@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Any
 
 import pytest
 
@@ -23,8 +24,8 @@ MIDDAY_IST = datetime(2026, 8, 3, 8, 30, tzinfo=UTC)
 LATE_NIGHT_IST = datetime(2026, 8, 3, 18, 0, tzinfo=UTC)  # 23:30 IST
 
 
-def ctx(**overrides) -> SendContext:  # type: ignore[no-untyped-def]
-    base = {
+def ctx(**overrides: Any) -> SendContext:
+    base: dict[str, Any] = {
         "channel": Channel.WHATSAPP,
         "purpose": "transactional",
         "now": MIDDAY_IST,
@@ -34,7 +35,7 @@ def ctx(**overrides) -> SendContext:  # type: ignore[no-untyped-def]
         "template_approved": False,
     }
     base.update(overrides)
-    return SendContext(**base)  # type: ignore[arg-type]
+    return SendContext(**base)
 
 
 class TestHardStops:

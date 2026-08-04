@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Any
+from uuid import UUID
+
 import pytest
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from domain.base import DomainEvent
 from domain.events.catalog import LEAD_CREATED
@@ -14,7 +18,7 @@ from shared.utils.ids import uuid7
 pytestmark = pytest.mark.postgres
 
 
-def _event(tenant_id):  # type: ignore[no-untyped-def]
+def _event(tenant_id: UUID) -> DomainEvent:
     return DomainEvent(
         event_type=LEAD_CREATED,
         tenant_id=tenant_id,
@@ -24,7 +28,9 @@ def _event(tenant_id):  # type: ignore[no-untyped-def]
     )
 
 
-async def test_state_change_and_outbox_row_commit_together(session_factory, seeded_tenants) -> None:
+async def test_state_change_and_outbox_row_commit_together(
+    session_factory: async_sessionmaker[AsyncSession], seeded_tenants: tuple[UUID, UUID]
+) -> None:
     tenant_a, _ = seeded_tenants
     tag_id = uuid7()
     event = _event(tenant_a)
@@ -57,7 +63,9 @@ async def test_state_change_and_outbox_row_commit_together(session_factory, seed
     assert tag_rows == 0, "RLS hides the row from an unbound session"
 
 
-async def test_rollback_discards_both_state_and_event(session_factory, seeded_tenants) -> None:
+async def test_rollback_discards_both_state_and_event(
+    session_factory: async_sessionmaker[AsyncSession], seeded_tenants: tuple[UUID, UUID]
+) -> None:
     tenant_a, _ = seeded_tenants
     tag_id = uuid7()
     with pytest.raises(RuntimeError):
@@ -85,10 +93,10 @@ async def test_rollback_discards_both_state_and_event(session_factory, seeded_te
 
 
 async def test_dispatcher_marks_processed_and_is_idempotent(
-    session_factory, seeded_tenants
+    session_factory: async_sessionmaker[AsyncSession], seeded_tenants: tuple[UUID, UUID]
 ) -> None:
     tenant_a, _ = seeded_tenants
-    seen: list[dict] = []
+    seen: list[dict[str, Any]] = []
 
     async with SqlAlchemyUnitOfWork(tenant_a, session_factory=session_factory) as uow:
         uow.collect(_event(tenant_a))
@@ -109,16 +117,18 @@ async def test_dispatcher_marks_processed_and_is_idempotent(
     assert len({event["event_id"] for event in seen}) == len(seen)
 
 
-async def _collect(sink: list[dict], payload: dict) -> None:
+async def _collect(sink: list[dict[str, Any]], payload: dict[str, Any]) -> None:
     sink.append(payload)
 
 
-async def test_failing_handler_retries_then_dead_letters(session_factory, seeded_tenants) -> None:
+async def test_failing_handler_retries_then_dead_letters(
+    session_factory: async_sessionmaker[AsyncSession], seeded_tenants: tuple[UUID, UUID]
+) -> None:
     tenant_a, _ = seeded_tenants
     async with SqlAlchemyUnitOfWork(tenant_a, session_factory=session_factory) as uow:
         uow.collect(_event(tenant_a))
 
-    async def boom(payload: dict) -> None:
+    async def boom(payload: dict[str, Any]) -> None:
         raise ValueError("downstream is unavailable")
 
     dispatcher = OutboxDispatcher(session_factory)
@@ -141,7 +151,9 @@ async def test_failing_handler_retries_then_dead_letters(session_factory, seeded
     assert final.dead_lettered == 1
 
 
-async def test_unit_of_work_requires_a_tenant(session_factory) -> None:
+async def test_unit_of_work_requires_a_tenant(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
     from shared.exceptions import TenantContextMissing
 
     with pytest.raises(TenantContextMissing):

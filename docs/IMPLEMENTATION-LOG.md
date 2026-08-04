@@ -99,3 +99,64 @@ build. It also found four security defects, including a webhook authentication
 bypass and a dead-code authorization scope.
 
 `docs/IMPLEMENTATION-AUDIT.md` supersedes the milestone table above.
+
+---
+
+## Post-audit hardening (P2 track)
+
+Recorded after the 2026-08-01 audit correction above. Each entry states what was
+measured, not what was intended.
+
+### P2-5 - domain mutation gate (2026-08-02, commit `0f8ea02`)
+
+Pinned mutmut 3.6 runs nightly against the domain layer, exports raw CI statistics
+and fails below 75% or on missing, incomplete or interrupted evidence. Untested and
+runtime-failed mutants count against the score. The runner is Linux-only by upstream
+design, so no score is claimed from the current Windows host.
+
+### P2-6 - strict mypy over the full test tree (2026-08-04, commit `04b825b`)
+
+`mypy tests --no-incremental` measured **178 errors in 23 files** and now reports
+zero. Fixes are real annotations, not suppressions: the pre-existing
+`# type: ignore[no-untyped-def]` comments in `tests/conftest.py`,
+`tests/unit/test_consent_policy.py` and `tests/contract/test_provider_adapters.py`
+were removed and replaced with types.
+
+Two findings were substantive rather than cosmetic:
+
+- `EmailAdapter.parse_webhook` accepted SendGrid list payloads in its body but
+  declared `dict[str, Any]`. The parameter was widened; the `ProviderPort` Protocol
+  is unchanged, because an implementation may accept more than it promises.
+- Two assertions in `tests/e2e/test_prompt_registry.py` compared `count >= 3`
+  against a `scalar()` result typed `int | None`, which would have raised at runtime
+  had the query returned nothing. They now bind the value and assert non-null first.
+
+`tests` joined the mypy `packages` list, so bare `mypy` - what CI, `make` and the
+pre-commit hook run - covers 264 source files instead of 190. Gates at the commit:
+ruff check and format over 288 files, mypy 264 source files, `mypy tests
+--no-incremental` 74 source files, import-linter 6/6, 722 unit and contract tests.
+
+### P2-7 - OpenTelemetry tracing (2026-08-04)
+
+Spans at five boundaries - HTTP edge, Celery task, outbox dispatch, AI gateway,
+outbound webhook - with W3C trace context propagated from request to worker through
+the Celery message headers. Three constraints shape the implementation, and each has
+a test that fails if it weakens:
+
+- **No auto-instrumentation.** The `opentelemetry-instrumentation-*` packages record
+  full request targets, SQL text and header values. Only the API, SDK and OTLP/HTTP
+  exporter are installed; spans are opened by hand.
+- **Allow-listed attributes.** Unlisted keys are dropped, non-scalar values are
+  dropped whole, strings pass through the existing log redactor and are truncated.
+- **No exception recording.** `Span.record_exception` writes `str(exc)` and a
+  stacktrace, and messages quote the offending value; failures record the exception
+  type and an error status only.
+
+Route templates are recorded rather than resolved paths or query strings. Inbound
+`traceparent` is ignored unless `OTEL_TRUST_INCOMING_TRACE_CONTEXT` is set, because
+the public endpoints would otherwise let any caller choose the trace id. Tracing is
+fail-closed: without both `OTEL_ENABLED` and an endpoint, no provider is installed.
+
+No collector is deployed and no production tracing is claimed. Trace retention and
+access approval remain open in `docs/RELEASE-BLOCKERS.md`.
+

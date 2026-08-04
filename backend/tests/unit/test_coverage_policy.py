@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from pathlib import Path
 
 from scripts.check_coverage_policy import check
 
 
-def test_owned_exception_temporarily_satisfies_a_module_target(tmp_path) -> None:
+def test_owned_exception_temporarily_satisfies_a_module_target(tmp_path: Path) -> None:
     coverage = tmp_path / "coverage.json"
     policy = tmp_path / "policy.yaml"
     coverage.write_text(
@@ -34,7 +35,7 @@ exceptions:
     assert report["exceptions_used"][0]["owner"] == "platform"
 
 
-def test_expired_or_regressed_exception_fails(tmp_path) -> None:
+def test_expired_or_regressed_exception_fails(tmp_path: Path) -> None:
     coverage = tmp_path / "coverage.json"
     policy = tmp_path / "policy.yaml"
     coverage.write_text(

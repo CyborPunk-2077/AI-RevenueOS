@@ -10,12 +10,22 @@ import structlog
 
 from infrastructure.logging.context import current_context
 from infrastructure.logging.redaction import redact
+from infrastructure.observability.tracing import current_trace_id
 
 
 def _inject_context(_logger: Any, _name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     for key, value in current_context().items():
         if value is not None and key not in event_dict:
             event_dict[key] = value
+    return event_dict
+
+
+def _inject_trace(_logger: Any, _name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+    """Carry the trace id into logs so an operator can pivot between the two."""
+    if "trace_id" not in event_dict:
+        trace_id = current_trace_id()
+        if trace_id is not None:
+            event_dict["trace_id"] = trace_id
     return event_dict
 
 
@@ -38,6 +48,7 @@ def configure_logging(
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         _inject_context,
+        _inject_trace,
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
         _redact_processor,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import timedelta
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -18,7 +19,7 @@ pytestmark = pytest.mark.postgres
 
 
 async def test_concurrent_public_claims_commit_one_booking_lock_and_audit(
-    wired_engine, seeded_tenants, session_factory
+    wired_engine: Any, seeded_tenants: Any, session_factory: Any
 ) -> None:
     from application.appointments.booking import claim_public_slot
 

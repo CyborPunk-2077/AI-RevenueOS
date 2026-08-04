@@ -82,7 +82,7 @@ class EmailAdapter(MessagingPort):
         expected = hmac.new(self._webhook_secret.encode(), body, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, signature)
 
-    def parse_webhook(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    def parse_webhook(self, payload: dict[str, Any] | list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Normalise SES and SendGrid delivery notifications into one shape."""
         events: list[dict[str, Any]] = []
         records = payload if isinstance(payload, list) else payload.get("Records", [payload])

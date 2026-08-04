@@ -7,6 +7,25 @@ automation, analytics and compliance.
 India defaults are `Asia/Kolkata`, INR, Indian phone validation, Razorpay and
 WhatsApp. Internationalisation does not require a redesign.
 
+## Status
+
+**This is not GA.** Provider, cloud, legal, staging, performance, DAST, restore and
+production claims stay unproven until real evidence exists; every externally gated
+capability ships disabled. `docs/RELEASE-BLOCKERS.md` is the authoritative list of
+what is open, and repository evidence overrides any summary - including this one.
+
+Current post-audit hardening track:
+
+| Item | State |
+|---|---|
+| P2-5 mutation testing gate | Configured, pinned, nightly, fail-closed at 75%. No score claimed; the runner is Linux-only |
+| P2-6 strict mypy over the test tree | **Done.** 178 errors in 23 files fixed to zero; `tests` is in the mypy `packages` list, so bare `mypy` covers 264 source files |
+| P2-7 OpenTelemetry tracing | **Implemented, externally gated.** Spans at five boundaries with allow-listed attributes; off until a collector exists. See `docs/runbooks/tracing.md` |
+| P2-8 Storybook | Open |
+| P2-9 dev/staging/sandbox Terraform | Open |
+
+`docs/RESUME-HANDOFF.md` states the exact next task and the toolchain to run it.
+
 ## Run the demo (Windows)
 
 Docker Desktop running, then double-click **`RUN_DEMO.cmd`** — or from a terminal:
@@ -85,16 +104,29 @@ make security          # SAST, dependency audit, secret scan
 Integration tests run against a real PostgreSQL 16 with pgvector and connect as a
 non-superuser role, so RLS is genuinely exercised rather than bypassed.
 
+## Observability
+
+Structured JSON logs carry `correlation_id`, `tenant_id`, `user_id` and, inside a
+span, `trace_id`; the redactor strips secrets and P3 PII before anything is
+written. Prometheus metrics are exposed on an allow-listed CIDR. Tracing is
+OpenTelemetry over OTLP/HTTP and is **off** until both `OTEL_ENABLED` and an
+exporter endpoint are set - see `docs/runbooks/tracing.md`, which also lists the
+attributes a span may carry and the three categories that are deliberately never
+recorded.
+
 ## Documentation
 
 | Document | Purpose |
 |---|---|
+| `docs/RELEASE-BLOCKERS.md` | Authoritative open-blocker list; overrides summaries |
+| `docs/RESUME-HANDOFF.md` | The exact next task, and how to run the gates here |
 | `docs/adr/` | Architecture decisions and their trade-offs |
 | `docs/runbooks/provider-activation.md` | Turning on a gated provider |
 | `docs/runbooks/incident-response.md` | Severity, mitigation order, cross-tenant procedure |
 | `docs/runbooks/disaster-recovery.md` | Backup, restore, regional recovery |
 | `docs/runbooks/database.md` | Migrations, partitions, append-only tables |
 | `docs/runbooks/workers.md` | Queues, pools, retries, dead letters, the three DB roles |
+| `docs/runbooks/tracing.md` | OpenTelemetry: switches, span inventory, what may never be recorded |
 | `docs/GA-ACTIVATION-CHECKLIST.md` | Every remaining external gate |
 | `docs/ACCEPTANCE-EVIDENCE.md` | The 30 global criteria mapped to evidence |
 | `docs/IMPLEMENTATION-LOG.md` | Milestone-by-milestone record |

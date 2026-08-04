@@ -6,6 +6,8 @@ import hashlib
 import hmac
 import json
 import time
+from collections.abc import Callable
+from typing import Any
 from uuid import uuid4
 
 import httpx
@@ -38,7 +40,9 @@ APP_SECRET = "whatsapp-app-secret"
 RZP_WEBHOOK_SECRET = "razorpay-webhook-secret"
 
 
-def configured_whatsapp(handler=None) -> WhatsAppAdapter:  # type: ignore[no-untyped-def]
+def configured_whatsapp(
+    handler: Callable[[httpx.Request], httpx.Response] | None = None,
+) -> WhatsAppAdapter:
     transport = httpx.MockTransport(handler) if handler else None
     return WhatsAppAdapter(
         phone_number_id="1234567890",
@@ -299,8 +303,10 @@ class TestWhatsAppSendBehaviour:
 
 
 class TestRazorpayAdapter:
-    def _adapter(self, handler=None, **over):  # type: ignore[no-untyped-def]
-        args = {
+    def _adapter(
+        self, handler: Callable[[httpx.Request], httpx.Response] | None = None, **over: Any
+    ) -> RazorpayAdapter:
+        args: dict[str, Any] = {
             "key_id": "rzp_test_key",
             "key_secret": "secret",
             "webhook_secret": RZP_WEBHOOK_SECRET,
@@ -308,7 +314,7 @@ class TestRazorpayAdapter:
         }
         args.update(over)
         client = httpx.AsyncClient(transport=httpx.MockTransport(handler)) if handler else None
-        return RazorpayAdapter(client=client, **args)  # type: ignore[arg-type]
+        return RazorpayAdapter(client=client, **args)
 
     def test_unconfigured_without_credentials(self) -> None:
         assert (
@@ -357,7 +363,7 @@ class TestRazorpayAdapter:
         assert result.error_code == "VALIDATION_ERROR"
 
     async def test_order_sends_the_server_derived_amount_and_idempotency_key(self) -> None:
-        captured: dict = {}
+        captured: dict[str, Any] = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
             captured["json"] = json.loads(request.content)
@@ -683,7 +689,6 @@ class TestFileSecurity:
     ) -> None:
         import asyncio
         from io import BytesIO
-        from typing import Any
 
         received = bytearray()
 

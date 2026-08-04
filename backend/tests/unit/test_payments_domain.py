@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from domain.base import InvalidTransition, PolicyViolation
@@ -10,6 +12,7 @@ from domain.payments.state_machine import (
     REFUND_MFA_THRESHOLD,
     OrderRequest,
     PaymentStatus,
+    RefundAuthorization,
     assert_transition,
     authorize_refund,
     sanitize_provider_payload,
@@ -96,8 +99,8 @@ class TestOrderAmountAuthority:
 
 
 class TestRefundAuthorisation:
-    def _base(self, **over):  # type: ignore[no-untyped-def]
-        args = {
+    def _base(self, **over: Any) -> RefundAuthorization:
+        args: dict[str, Any] = {
             "payment_status": PaymentStatus.CAPTURED,
             "payment_amount_minor": 5_000_000,
             "already_refunded_minor": 0,
@@ -107,7 +110,7 @@ class TestRefundAuthorisation:
             "approver_id": None,
         }
         args.update(over)
-        return authorize_refund(**args)  # type: ignore[arg-type]
+        return authorize_refund(**args)
 
     def test_small_refund_permitted_without_mfa(self) -> None:
         result = self._base()

@@ -61,7 +61,7 @@ def compose() -> dict[str, Any]:
 @pytest.fixture(scope="session")
 def api_hostname_used_by_the_bff(compose: dict[str, Any]) -> str:
     """The host the web container puts in the Host header when it calls the API."""
-    internal = compose["web"]["environment"]["API_INTERNAL_URL"]
+    internal: str = compose["web"]["environment"]["API_INTERNAL_URL"]
     host = urlparse(internal).hostname
     assert host, f"could not read a hostname out of API_INTERNAL_URL={internal!r}"
     return host

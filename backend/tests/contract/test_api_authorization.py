@@ -8,13 +8,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from domain.auth.permissions import Role
+from infrastructure.auth.tokens import TokenService
 from tests.contract.conftest import OTHER_TENANT_ID, TENANT_ID, make_token
 
 pytestmark = pytest.mark.contract
 
 
 class TestRoleEnforcement:
-    def test_viewer_cannot_create(self, client: TestClient, viewer_headers: dict) -> None:
+    def test_viewer_cannot_create(self, client: TestClient, viewer_headers: dict[str, str]) -> None:
         response = client.post(
             "/v1/leads", headers=viewer_headers, json={"first_name": "A", "email": "a@b.in"}
         )
@@ -22,8 +23,9 @@ class TestRoleEnforcement:
 
     def test_authenticated_denial_invokes_the_security_auditor(
         self,
+        app: Any,
         client: TestClient,
-        viewer_headers: dict,
+        viewer_headers: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         captured: list[tuple[str, str]] = []
@@ -31,7 +33,7 @@ class TestRoleEnforcement:
         async def capture(request: Any, error: Any) -> None:
             captured.append((request.url.path, error.details["required_permission"]))
 
-        monkeypatch.setattr(client.app.state, "authorization_denial_auditor", capture)
+        monkeypatch.setattr(app.state, "authorization_denial_auditor", capture)
         response = client.post(
             "/v1/leads",
             headers=viewer_headers,
@@ -41,28 +43,30 @@ class TestRoleEnforcement:
         assert response.status_code == 403
         assert captured == [("/v1/leads", "lead:create")]
 
-    def test_viewer_can_read_reference_data(self, client: TestClient, viewer_headers: dict) -> None:
+    def test_viewer_can_read_reference_data(
+        self, client: TestClient, viewer_headers: dict[str, str]
+    ) -> None:
         assert client.get("/v1/tenant", headers=viewer_headers).status_code == 200
 
     def test_member_cannot_read_the_permission_catalogue(
-        self, client: TestClient, member_headers: dict
+        self, client: TestClient, member_headers: dict[str, str]
     ) -> None:
         assert client.get("/v1/permissions", headers=member_headers).status_code == 403
 
     def test_admin_can_read_the_permission_catalogue(
-        self, client: TestClient, auth_headers: dict
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         body = client.get("/v1/permissions", headers=auth_headers).json()
         assert body["success"] is True
         assert len(body["data"]["permissions"]) > 100
 
     def test_owner_only_actions_are_refused_to_an_admin(
-        self, client: TestClient, auth_headers: dict
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         assert client.post("/v1/tenant/delete-request", headers=auth_headers).status_code == 403
 
     def test_owner_may_request_deletion(
-        self, client: TestClient, owner_headers: dict, monkeypatch: pytest.MonkeyPatch
+        self, client: TestClient, owner_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         async def request(**_: object) -> dict[str, object]:
             return {"request_id": "request-1", "status": "received", "retention_days": 90}
@@ -73,7 +77,9 @@ class TestRoleEnforcement:
 
 
 class TestStepUpAuthentication:
-    def test_export_without_mfa_demands_step_up(self, client: TestClient, token_service) -> None:
+    def test_export_without_mfa_demands_step_up(
+        self, client: TestClient, token_service: TokenService
+    ) -> None:
         token = make_token(token_service, role=Role.OWNER, mfa=False)
         response = client.post("/v1/tenant/export", headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == 403
@@ -82,7 +88,7 @@ class TestStepUpAuthentication:
     def test_export_with_recent_mfa_is_permitted(
         self,
         client: TestClient,
-        owner_headers: dict,
+        owner_headers: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         async def request(**_: object) -> dict[str, object]:
@@ -95,7 +101,9 @@ class TestStepUpAuthentication:
         monkeypatch.setattr("application.tenants.requests.request_tenant_export", request)
         assert client.post("/v1/tenant/export", headers=owner_headers).status_code == 200
 
-    def test_deletion_without_mfa_demands_step_up(self, client: TestClient, token_service) -> None:
+    def test_deletion_without_mfa_demands_step_up(
+        self, client: TestClient, token_service: TokenService
+    ) -> None:
         token = make_token(token_service, role=Role.OWNER, mfa=False)
         response = client.post(
             "/v1/tenant/delete-request", headers={"Authorization": f"Bearer {token}"}
@@ -104,20 +112,24 @@ class TestStepUpAuthentication:
 
 
 class TestTenantIsolationAtTheEdge:
-    def test_the_token_tenant_is_authoritative(self, client: TestClient, token_service) -> None:
+    def test_the_token_tenant_is_authoritative(
+        self, client: TestClient, token_service: TokenService
+    ) -> None:
         token = make_token(token_service, tenant_id=OTHER_TENANT_ID)
         body = client.get("/v1/tenant", headers={"Authorization": f"Bearer {token}"}).json()
         assert body["data"]["id"] == str(OTHER_TENANT_ID)
 
     def test_a_client_supplied_tenant_header_is_ignored(
-        self, client: TestClient, auth_headers: dict
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         body = client.get(
             "/v1/tenant", headers={**auth_headers, "X-Tenant-ID": str(OTHER_TENANT_ID)}
         ).json()
         assert body["data"]["id"] == str(TENANT_ID)
 
-    def test_a_mismatched_api_host_is_refused(self, client: TestClient, auth_headers: dict) -> None:
+    def test_a_mismatched_api_host_is_refused(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
         response = client.get(
             "/v1/tenant", headers={**auth_headers, "Host": "api.someone-else.airevenueos.io"}
         )
@@ -126,7 +138,7 @@ class TestTenantIsolationAtTheEdge:
 
 class TestFeatureGating:
     def test_gated_channels_are_reported_as_disabled_with_a_prerequisite(
-        self, client: TestClient, auth_headers: dict
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         features = client.get(
             "/v1/tenant/feature-flags", headers=auth_headers, params={"plan": "enterprise"}
@@ -135,13 +147,17 @@ class TestFeatureGating:
             assert features[channel]["enabled"] is False
             assert features[channel]["activation_prerequisite"]
 
-    def test_voice_is_never_enabled_by_a_plan(self, client: TestClient, auth_headers: dict) -> None:
+    def test_voice_is_never_enabled_by_a_plan(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
         features = client.get(
             "/v1/tenant/feature-flags", headers=auth_headers, params={"plan": "enterprise"}
         ).json()["data"]["features"]
         assert features["voice"]["enabled"] is False
 
-    def test_safe_features_remain_available(self, client: TestClient, auth_headers: dict) -> None:
+    def test_safe_features_remain_available(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
         features = client.get(
             "/v1/tenant/feature-flags", headers=auth_headers, params={"plan": "growth"}
         ).json()["data"]["features"]
@@ -171,7 +187,7 @@ class TestIndustryTemplateApi:
         assert body["qualification_rubric"]["criteria"]
 
     def test_applying_a_template_records_version_and_divergence(
-        self, client: TestClient, auth_headers: dict
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         body = client.post(
             "/v1/onboarding/apply-template", headers=auth_headers, params={"code": "gyms"}
@@ -181,7 +197,7 @@ class TestIndustryTemplateApi:
         assert "configuration" in body
 
     def test_applying_an_unknown_template_is_404(
-        self, client: TestClient, auth_headers: dict
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         response = client.post(
             "/v1/onboarding/apply-template", headers=auth_headers, params={"code": "nope"}
@@ -198,14 +214,18 @@ class TestWorkflowApiSafety:
         "edges": [],
     }
 
-    def test_valid_document_passes_validation(self, client: TestClient, auth_headers: dict) -> None:
+    def test_valid_document_passes_validation(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
         body = client.post(
             "/v1/workflows/validate", headers=auth_headers, json={"document": self.VALID}
         ).json()["data"]
         assert body["valid"] is True
         assert body["content_hash"]
 
-    def test_expression_escape_is_rejected(self, client: TestClient, auth_headers: dict) -> None:
+    def test_expression_escape_is_rejected(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
         document = {
             **self.VALID,
             "nodes": [
@@ -224,7 +244,7 @@ class TestWorkflowApiSafety:
         assert any("forbidden token" in p for p in body["problems"])
 
     def test_publishing_an_invalid_document_is_422(
-        self, client: TestClient, auth_headers: dict
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         document = {**self.VALID, "nodes": [{"id": "n1", "type": "action", "action": "db.drop"}]}
         response = client.post(
@@ -236,7 +256,7 @@ class TestWorkflowApiSafety:
     def test_publishing_returns_a_pinned_content_hash(
         self,
         client: TestClient,
-        auth_headers: dict,
+        auth_headers: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from domain.workflows.dsl import compile_workflow
@@ -260,7 +280,7 @@ class TestWorkflowApiSafety:
         assert len(body["content_hash"]) == 64
 
     def test_irreversible_action_without_approval_is_refused(
-        self, client: TestClient, auth_headers: dict
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         document = {
             **self.VALID,
@@ -271,7 +291,9 @@ class TestWorkflowApiSafety:
         )
         assert response.status_code == 422
 
-    def test_viewer_cannot_publish(self, client: TestClient, viewer_headers: dict) -> None:
+    def test_viewer_cannot_publish(
+        self, client: TestClient, viewer_headers: dict[str, str]
+    ) -> None:
         response = client.post(
             "/v1/workflows/publish", headers=viewer_headers, json={"document": self.VALID}
         )
@@ -314,14 +336,14 @@ class TestAiApiSafety:
         assert client.get("/v1/ai/health").status_code == 401
 
     def test_ai_health_reports_unconfigured_providers(
-        self, client: TestClient, auth_headers: dict
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         body = client.get("/v1/ai/health", headers=auth_headers).json()["data"]
         assert body["providers"]["openai"]["configured"] is False
         assert body["providers"]["anthropic"]["configured"] is False
 
     def test_chat_degrades_safely_without_credentials(
-        self, client: TestClient, auth_headers: dict
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         body = client.post(
             "/v1/ai/chat", headers=auth_headers, json={"message": "summarise this lead"}
@@ -334,7 +356,7 @@ class TestAiApiSafety:
             assert body["metadata"]["provider_called"] is False
 
     def test_prompt_injection_is_blocked_at_the_api_edge(
-        self, client: TestClient, auth_headers: dict
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         body = client.post(
             "/v1/ai/chat",
@@ -344,7 +366,7 @@ class TestAiApiSafety:
         assert body["metadata"]["degraded_reason"] == "input_guard_blocked"
 
     def test_generated_content_always_requires_review(
-        self, client: TestClient, auth_headers: dict
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         body = client.post(
             "/v1/ai/generate",
@@ -354,7 +376,7 @@ class TestAiApiSafety:
         assert body["requires_review"] is True
 
     def test_ai_responses_never_leak_credentials(
-        self, client: TestClient, auth_headers: dict
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         raw = client.post(
             "/v1/ai/chat", headers=auth_headers, json={"message": "hello"}

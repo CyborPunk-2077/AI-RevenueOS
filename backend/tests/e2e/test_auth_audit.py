@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -11,7 +12,7 @@ pytestmark = pytest.mark.postgres
 
 
 async def test_login_refresh_reuse_and_logout_commit_compact_audit_rows(
-    wired_engine, seeded_tenants, session_factory
+    wired_engine: Any, seeded_tenants: Any, session_factory: Any
 ) -> None:
     from application.auth.service import login, logout, refresh
     from infrastructure.auth.passwords import hash_password
@@ -99,9 +100,9 @@ async def test_login_refresh_reuse_and_logout_commit_compact_audit_rows(
 
 
 async def test_explicit_bulk_and_session_cap_revocations_are_audited(
-    wired_engine, seeded_tenants, session_factory
+    wired_engine: Any, seeded_tenants: Any, session_factory: Any
 ) -> None:
-    from application.auth.service import issue_session
+    from application.auth.service import AuthResult, issue_session
     from application.auth.sessions import revoke_all, revoke_session
     from domain.auth.permissions import Role
     from infrastructure.auth.tokens import MAX_SESSIONS_PER_USER, TokenService, generate_keypair
@@ -140,7 +141,7 @@ async def test_explicit_bulk_and_session_cap_revocations_are_audited(
         issuer="https://session-audit.test",
     )
 
-    async def open_session():
+    async def open_session() -> AuthResult:
         return await issue_session(
             user_id=user_id,
             tenant=tenant,
@@ -192,7 +193,7 @@ async def test_explicit_bulk_and_session_cap_revocations_are_audited(
 
 
 async def test_registration_verification_and_password_reset_are_audited(
-    wired_engine, session_factory
+    wired_engine: Any, session_factory: Any
 ) -> None:
     from application.auth.registration import forgot_password, reset_password, signup, verify_email
     from application.auth.service import login
@@ -253,7 +254,11 @@ async def test_registration_verification_and_password_reset_are_audited(
 
 
 async def test_mfa_security_mutations_are_audited_without_secrets(
-    wired_engine, seeded_tenants, session_factory, monkeypatch, request
+    wired_engine: Any,
+    seeded_tenants: Any,
+    session_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
 ) -> None:
     from application.auth.mfa import (
         complete_enrolment,
@@ -372,7 +377,7 @@ async def test_mfa_security_mutations_are_audited_without_secrets(
 
 
 async def test_api_key_reveal_and_revocation_are_audited_without_the_key(
-    wired_engine, seeded_tenants, session_factory
+    wired_engine: Any, seeded_tenants: Any, session_factory: Any
 ) -> None:
     from application.auth.api_keys import create, revoke
     from shared.utils.ids import uuid7

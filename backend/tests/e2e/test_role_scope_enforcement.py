@@ -7,7 +7,8 @@ version.
 
 from __future__ import annotations
 
-from uuid import uuid4
+from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -19,7 +20,12 @@ pytestmark = pytest.mark.postgres
 
 
 def service_for(
-    tenant_id, *, user_id=None, scope=Scope.GLOBAL, branch_ids=frozenset(), team_ids=frozenset()
+    tenant_id: UUID,
+    *,
+    user_id: UUID | None = None,
+    scope: Scope = Scope.GLOBAL,
+    branch_ids: frozenset[str] = frozenset(),
+    team_ids: frozenset[str] = frozenset(),
 ) -> LeadService:
     return LeadService(
         tenant_id=tenant_id,
@@ -31,7 +37,7 @@ def service_for(
     )
 
 
-async def _seed(admin: LeadService, **over):  # type: ignore[no-untyped-def]
+async def _seed(admin: LeadService, **over: Any) -> dict[str, Any]:
     payload = {"first_name": "Scoped", "email": f"{uuid4()}@example.in"}
     payload.update(over)
     return await admin.capture(payload)
@@ -39,7 +45,7 @@ async def _seed(admin: LeadService, **over):  # type: ignore[no-untyped-def]
 
 class TestSelfScope:
     async def test_member_sees_only_leads_assigned_to_them(
-        self, wired_engine, principal_factory
+        self, wired_engine: Any, principal_factory: Any
     ) -> None:
         tenant = principal_factory.tenant_a
         admin = service_for(tenant)
@@ -55,7 +61,7 @@ class TestSelfScope:
         assert "Theirs" not in names
 
     async def test_self_scope_excludes_unassigned_leads(
-        self, wired_engine, principal_factory
+        self, wired_engine: Any, principal_factory: Any
     ) -> None:
         tenant = principal_factory.tenant_a
         admin = service_for(tenant)
@@ -66,7 +72,7 @@ class TestSelfScope:
         assert "Unassigned" not in names
 
     async def test_global_scope_still_sees_everything_in_the_tenant(
-        self, wired_engine, principal_factory
+        self, wired_engine: Any, principal_factory: Any
     ) -> None:
         tenant = principal_factory.tenant_a
         admin = service_for(tenant)
@@ -78,7 +84,7 @@ class TestSelfScope:
 
 class TestTeamAndBranchScope:
     async def test_team_scope_filters_to_the_principals_teams(
-        self, wired_engine, principal_factory
+        self, wired_engine: Any, principal_factory: Any
     ) -> None:
         tenant = principal_factory.tenant_a
         admin = service_for(tenant)
@@ -94,7 +100,7 @@ class TestTeamAndBranchScope:
         assert "OtherTeamLead" not in names
 
     async def test_branch_scope_filters_to_the_principals_branches(
-        self, wired_engine, principal_factory
+        self, wired_engine: Any, principal_factory: Any
     ) -> None:
         tenant = principal_factory.tenant_a
         admin = service_for(tenant)
@@ -112,7 +118,7 @@ class TestTeamAndBranchScope:
 
 class TestScopeFailsClosed:
     async def test_team_scope_without_teams_returns_nothing(
-        self, wired_engine, principal_factory
+        self, wired_engine: Any, principal_factory: Any
     ) -> None:
         tenant = principal_factory.tenant_a
         await _seed(service_for(tenant), first_name="Existing", team_id=uuid4())
@@ -121,7 +127,7 @@ class TestScopeFailsClosed:
         assert (await orphan.list_leads(ListQuery())).items == []
 
     async def test_branch_scope_without_branches_returns_nothing(
-        self, wired_engine, principal_factory
+        self, wired_engine: Any, principal_factory: Any
     ) -> None:
         tenant = principal_factory.tenant_a
         await _seed(service_for(tenant), first_name="Existing", branch_id=uuid4())
@@ -132,7 +138,7 @@ class TestScopeFailsClosed:
 
 class TestScopeComposesWithTenantIsolation:
     async def test_scope_never_widens_past_the_tenant_boundary(
-        self, wired_engine, principal_factory
+        self, wired_engine: Any, principal_factory: Any
     ) -> None:
         """A global-scope principal in tenant B still cannot see tenant A's rows."""
         shared_user = uuid4()
@@ -149,7 +155,7 @@ class TestObjectLevelScope:
     """Scoping only list queries would leave an in-tenant IDOR."""
 
     async def test_member_cannot_read_another_users_lead_by_id(
-        self, wired_engine, principal_factory
+        self, wired_engine: Any, principal_factory: Any
     ) -> None:
         from shared.exceptions import NotFound
 
@@ -164,7 +170,7 @@ class TestObjectLevelScope:
             await member.get(other["id"])
 
     async def test_member_cannot_update_another_users_lead(
-        self, wired_engine, principal_factory
+        self, wired_engine: Any, principal_factory: Any
     ) -> None:
         from shared.exceptions import NotFound
 
@@ -178,7 +184,7 @@ class TestObjectLevelScope:
             await member.update(other["id"], {"last_name": "Hijacked"})
 
     async def test_member_can_read_and_update_their_own_lead(
-        self, wired_engine, principal_factory
+        self, wired_engine: Any, principal_factory: Any
     ) -> None:
         tenant = principal_factory.tenant_a
         admin = service_for(tenant)
@@ -191,7 +197,7 @@ class TestObjectLevelScope:
         assert updated["last_name"] == "Verified"
 
     async def test_out_of_scope_and_absent_are_indistinguishable(
-        self, wired_engine, principal_factory
+        self, wired_engine: Any, principal_factory: Any
     ) -> None:
         from shared.exceptions import NotFound
 

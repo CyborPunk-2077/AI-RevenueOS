@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
+from opentelemetry.trace import SpanKind
+
 from domain.ai.guards import GuardResult, requires_human_confirmation, scan_input, scan_output
 from infrastructure.ai.models import (
     DEGRADED_MESSAGES,
@@ -32,6 +34,7 @@ from infrastructure.monitoring.metrics import (
     provider_calls,
     provider_latency,
 )
+from infrastructure.observability.tracing import set_attributes, start_span
 
 logger = get_logger("ai.gateway")
 
@@ -166,6 +169,14 @@ class AIGateway:
 
     # -- main entry point -------------------------------------------------
     async def complete(self, request: AIRequest) -> AIResponse:
+        # Task, provider, model and token counts only. Prompts, completions, tool
+        # arguments and retrieved context never become span attributes.
+        with start_span(
+            "ai complete", kind=SpanKind.CLIENT, **{"ai.task": str(request.task)}
+        ):
+            return await self._complete(request)
+
+    async def _complete(self, request: AIRequest) -> AIResponse:
         started = time.perf_counter()
         policy = route_for(request.task, request.tier)
         request_id = request.correlation_id or f"ai-{int(time.time() * 1000)}"
@@ -273,6 +284,14 @@ class AIGateway:
                 False,
             )
             self._publish_metrics(spec.provider.value, model_name, request.task, usage, latency_ms)
+            set_attributes(
+                **{
+                    "ai.provider": spec.provider.value,
+                    "ai.model": model_name,
+                    "ai.tokens_input": usage.get("input_tokens"),
+                    "ai.tokens_output": usage.get("output_tokens"),
+                }
+            )
 
             fallback_from = policy.primary if model_name != policy.primary else None
             warnings = list(out_guard.reasons)

@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import os
 import tempfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from uuid import UUID
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import NullPool
 
 from shared.utils.ids import uuid7
@@ -82,7 +87,7 @@ def migrated_database(database_url: str) -> str:
 
 
 @pytest_asyncio.fixture
-async def engine(migrated_database: str):  # type: ignore[no-untyped-def]
+async def engine(migrated_database: str) -> AsyncIterator[AsyncEngine]:
     eng = create_async_engine(migrated_database, poolclass=NullPool, future=True)
     try:
         yield eng
@@ -91,19 +96,23 @@ async def engine(migrated_database: str):  # type: ignore[no-untyped-def]
 
 
 @pytest_asyncio.fixture
-async def session_factory(engine):  # type: ignore[no-untyped-def]
+async def session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
 
 
 @pytest_asyncio.fixture
-async def db(session_factory) -> AsyncIterator[AsyncSession]:  # type: ignore[no-untyped-def]
+async def db(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[AsyncSession]:
     async with session_factory() as session:
         yield session
         await session.rollback()
 
 
 @pytest_asyncio.fixture
-async def seeded_tenants(session_factory) -> AsyncIterator[tuple[UUID, UUID]]:  # type: ignore[no-untyped-def]
+async def seeded_tenants(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[tuple[UUID, UUID]]:
     async with session_factory() as session, session.begin():
         for tid, slug in ((TENANT_A, "tenant-a"), (TENANT_B, "tenant-b")):
             await session.execute(
@@ -121,5 +130,5 @@ async def seeded_tenants(session_factory) -> AsyncIterator[tuple[UUID, UUID]]:  
 
 
 @pytest.fixture
-def new_id():  # type: ignore[no-untyped-def]
+def new_id() -> Callable[..., UUID]:
     return uuid7

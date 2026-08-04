@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from sqlalchemy import text
@@ -14,7 +15,7 @@ pytestmark = pytest.mark.postgres
 
 
 async def test_denial_audit_is_compact_and_tenant_isolated(
-    wired_engine, seeded_tenants, session_factory
+    wired_engine: Any, seeded_tenants: Any, session_factory: Any
 ) -> None:
     from application.audit.denials import audit_authorization_denial
 

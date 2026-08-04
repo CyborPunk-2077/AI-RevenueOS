@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from domain.workflows.dsl import (
@@ -14,8 +16,8 @@ from domain.workflows.dsl import (
 )
 
 
-def wf(**overrides):  # type: ignore[no-untyped-def]
-    doc = {
+def wf(**overrides: Any) -> dict[str, Any]:
+    doc: dict[str, Any] = {
         "name": "Welcome new leads",
         "description": "Tag and notify on capture",
         "category": "lead_nurture",

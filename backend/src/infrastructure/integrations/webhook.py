@@ -15,6 +15,9 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
+from opentelemetry.trace import SpanKind
+
+from infrastructure.observability.tracing import set_attributes, start_span
 
 Resolver = Callable[[str, int], Awaitable[list[str]]]
 
@@ -87,10 +90,25 @@ async def send_webhook(
     )
     owned_client = client is None
     http = client or httpx.AsyncClient(timeout=15.0, follow_redirects=False, trust_env=False)
+    # The span records the outcome, never the destination URL: a tenant's webhook
+    # endpoint frequently embeds a token in its path or query string.
     try:
-        response = await http.post(url, content=body, headers=headers)
-    except httpx.HTTPError as exc:
-        return WebhookResult(False, False, error=type(exc).__name__)
+        with start_span(
+            "webhook send",
+            kind=SpanKind.CLIENT,
+            **{"provider.name": "custom_webhook", "provider.operation": "send"},
+        ):
+            try:
+                response = await http.post(url, content=body, headers=headers)
+            except httpx.HTTPError as exc:
+                set_attributes(**{"provider.outcome": "transport_error"})
+                return WebhookResult(False, False, error=type(exc).__name__)
+            set_attributes(
+                **{
+                    "provider.status_code": response.status_code,
+                    "provider.outcome": "sent",
+                }
+            )
     finally:
         if owned_client:
             await http.aclose()

@@ -56,6 +56,7 @@ fabricated, simulated or assumed.
 | 4.5 | PagerDuty rotation and escalation policy | On-call |
 | 4.6 | Sentry and Langfuse production projects | Production telemetry |
 | 4.7 | Private S3 buckets, task-role policy and deployed ClamAV | File uploads; follow `docs/runbooks/storage-activation.md` |
+| 4.8 | OTLP collector endpoint, plus a trace retention/access decision and an ingress that strips client `traceparent` | Tracing; follow `docs/runbooks/tracing.md`. Spans are tenant-attributable telemetry, so retention and access need the same approval as logs |
 
 ## 5. Pilot and release evidence (M23 and M24)
 

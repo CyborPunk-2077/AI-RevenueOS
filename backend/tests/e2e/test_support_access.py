@@ -34,7 +34,7 @@ async def test_support_grant_is_durable_idempotent_and_tenant_isolated(
     tenant_a, tenant_b = seeded_tenants
     owner = principal_factory(tenant_a, Role.OWNER)
     support_ref = f"support-{uuid4().hex}@example.invalid"
-    payload = {
+    payload: dict[str, Any] = {
         "support_user_ref": support_ref,
         "purpose": "Investigate ticket REV-1042 without write access",
         "duration_minutes": 15,

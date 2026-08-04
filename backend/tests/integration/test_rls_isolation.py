@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 import pytest
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 pytestmark = pytest.mark.postgres
 
 
-async def _bind(session, tenant_id) -> None:  # type: ignore[no-untyped-def]
+async def _bind(session: AsyncSession, tenant_id: UUID) -> None:
     await session.execute(
         text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(tenant_id)}
     )
@@ -27,7 +30,9 @@ PLATFORM_SCOPED: dict[str, str] = {
 }
 
 
-async def test_every_table_carrying_a_tenant_id_enforces_rls(session_factory) -> None:
+async def test_every_table_carrying_a_tenant_id_enforces_rls(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
     """Asserted against the live database, including partition children.
 
     PostgreSQL does not propagate row level security to partitions, so a parent
@@ -61,7 +66,9 @@ async def test_every_table_carrying_a_tenant_id_enforces_rls(session_factory) ->
     )
 
 
-async def test_partition_children_are_individually_protected(session_factory) -> None:
+async def test_partition_children_are_individually_protected(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
     """A direct read of a partition must not bypass the parent's policy."""
     async with session_factory() as session:
         rows = (
@@ -83,7 +90,7 @@ async def test_partition_children_are_individually_protected(session_factory) ->
 
 
 async def test_rls_is_enabled_and_forced_on_every_registered_tenant_table(
-    session_factory,
+    session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     from infrastructure.database.base import TENANT_OWNED_TABLES
 
@@ -109,7 +116,9 @@ async def test_rls_is_enabled_and_forced_on_every_registered_tenant_table(
     assert len(TENANT_OWNED_TABLES) >= 90
 
 
-async def test_contact_allow_and_deny_path(session_factory, seeded_tenants) -> None:
+async def test_contact_allow_and_deny_path(
+    session_factory: async_sessionmaker[AsyncSession], seeded_tenants: tuple[UUID, UUID]
+) -> None:
     tenant_a, tenant_b = seeded_tenants
     from shared.utils.ids import uuid7
 
@@ -152,7 +161,9 @@ async def test_contact_allow_and_deny_path(session_factory, seeded_tenants) -> N
     assert found_none == 0
 
 
-async def test_cross_tenant_write_is_rejected(session_factory, seeded_tenants) -> None:
+async def test_cross_tenant_write_is_rejected(
+    session_factory: async_sessionmaker[AsyncSession], seeded_tenants: tuple[UUID, UUID]
+) -> None:
     tenant_a, tenant_b = seeded_tenants
     from shared.utils.ids import uuid7
 
@@ -172,7 +183,9 @@ async def test_cross_tenant_write_is_rejected(session_factory, seeded_tenants) -
     assert "row-level security" in str(exc.value).lower()
 
 
-async def test_update_cannot_move_a_row_across_tenants(session_factory, seeded_tenants) -> None:
+async def test_update_cannot_move_a_row_across_tenants(
+    session_factory: async_sessionmaker[AsyncSession], seeded_tenants: tuple[UUID, UUID]
+) -> None:
     tenant_a, tenant_b = seeded_tenants
     from shared.utils.ids import uuid7
 

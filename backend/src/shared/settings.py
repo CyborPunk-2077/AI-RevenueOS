@@ -133,6 +133,14 @@ class Settings(BaseSettings):
     metrics_allowed_cidrs: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["127.0.0.1/32", "10.0.0.0/8"]
     )
+    # Tracing is fail-closed: it stays a no-op until it is switched on AND given a
+    # collector endpoint. An enabled flag with no endpoint exports nothing.
+    otel_enabled: bool = False
+    otel_exporter_endpoint: str | None = None
+    otel_sample_ratio: float = Field(default=0.05, ge=0.0, le=1.0)
+    otel_export_timeout_ms: int = 5_000
+    # Only enable behind an ingress that strips client-supplied `traceparent`.
+    otel_trust_incoming_trace_context: bool = False
 
     features: FeatureFlagDefaults = Field(default_factory=FeatureFlagDefaults)
 

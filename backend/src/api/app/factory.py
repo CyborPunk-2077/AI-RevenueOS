@@ -20,6 +20,7 @@ from api.middleware.security import (
     SecurityHeadersMiddleware,
 )
 from infrastructure.logging.setup import configure_logging, get_logger
+from infrastructure.observability.tracing import configure_tracing, shutdown_tracing
 
 logger = get_logger("api.app")
 
@@ -29,6 +30,15 @@ WEBHOOK_PREFIXES = ("/v1/webhooks/inbound", "/v1/public")
 def create_app(settings: Settings | None = None) -> FastAPI:
     cfg = settings or get_settings()
     configure_logging(level=cfg.log_level, json_output=cfg.log_json, service=cfg.service_name)
+    configure_tracing(
+        enabled=cfg.otel_enabled,
+        endpoint=cfg.otel_exporter_endpoint,
+        service_name=cfg.service_name,
+        release=cfg.release,
+        environment=str(cfg.environment),
+        sample_ratio=cfg.otel_sample_ratio,
+        export_timeout_ms=cfg.otel_export_timeout_ms,
+    )
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -81,7 +91,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         TrustedHostMiddleware, allowed_hosts=[*cfg.trusted_hosts, "*.airevenueos.io"]
     )
-    app.add_middleware(CorrelationMiddleware)
+    app.add_middleware(
+        CorrelationMiddleware, trust_incoming_context=cfg.otel_trust_incoming_trace_context
+    )
 
     register_exception_handlers(app)
     app.include_router(health_router)
@@ -115,6 +127,7 @@ async def _startup(app: FastAPI, cfg: Settings) -> None:
 
 
 async def _shutdown(app: FastAPI) -> None:
+    shutdown_tracing()
     engine: Any = getattr(app.state, "engine", None)
     if engine is not None:
         await engine.dispose()
