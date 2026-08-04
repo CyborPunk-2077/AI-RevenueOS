@@ -32,6 +32,37 @@ class RefreshRequest(StrictModel):
     refresh_token: Annotated[str, Field(min_length=8, max_length=512)]
 
 
+class LeadMergeRequest(StrictModel):
+    merge_id: UUID
+
+
+class LeadDisqualifyRequest(StrictModel):
+    # Long enough to be a sentence: an unexplained disqualification is
+    # indistinguishable from a mis-click a quarter later.
+    reason: Annotated[str, Field(min_length=3, max_length=200)]
+
+
+class AssignmentRuleCreateRequest(StrictModel):
+    name: Annotated[str, Field(min_length=1, max_length=150)]
+    strategy: Literal["round_robin", "first_available", "load_balanced"] = "round_robin"
+    conditions: dict[str, Any] = Field(default_factory=dict)
+    targets: list[str] = Field(default_factory=list)
+    position: int | None = None
+
+
+class AssignmentRuleUpdateRequest(StrictModel):
+    name: Annotated[str | None, Field(min_length=1, max_length=150)] = None
+    strategy: Literal["round_robin", "first_available", "load_balanced"] | None = None
+    conditions: dict[str, Any] | None = None
+    targets: list[str] | None = None
+    position: int | None = None
+    is_active: bool | None = None
+
+
+class ReorderRulesRequest(StrictModel):
+    rule_ids: Annotated[list[UUID], Field(min_length=1, max_length=100)]
+
+
 class FormCreateRequest(StrictModel):
     name: Annotated[str, Field(min_length=1, max_length=150)]
     type: Literal["embedded", "hosted", "popup"] = "embedded"

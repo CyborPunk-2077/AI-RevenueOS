@@ -255,3 +255,58 @@ Coverage: 8 unit tests over the privilege ceiling, 13 real-Postgres E2E tests
 (durability, single-use, revocation, expiry and reissue, cross-tenant invisibility,
 forged prefix, audit rows), and 7 contract tests over RBAC and the open routes.
 
+### M08 - forms, import, dedupe, assignment (2026-08-04)
+
+Four gaps closed in one pass, sharing one rule: the destructive operations are
+reversible and the bulk operation is previewable.
+
+**CSV import.** Preview and commit call the same `plan_import`, so what the user
+approved is what runs. Every row is judged before anything is written - a partial
+import that stops halfway leaves the user reconciling by hand. Rows without a
+usable email or phone are rejected rather than repaired, because a guessed
+address is plausible rubbish nobody notices until a campaign bounces. Duplicates
+*within the file* are caught too; that is the commonest way a CRM gets twins on
+day one. Commit is idempotent on `import_key`, so a double-clicked button does
+not import twice.
+
+**Assignment rules.** Ordered, first match wins - visible in the UI and
+explainable to the person whose leads stopped arriving, unlike specificity
+scoring. Conditions may only read a fixed set of lead attributes: a rule reading
+arbitrary capture keys silently stops matching the day someone renames a form
+field. Round-robin's cursor advances in the same transaction as the assignment;
+two concurrent captures can hand one person two leads in a row, which is a better
+trade than serialising every capture behind one row.
+
+**Merge.** The loser is soft-deleted and stamped with `merged_into_id`, never
+deleted, so a bookmarked URL or an inbound webhook naming the old id resolves to
+the survivor. Only empty fields are filled - overwriting a human-corrected field
+with older data is the failure mode people never forgive - and source events move
+to the survivor so attribution survives.
+
+**Disqualify and restore** are a pair, because "not now" is the commonest reason
+and it is usually wrong within a quarter. A reason is mandatory: three months on,
+no reason is indistinguishable from a mis-click. A converted lead cannot be
+restored - a contact exists downstream and reopening would fork the truth.
+
+Deduplication records candidates for a human rather than auto-merging: an
+automatic merge on a fuzzy name match destroys data nobody asked it to touch.
+
+### M05 - app-shell route groups (2026-08-04)
+
+`(auth)`, `(onboarding)`, `(dashboard)/[tenantSlug]` and `(fullscreen)` now exist
+as route groups with their own layouts. Groups do not affect URLs, so the
+existing flat routes still resolve while new work lands in the right shell.
+
+Each layout exists because the surrounding chrome is wrong everywhere else:
+`(auth)` has no navigation, since every link would 401; `(onboarding)` hides the
+full nav so a half-configured tenant is not invited to click into eight empty
+screens; `(fullscreen)` is for people who are not users and never will be;
+`(dashboard)/[tenantSlug]` checks the slug against the session and redirects on a
+mismatch, because rendering another tenant's chrome looks like a leak even when
+nothing leaked.
+
+The invitation UI for M06 lands here: an accept page under `(auth)`, and a team
+settings page with the invite form and invitation list. The invite form reports
+`delivery: not_sent` honestly rather than implying an email went out, because
+email remains gated.
+

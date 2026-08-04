@@ -51,9 +51,7 @@ async def create_form(
 
 
 @router.get("/forms/{form_id}", summary="Read a form")
-async def read_form(
-    form_id: UUID, request: Request, principal: CurrentPrincipal
-) -> dict[str, Any]:
+async def read_form(form_id: UUID, request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
     principal.require("form", "read")
     result = await form_builder.get_form(tenant_id=principal.tenant_id, form_id=form_id)
     return success(result, request_id=_request_id(request))

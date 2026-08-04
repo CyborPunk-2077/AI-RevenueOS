@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 
 from api.app.envelope import success
 from api.deps.idempotency import IdempotencyContext, idempotency, parse_if_match
@@ -13,6 +13,8 @@ from api.deps.principal import CurrentPrincipal, ListQuery, list_query, rate_lim
 from api.v1.schemas import (
     LeadBulkUpdateRequest,
     LeadCreate,
+    LeadDisqualifyRequest,
+    LeadMergeRequest,
     LeadQualifyRequest,
     LeadReviewRequest,
     LeadUpdate,
@@ -128,6 +130,90 @@ async def lead_duplicates(
         {"candidates": candidates, "resolution": duplicate_resolution([])},
         request_id=getattr(request.state, "correlation_id", None),
     )
+
+
+@router.post("/{lead_id}/deduplicate", summary="Scan for duplicate candidates")
+async def deduplicate_lead(
+    lead_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("lead", "read")
+    from application.leads import lifecycle_ops
+
+    result = await lifecycle_ops.deduplicate(
+        tenant_id=principal.tenant_id, actor_id=principal.user_id, lead_id=lead_id
+    )
+    return success(result, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.post("/{lead_id}/merge", summary="Merge another lead into this one")
+async def merge_lead(
+    lead_id: UUID,
+    payload: LeadMergeRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+) -> dict[str, Any]:
+    """`lead_id` survives; the lead named in the body is folded into it."""
+    principal.require("lead", "merge")
+    from application.leads import lifecycle_ops
+
+    result = await lifecycle_ops.merge_leads(
+        tenant_id=principal.tenant_id,
+        actor_id=principal.user_id,
+        survivor_id=lead_id,
+        loser_id=payload.merge_id,
+    )
+    return success(result, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.post("/{lead_id}/disqualify", summary="Disqualify a lead with a reason")
+async def disqualify_lead(
+    lead_id: UUID,
+    payload: LeadDisqualifyRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+) -> dict[str, Any]:
+    principal.require("lead", "update")
+    from application.leads import lifecycle_ops
+
+    result = await lifecycle_ops.disqualify_lead(
+        tenant_id=principal.tenant_id,
+        actor_id=principal.user_id,
+        lead_id=lead_id,
+        reason=payload.reason,
+    )
+    return success(result, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.post("/{lead_id}/restore", summary="Reopen a disqualified or archived lead")
+async def restore_lead(
+    lead_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("lead", "update")
+    from application.leads import lifecycle_ops
+
+    result = await lifecycle_ops.restore_lead(
+        tenant_id=principal.tenant_id, actor_id=principal.user_id, lead_id=lead_id
+    )
+    return success(result, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.post("/{lead_id}/assign", summary="Run the assignment rules against this lead")
+async def assign_lead(
+    lead_id: UUID,
+    request: Request,
+    principal: CurrentPrincipal,
+    dry_run: Annotated[bool, Query()] = False,
+) -> dict[str, Any]:
+    principal.require("lead", "assign")
+    from application.leads import assignment_rules
+
+    result = await assignment_rules.apply_rules(
+        tenant_id=principal.tenant_id,
+        actor_id=principal.user_id,
+        lead_id=lead_id,
+        dry_run=dry_run,
+    )
+    return success(result, request_id=getattr(request.state, "correlation_id", None))
 
 
 @router.post(
