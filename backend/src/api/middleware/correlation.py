@@ -52,7 +52,10 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
                 f"{request.method} {request.url.path}",
                 kind=SpanKind.SERVER,
                 context=parent,
-                **{"http.request.method": request.method, "correlation.id": correlation_id},
+                attributes={
+                    "http.request.method": request.method,
+                    "correlation.id": correlation_id,
+                },
             ) as span:
                 response = await call_next(request)
                 status = response.status_code
@@ -63,9 +66,7 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
                         is_abs = template.startswith("/")
                         template = f"/v1{template}" if is_abs else f"/v1/{template}"
                     span.update_name(f"{request.method} {template}")
-                set_attributes(
-                    **{"http.route": template or "", "http.response.status_code": status}
-                )
+                set_attributes({"http.route": template or "", "http.response.status_code": status})
                 response.headers["X-Request-ID"] = correlation_id
                 return response
         finally:

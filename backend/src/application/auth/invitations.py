@@ -112,7 +112,7 @@ async def _role_row(session: Any, tenant_id: UUID, role: Role) -> RoleRow:
     Sign-up only materialises `owner`. Inviting the first admin would otherwise
     fail on a missing row, which reads as a server error rather than what it is.
     """
-    existing = (
+    existing: RoleRow | None = (
         await session.execute(
             select(RoleRow).where(RoleRow.tenant_id == tenant_id, RoleRow.name == role.value)
         )
@@ -164,7 +164,7 @@ async def invite_user(
 
     with start_span(
         "invitation issue",
-        **{"tenant.id": str(tenant_id), "entity.type": "invitation"},
+        attributes={"tenant.id": str(tenant_id), "entity.type": "invitation"},
     ):
         async with tenant_session(tenant_id) as session:
             already_member = (
@@ -362,7 +362,7 @@ async def accept_invitation(*, token: str, full_name: str, password_hash: str) -
     tenant_id, token_hash = _split_token(token)
     user_id = uuid7()
 
-    with start_span("invitation accept", **{"tenant.id": str(tenant_id)}):
+    with start_span("invitation accept", attributes={"tenant.id": str(tenant_id)}):
         async with tenant_session(tenant_id) as session:
             invitation = (
                 await session.execute(

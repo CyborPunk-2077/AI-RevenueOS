@@ -172,7 +172,7 @@ class AIGateway:
         # Task, provider, model and token counts only. Prompts, completions, tool
         # arguments and retrieved context never become span attributes.
         with start_span(
-            "ai complete", kind=SpanKind.CLIENT, **{"ai.task": str(request.task)}
+            "ai complete", kind=SpanKind.CLIENT, attributes={"ai.task": str(request.task)}
         ):
             return await self._complete(request)
 
@@ -285,7 +285,7 @@ class AIGateway:
             )
             self._publish_metrics(spec.provider.value, model_name, request.task, usage, latency_ms)
             set_attributes(
-                **{
+                {
                     "ai.provider": spec.provider.value,
                     "ai.model": model_name,
                     "ai.tokens_input": getattr(usage, "input_tokens", None),

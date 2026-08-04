@@ -37,10 +37,11 @@ def _blocks(document: dict[str, Any], kind: str) -> list[dict[str, Any]]:
 
 def _module(environment: str, name: str) -> dict[str, Any]:
     for block in _blocks(_document(environment), "module"):
-        if name in block:
-            return block[name]
-        elif f'"{name}"' in block:
-            return block[f'"{name}"']
+        # Some hcl2 versions keep the block label quoted; accept either shape.
+        for key in (name, f'"{name}"'):
+            if key in block:
+                body: dict[str, Any] = block[key]
+                return body
     raise AssertionError(f"{environment} declares no module {name!r}")
 
 
@@ -72,7 +73,9 @@ class TestIsolation:
             keys.add(settings.get("key", settings.get('"key"')))
             buckets.add(settings.get("bucket", settings.get('"bucket"')))
             assert settings.get("encrypt", settings.get('"encrypt"')) is True
-            assert settings.get("dynamodb_table", settings.get('"dynamodb_table"')), f"{environment} has no state lock table"
+            assert settings.get("dynamodb_table", settings.get('"dynamodb_table"')), (
+                f"{environment} has no state lock table"
+            )
         assert len(keys) == len(ALL_ENVIRONMENTS)
         assert len(buckets) == len(ALL_ENVIRONMENTS)
 
@@ -162,7 +165,7 @@ class TestNetworkModuleRouting:
         assert 'resource "aws_route_table" "private_data"' in source
         # A default route on the data route table would give PostgreSQL and Redis a
         # path to the internet. There must not be one.
-        assert 'route_table_id         = aws_route_table.private_data' not in source
+        assert "route_table_id         = aws_route_table.private_data" not in source
         assert 'aws_route" "private_data' not in source
 
     def test_application_subnets_egress_through_nat_not_the_gateway(self) -> None:

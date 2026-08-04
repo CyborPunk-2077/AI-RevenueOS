@@ -202,8 +202,14 @@ def current_trace_id() -> str | None:
     return format(context.trace_id, "032x")
 
 
-def set_attributes(**attributes: Any) -> None:
-    """Add allow-listed attributes to whatever span is currently active."""
+def set_attributes(attributes: Mapping[str, Any]) -> None:
+    """Add allow-listed attributes to whatever span is currently active.
+
+    Takes a mapping rather than keyword arguments because every key here is
+    dotted - `http.route`, `tenant.id` - which is not a valid Python identifier.
+    Unpacking a `dict[str, str]` into `**kwargs` also makes the type checker
+    compare it against `kind` and `context`, which it can never satisfy.
+    """
     span = trace.get_current_span()
     if not span.is_recording():
         return
@@ -217,7 +223,7 @@ def start_span(
     *,
     kind: SpanKind = SpanKind.INTERNAL,
     context: Context | None = None,
-    **attributes: Any,
+    attributes: Mapping[str, Any] | None = None,
 ) -> Iterator[Span]:
     """Open a span whose attributes are filtered and whose errors carry no message."""
     with tracer().start_as_current_span(
@@ -227,7 +233,7 @@ def start_span(
         record_exception=False,
         set_status_on_exception=False,
     ) as span:
-        for key, value in safe_attributes(attributes).items():
+        for key, value in safe_attributes(attributes or {}).items():
             span.set_attribute(key, value)
         try:
             yield span
@@ -242,4 +248,3 @@ def _record_failure(span: Span, exc: BaseException) -> None:
         return
     span.set_attribute("error.type", type(exc).__name__)
     span.set_status(StatusCode.ERROR)
-

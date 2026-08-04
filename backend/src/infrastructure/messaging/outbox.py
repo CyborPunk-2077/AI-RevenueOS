@@ -98,7 +98,7 @@ class OutboxDispatcher:
             with start_span(
                 f"outbox dispatch {event_type}",
                 kind=SpanKind.PRODUCER,
-                **{
+                attributes={
                     "outbox.event_type": event_type,
                     "messaging.operation": "publish",
                     "tenant.id": str(tenant_id) if tenant_id else None,

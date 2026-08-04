@@ -96,15 +96,15 @@ async def send_webhook(
         with start_span(
             "webhook send",
             kind=SpanKind.CLIENT,
-            **{"provider.name": "custom_webhook", "provider.operation": "send"},
+            attributes={"provider.name": "custom_webhook", "provider.operation": "send"},
         ):
             try:
                 response = await http.post(url, content=body, headers=headers)
             except httpx.HTTPError as exc:
-                set_attributes(**{"provider.outcome": "transport_error"})
+                set_attributes({"provider.outcome": "transport_error"})
                 return WebhookResult(False, False, error=type(exc).__name__)
             set_attributes(
-                **{
+                {
                     "provider.status_code": response.status_code,
                     "provider.outcome": "sent",
                 }

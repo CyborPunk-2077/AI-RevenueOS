@@ -4,7 +4,7 @@ The interesting assertions here are negative: given a caller who hands the trace
 an email address, a bearer token or a whole request payload, nothing recognisable
 may survive onto the span. A span attribute is not redacted downstream the way a
 log line is, so the filter in `safe_attributes` is the only thing standing between
-a careless `set_attributes(**row)` and P3/P4 data sitting in a collector.
+a careless `set_attributes(row)` and P3/P4 data sitting in a collector.
 """
 
 from __future__ import annotations
@@ -69,8 +69,8 @@ class TestFailClosed:
 
     def test_spans_are_harmless_when_tracing_is_off(self) -> None:
         """An unconfigured process still runs the instrumented code paths."""
-        with tracing.start_span("task noop", **{"task.name": "noop"}):
-            tracing.set_attributes(**{"outcome": "ok"})
+        with tracing.start_span("task noop", attributes={"task.name": "noop"}):
+            tracing.set_attributes({"outcome": "ok"})
         assert tracing.current_trace_id() is None
 
 
@@ -123,9 +123,13 @@ class TestSpanRecording:
         with tracing.start_span(
             "GET /v1/leads",
             kind=SpanKind.SERVER,
-            **{"http.request.method": "GET", "http.route": "/v1/leads", "secret": "s3cr3t"},
+            attributes={
+                "http.request.method": "GET",
+                "http.route": "/v1/leads",
+                "secret": "s3cr3t",
+            },
         ):
-            tracing.set_attributes(**{"http.response.status_code": 200})
+            tracing.set_attributes({"http.response.status_code": 200})
 
         span = only(exported)
         assert span.name == "GET /v1/leads"
@@ -144,9 +148,11 @@ class TestSpanRecording:
         class DuplicateContact(ValueError):
             pass
 
-        with pytest.raises(DuplicateContact):
-            with tracing.start_span("contact create", **{"entity.type": "contact"}):
-                raise DuplicateContact("asha@example.in already exists in tenant 0189...")
+        with (
+            pytest.raises(DuplicateContact),
+            tracing.start_span("contact create", attributes={"entity.type": "contact"}),
+        ):
+            raise DuplicateContact("asha@example.in already exists in tenant 0189...")
 
         span = only(exported)
         assert (span.attributes or {}).get("error.type") == "DuplicateContact"

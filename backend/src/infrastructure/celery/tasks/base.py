@@ -72,7 +72,7 @@ def airev_task(
                     f"task {name}",
                     kind=SpanKind.CONSUMER,
                     context=extract(carrier),
-                    **{
+                    attributes={
                         "task.name": name,
                         "task.attempt": attempt,
                         "messaging.operation": "process",

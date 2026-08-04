@@ -88,6 +88,6 @@ class TestTheOpenRoutesAreNotAnOracle:
     def test_a_weak_password_is_refused_before_any_lookup(self, client: TestClient) -> None:
         response = client.post(
             "/v1/invitations/accept",
-            json={"token": "bogus.secret", "full_name": "Asha", "password": "password1234"},
+            json={"token": "bogus.secret", "full_name": "Asha", "password": "aaaaaaaaaaaa"},
         )
         assert response.status_code == 422
