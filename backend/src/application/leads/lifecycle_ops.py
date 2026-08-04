@@ -78,7 +78,7 @@ def _row(lead: Lead) -> dict[str, Any]:
 
 
 async def deduplicate(
-    *, tenant_id: UUID, _actor_id: UUID, lead_id: UUID, persist: bool = True
+    *, tenant_id: UUID, actor_id: UUID, lead_id: UUID, persist: bool = True
 ) -> dict[str, Any]:
     """Score candidates and record them, so a human can decide later.
 
@@ -241,7 +241,7 @@ async def merge_leads(
 
 
 async def disqualify_lead(
-    *, tenant_id: UUID, _actor_id: UUID, lead_id: UUID, reason: str
+    *, tenant_id: UUID, actor_id: UUID, lead_id: UUID, reason: str
 ) -> dict[str, Any]:
     """Close a lead with a stated reason. Reversible by `restore_lead`."""
     cleaned = reason.strip()
@@ -277,7 +277,7 @@ async def disqualify_lead(
         }
 
 
-async def restore_lead(*, tenant_id: UUID, _actor_id: UUID, lead_id: UUID) -> dict[str, Any]:
+async def restore_lead(*, tenant_id: UUID, actor_id: UUID, lead_id: UUID) -> dict[str, Any]:
     """Reopen a disqualified or archived lead.
 
     A converted lead is not restorable: a contact and possibly a deal already

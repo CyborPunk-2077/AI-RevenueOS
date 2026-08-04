@@ -242,8 +242,8 @@ class TestDeduplicate:
         first = await _lead(tenant_a, email=shared)
         await _lead(tenant_a, email=shared)
 
-        await lifecycle_ops.deduplicate(tenant_id=tenant_a, _actor_id=uuid4(), lead_id=first)
-        await lifecycle_ops.deduplicate(tenant_id=tenant_a, _actor_id=uuid4(), lead_id=first)
+        await lifecycle_ops.deduplicate(tenant_id=tenant_a, actor_id=uuid4(), lead_id=first)
+        await lifecycle_ops.deduplicate(tenant_id=tenant_a, actor_id=uuid4(), lead_id=first)
 
         recorded = await lifecycle_ops.duplicate_candidates(tenant_id=tenant_a, lead_id=first)
         assert len({row["candidate_lead_id"] for row in recorded}) == len(recorded)
@@ -256,5 +256,5 @@ class TestDeduplicate:
         mine = await _lead(tenant_a, email=shared)
         await _lead(tenant_b, email=shared)
 
-        result = await lifecycle_ops.deduplicate(tenant_id=tenant_a, _actor_id=uuid4(), lead_id=mine)
+        result = await lifecycle_ops.deduplicate(tenant_id=tenant_a, actor_id=uuid4(), lead_id=mine)
         assert result["candidates"] == []

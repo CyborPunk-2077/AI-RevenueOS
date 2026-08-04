@@ -279,7 +279,7 @@ try {
     # --- build -------------------------------------------------------------
     if (-not $SkipBuild) {
         Write-Step 'Building images (api, web) - several minutes on a first run'
-        Invoke-Compose -ComposeArgs @('build', 'api', 'web')
+        Invoke-Compose -ComposeArgs @('build')
         Write-Ok 'Images built'
     }
 

@@ -68,6 +68,32 @@ export function WorkspaceShell({
             <SignOutButton />
           </div>
         </div>
+        {active === 'settings' && (
+          <div className="border-t bg-muted/20">
+            <div className="mx-auto flex max-w-5xl items-center gap-6 px-6 py-2">
+              <nav aria-label="Settings Sections" className="flex flex-wrap gap-4 text-sm">
+                <Link
+                  href="/settings/integrations"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Integrations
+                </Link>
+                <Link
+                  href={`/${tenantSlug}/settings/webchat`}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Web Chat
+                </Link>
+                <Link
+                  href={`/${tenantSlug}/settings/team`}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Team
+                </Link>
+              </nav>
+            </div>
+          </div>
+        )}
       </header>
       <main id="main-content" className="mx-auto max-w-5xl px-6 py-8">
         {children}
