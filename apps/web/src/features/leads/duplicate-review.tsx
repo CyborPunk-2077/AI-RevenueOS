@@ -115,7 +115,7 @@ export function DuplicateReview({
           type="button"
           onClick={() => void scan()}
           disabled={busy}
-          className="rounded border border-border px-3 py-1.5 text-sm disabled:opacity-60"
+          className="btn btn-ghost px-3 py-1.5"
         >
           {busy ? 'Scanning…' : 'Scan again'}
         </button>
@@ -158,7 +158,7 @@ export function DuplicateReview({
                 <button
                   type="button"
                   onClick={() => setConfirming(row)}
-                  className="rounded border border-border px-3 py-1.5 text-sm"
+                  className="btn btn-ghost px-3 py-1.5"
                 >
                   Merge into this lead
                   <span className="sr-only">
@@ -239,14 +239,14 @@ function MergeConfirmation({
           type="button"
           onClick={onConfirm}
           disabled={busy}
-          className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
+          className="btn btn-primary"
         >
           {busy ? 'Merging…' : 'Merge'}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded border border-border px-4 py-2 text-sm"
+          className="btn btn-ghost"
         >
           Cancel
         </button>

@@ -274,3 +274,125 @@
     grid-template-columns: 1fr;
   }
 }
+
+@layer components {
+  /*
+   * Micro-interactions.
+   *
+   * The rule throughout: animate transform and opacity only. Those are the two
+   * properties a browser can hand to the compositor, so they run at 60fps
+   * without touching layout. Animating height, width or box-shadow alone forces
+   * a repaint of the whole layer every frame and is where "smooth" UI goes to
+   * die on a mid-range Android phone, which is most of this product's market.
+   */
+
+  /* Primary action. Presses in rather than out - the finger metaphor. */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium;
+    transition:
+      transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 140ms ease,
+      box-shadow 140ms ease,
+      opacity 140ms ease;
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    box-shadow: var(--shadow-sm);
+  }
+  .btn-primary:hover:not(:disabled) {
+    box-shadow: var(--shadow-md);
+    filter: brightness(1.06);
+  }
+
+  .btn-ghost {
+    border: 1px solid hsl(var(--border));
+  }
+  .btn-ghost:hover:not(:disabled) {
+    border-color: hsl(var(--border-strong));
+    background-color: hsl(var(--surface-sunken));
+  }
+
+  /* Inputs: the ring grows from the field rather than appearing around it. */
+  .field {
+    @apply w-full rounded border px-3 py-2 text-sm;
+    border-color: hsl(var(--border));
+    background-color: hsl(var(--surface));
+    transition:
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+  .field:hover {
+    border-color: hsl(var(--border-strong));
+  }
+  .field:focus {
+    outline: none;
+    border-color: hsl(var(--ring));
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.18);
+  }
+
+  /* Table rows: a tint on hover, and the row a link sits in reads as one target. */
+  .row-hover {
+    transition: background-color 120ms ease;
+  }
+  .row-hover:hover {
+    background-color: hsl(var(--primary) / 0.04);
+  }
+
+  /* Wizard step markers. The completed state animates once, on arrival. */
+  .step-dot {
+    @apply inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold;
+    transition:
+      background-color 200ms ease,
+      color 200ms ease,
+      transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .step-dot[data-state='current'] {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    transform: scale(1.08);
+  }
+  .step-dot[data-state='done'] {
+    background-color: hsl(var(--success-soft));
+    color: hsl(var(--success));
+  }
+  .step-dot[data-state='todo'] {
+    background-color: hsl(var(--surface-sunken));
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* Staggered list entry. Cheap, and it makes a table feel composed rather than
+     dumped. Capped at eight so a 2000-row import does not animate for a minute. */
+  .stagger > * {
+    animation: fade-up 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 40ms; }
+  .stagger > *:nth-child(3) { animation-delay: 80ms; }
+  .stagger > *:nth-child(4) { animation-delay: 120ms; }
+  .stagger > *:nth-child(5) { animation-delay: 160ms; }
+  .stagger > *:nth-child(6) { animation-delay: 200ms; }
+  .stagger > *:nth-child(7) { animation-delay: 240ms; }
+  .stagger > *:nth-child(n + 8) { animation-delay: 280ms; }
+
+  /* A field being removed, or a rejected row, should leave rather than vanish. */
+  .leaving {
+    animation: fade-out-down 180ms ease-in both;
+  }
+}
+
+@keyframes fade-out-down {
+  to {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+

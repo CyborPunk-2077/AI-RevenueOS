@@ -219,13 +219,13 @@ export function AssignmentRules({ rules }: { rules: AssignmentRule[] }): JSX.Ele
             value={dryRunLead}
             placeholder="Lead id"
             onChange={(event) => setDryRunLead(event.target.value)}
-            className="flex-1 rounded border border-border px-3 py-2 font-mono text-sm"
+            className="field flex-1 font-mono"
           />
           <button
             type="button"
             onClick={() => void preview()}
             disabled={busy || !dryRunLead.trim()}
-            className="rounded border border-border px-4 py-2 text-sm disabled:opacity-60"
+            className="btn btn-ghost"
           >
             Dry run
           </button>

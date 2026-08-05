@@ -208,7 +208,7 @@ export function ImportWizard(): JSX.Element {
               const chosen = event.target.files?.[0];
               if (chosen) void choose(chosen);
             }}
-            className="mt-3 block w-full rounded border border-border px-3 py-2 text-sm"
+            className="field mt-3 block"
           />
           {busy ? (
             <p role="status" className="mt-3 text-sm text-muted-foreground">
@@ -257,7 +257,7 @@ export function ImportWizard(): JSX.Element {
                           else delete next[header];
                           void reprice(next);
                         }}
-                        className="rounded border border-border px-2 py-1 text-sm"
+                        className="field w-auto py-1"
                       >
                         {TARGETS.map((target) => (
                           <option key={target} value={target}>
@@ -298,14 +298,14 @@ export function ImportWizard(): JSX.Element {
                 type="button"
                 onClick={() => void commit()}
                 disabled={busy || preview.accepted === 0 || !named || !contactable}
-                className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
+                className="btn btn-primary"
               >
                 {busy ? 'Importing…' : `Import ${preview.accepted} leads`}
               </button>
               <button
                 type="button"
                 onClick={restart}
-                className="rounded border border-border px-4 py-2 text-sm"
+                className="btn btn-ghost"
               >
                 Choose a different file
               </button>
@@ -328,14 +328,14 @@ export function ImportWizard(): JSX.Element {
             <div className="mt-4 flex gap-3">
               <a
                 href="/leads"
-                className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                className="btn btn-primary"
               >
                 View leads
               </a>
               <button
                 type="button"
                 onClick={restart}
-                className="rounded border border-border px-4 py-2 text-sm"
+                className="btn btn-ghost"
               >
                 Import another file
               </button>
@@ -364,16 +364,22 @@ function Steps({ current }: { current: Step }): JSX.Element {
       {steps.map((step, position) => (
         <li key={step.key} className="flex items-center gap-2">
           <span
-            aria-current={position === index ? 'step' : undefined}
-            className={
-              position === index
-                ? 'rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground'
-                : 'rounded-full bg-surface-sunken px-3 py-1 text-xs text-muted-foreground'
-            }
+            className="step-dot"
+            data-state={position === index ? 'current' : position < index ? 'done' : 'todo'}
+            aria-hidden="true"
           >
-            {position + 1}. {step.label}
+            {position < index ? '\u2713' : position + 1}
+          </span>
+          <span
+            aria-current={position === index ? 'step' : undefined}
+            className={position === index ? 'font-medium' : 'text-muted-foreground'}
+          >
+            {step.label}
             {position < index ? <span className="sr-only"> (completed)</span> : null}
           </span>
+          {position < steps.length - 1 ? (
+            <span aria-hidden="true" className="mx-1 h-px w-6 bg-border" />
+          ) : null}
         </li>
       ))}
     </ol>
@@ -447,7 +453,7 @@ function RejectionTable({
             </th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="stagger">
           {rejections.map((rejection) => (
             <tr key={rejection.row} className="border-b border-border/60 align-top">
               <th scope="row" className="py-2 font-normal tabular">

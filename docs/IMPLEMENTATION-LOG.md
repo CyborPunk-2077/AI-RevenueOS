@@ -351,3 +351,56 @@ tests over RBAC and what the public routes refuse, and 15 real-Postgres E2E test
 covering rotation, expiry, cross-origin replay, forged tenant prefixes and
 cross-tenant invisibility.
 
+### Front-end completion pass (2026-08-04)
+
+**The gap this closed.** M08 and M11 had shipped complete backends with no user
+interface: 14 endpoints across the form builder and CSV importer, plus assignment
+rules and duplicate review, were reachable only from the API. A user could not
+import a file, build a capture form, order the assignment rules, or resolve a
+duplicate from inside the product.
+
+Four screens now exist, each against the API that was already there:
+
+- **CSV import wizard** (`/[tenantSlug]/imports`). Preview and commit call the
+  same planner with the same file and mapping, so what is approved is what runs.
+  Rejections are listed per row with their reasons rather than summarised - "352
+  skipped" is not actionable, "row 47: duplicate of row 12 in this file" is. The
+  idempotency key is minted when the file is chosen, so a retry replays and a
+  second click does not double-import.
+- **Form builder** (`/[tenantSlug]/forms`). The draft/published split is the
+  whole point of the backend design, so the UI states it: a banner when the draft
+  has moved on, and a "Live now" panel rendering `published_schema` rather than
+  the draft.
+- **Assignment rules** (`settings/assignment`). Move up/down rather than drag:
+  order *is* the algorithm here, and drag is unusable by keyboard. A failed
+  reorder rolls the list back rather than showing an order the server rejected.
+- **Duplicate review** (lead detail). The merge confirmation names both records,
+  states which survives, and lists the specific fields that will be filled,
+  computed from the actual data.
+
+**Design system.** Tokens with measured contrast ratios, Inter and Outfit
+self-hosted through `next/font`, a dark theme set before first paint by a
+blocking inline script, and shared primitives (`Card`, `PageHeader`, `StatusPill`,
+`EmptyState`, `ListSkeleton`, `Stat`). Interaction styles animate transform and
+opacity only - the two properties the compositor can handle - because this
+product's market is mid-range Android, where animating layout properties is where
+smoothness dies.
+
+**Analytics charts.** Pipeline by stage, lead source mix and won-over-time, each
+paired with a "View as table" toggle over the same data. The chart is
+`aria-hidden` and the table is the accessible representation: an SVG chart is
+close to unreadable with a screen reader and a hue-only series is unreadable to
+anyone with a colour vision deficiency.
+
+**End-to-end coverage.** Four Playwright specs over the seams unit tests cannot
+reach: invitation accept, CSV preview then commit, form publish then public
+fetch, and a webchat visitor session with its origin check. The import spec
+asserts 1648 accepted and 352 rejected against
+`backend/tests/fixtures/leads_messy_2000.csv`, so a change that loosens
+validation fails the build rather than surfacing as a support ticket.
+
+**Verified by execution, in isolation:** the import planner over the 2000-row
+fixture (1648/352, with the rejection mix matching the injected defects), the
+assignment selector's round-robin, load-balancing and eligibility filtering, and
+the webchat origin allow-list. The rest awaits a full gate run.
+

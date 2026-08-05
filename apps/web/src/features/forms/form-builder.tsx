@@ -146,7 +146,7 @@ export function FormBuilder({ form }: { form: CaptureForm }): JSX.Element {
           value={name}
           maxLength={150}
           onChange={(event) => setName(event.target.value)}
-          className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
+          className="field mt-1"
         />
       </Card>
 
@@ -156,7 +156,7 @@ export function FormBuilder({ form }: { form: CaptureForm }): JSX.Element {
           <button
             type="button"
             onClick={() => setFields([...fields, { ...BLANK }])}
-            className="rounded border border-border px-3 py-1.5 text-sm"
+            className="btn btn-ghost px-3 py-1.5"
           >
             Add field
           </button>
@@ -256,7 +256,7 @@ export function FormBuilder({ form }: { form: CaptureForm }): JSX.Element {
           value={origins}
           aria-describedby="origins-help"
           onChange={(event) => setOrigins(event.target.value)}
-          className="mt-2 w-full rounded border border-border px-3 py-2 font-mono text-sm"
+          className="field mt-2 font-mono"
         />
       </Card>
 
@@ -276,7 +276,7 @@ export function FormBuilder({ form }: { form: CaptureForm }): JSX.Element {
           type="button"
           onClick={() => void saveDraft()}
           disabled={busy}
-          className="rounded border border-border px-4 py-2 text-sm disabled:opacity-60"
+          className="btn btn-ghost"
         >
           Save draft
         </button>
@@ -284,7 +284,7 @@ export function FormBuilder({ form }: { form: CaptureForm }): JSX.Element {
           type="button"
           onClick={() => void publish()}
           disabled={busy || !contactable}
-          className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
+          className="btn btn-primary"
         >
           {form.is_published ? 'Publish changes' : 'Publish form'}
         </button>
@@ -293,7 +293,7 @@ export function FormBuilder({ form }: { form: CaptureForm }): JSX.Element {
             type="button"
             onClick={() => void unpublish()}
             disabled={busy}
-            className="rounded border border-border px-4 py-2 text-sm disabled:opacity-60"
+            className="btn btn-ghost"
           >
             Take offline
           </button>
