@@ -26,6 +26,7 @@ export function WorkspaceShell({
     | 'inbox'
     | 'appointments'
     | 'analytics'
+    | 'imports'
     | 'settings';
   children: React.ReactNode;
 }): JSX.Element {
@@ -36,9 +37,10 @@ export function WorkspaceShell({
     { key: 'deals', href: '/deals', label: 'Deals' },
     { key: 'inbox', href: '/inbox', label: 'Inbox' },
     { key: 'appointments', href: '/appointments', label: 'Appointments' },
+    { key: 'imports', href: `/${tenantSlug}/imports`, label: 'Import' },
     { key: 'analytics', href: '/analytics', label: 'Analytics' },
     { key: 'settings', href: '/settings/integrations', label: 'Settings' },
-  ] as const;
+  ];
 
   return (
     <div className="min-h-screen">

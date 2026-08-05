@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/session';
 import { EditLeadForm } from '@/features/leads/edit-lead-form';
+import { DuplicateReview, type Candidate } from '@/features/leads/duplicate-review';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,13 @@ export default async function LeadDetailPage({
   // not exist -- the server decides, not the page.
   if (!result.ok || !result.data) notFound();
   const lead = result.data;
+
+  // Recorded candidates, not a fresh scan: scanning on every page view would run
+  // a 500-row comparison for a screen nobody asked to deduplicate. The button in
+  // the panel triggers the scan.
+  const duplicates = await apiFetch<{ candidates: Candidate[] }>(
+    `/leads/${params.leadId}/duplicates`,
+  );
 
   return (
     <div className="space-y-6">
@@ -65,6 +73,8 @@ export default async function LeadDetailPage({
       </dl>
 
       <EditLeadForm lead={lead} />
+
+      <DuplicateReview lead={lead} candidates={duplicates.data?.candidates ?? []} />
     </div>
   );
 }
