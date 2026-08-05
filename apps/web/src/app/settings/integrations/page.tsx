@@ -38,7 +38,7 @@ export default async function IntegrationSettingsPage(): Promise<JSX.Element> {
   return (
     <div className="space-y-8">
       <section>
-        <h1 className="text-xl font-semibold">Integrations</h1>
+        <h1 className="heading text-2xl">Integrations</h1>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
           Credentials are encrypted and never displayed. A saved configuration is not proof of
           provider, DNS, commercial, legal, or production activation.
@@ -52,7 +52,7 @@ export default async function IntegrationSettingsPage(): Promise<JSX.Element> {
 
       <div className="grid gap-4 md:grid-cols-2" data-testid="integration-readiness">
         {result.data.configurations.map((item) => (
-          <article key={`${item.kind}:${item.provider}:${item.identifier}`} className="rounded border p-4">
+          <article key={`${item.kind}:${item.provider}:${item.identifier}`} className="surface p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="font-medium">{label(item.provider)}</h2>

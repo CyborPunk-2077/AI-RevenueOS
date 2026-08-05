@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { apiFetch } from '@/lib/session';
 import { NewAccountForm } from '@/features/crm/new-account-form';
+import { PageHeader } from '@/features/ui/primitives';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,12 +25,7 @@ export default async function AccountsPage({
 
   return (
     <div className="space-y-8">
-      <section>
-        <h1 className="text-xl font-semibold">Accounts</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Companies you work with. Contacts can be linked to one.
-        </p>
-      </section>
+      <PageHeader title="Accounts" description="Companies you work with. Contacts can be linked to one." />
 
       <form method="get" role="search" className="flex gap-2">
         <label htmlFor="account_search" className="sr-only">
@@ -70,7 +66,7 @@ export default async function AccountsPage({
         {accounts.length === 0 ? (
           <p
             data-testid="accounts-empty"
-            className="rounded border border-dashed p-6 text-sm text-muted-foreground"
+            className="surface border-dashed p-6 text-center text-sm text-muted-foreground"
           >
             {search ? `No accounts match “${search}”.` : 'No accounts yet. Create one above.'}
           </p>
@@ -78,7 +74,7 @@ export default async function AccountsPage({
           <table className="w-full text-left text-sm">
             <caption className="sr-only">Accounts for your organisation</caption>
             <thead>
-              <tr className="border-b">
+              <tr className="row-hover border-b border-border/60">
                 <th scope="col" className="py-2">
                   Name
                 </th>

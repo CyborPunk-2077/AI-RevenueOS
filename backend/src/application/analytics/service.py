@@ -107,6 +107,30 @@ class AnalyticsService(_PrincipalScoped):
             )
 
             deal_scope = DealRepo(session, self.tenant_id).scoped_query(perms).subquery()
+
+            # Open value per stage, in board order. `is_lost` stages are excluded:
+            # a lost column carries no pipeline, and including it would make the
+            # total on this chart disagree with `pipeline_amount_minor` below.
+            from infrastructure.database.models.crm import Stage
+
+            stage_rows = (
+                await session.execute(
+                    select(
+                        Stage.name,
+                        Stage.position,
+                        func.coalesce(func.sum(deal_scope.c.amount_minor), 0),
+                        func.count(deal_scope.c.id),
+                    )
+                    .select_from(Stage)
+                    .join(deal_scope, deal_scope.c.stage_id == Stage.id, isouter=True)
+                    .where(
+                        Stage.tenant_id == self.tenant_id,
+                        Stage.is_lost.is_(False),
+                    )
+                    .group_by(Stage.name, Stage.position)
+                    .order_by(Stage.position)
+                )
+            ).all()
             deal_row = (
                 await session.execute(
                     select(
@@ -362,6 +386,15 @@ class AnalyticsService(_PrincipalScoped):
             "lead_sources": [
                 {"source": source or "unknown", "count": int(count)}
                 for source, count in source_rows
+            ],
+            "pipeline_by_stage": [
+                {
+                    "stage": name,
+                    "position": int(position),
+                    "amount_minor": int(amount),
+                    "deal_count": int(count),
+                }
+                for name, position, amount, count in stage_rows
             ],
             "daily": [{"day": day, **values} for day, values in days.items()],
             "scope": self.scope.value,

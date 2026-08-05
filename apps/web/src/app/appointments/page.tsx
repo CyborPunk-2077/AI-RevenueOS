@@ -1,5 +1,6 @@
 import { apiFetch } from '@/lib/session';
 import { AppointmentPanel, type AppointmentEntry } from '@/features/crm/appointment-panel';
+import { PageHeader } from '@/features/ui/primitives';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,13 +16,7 @@ export default async function AppointmentsPage(): Promise<JSX.Element> {
 
   return (
     <div className="space-y-8">
-      <section>
-        <h1 className="text-xl font-semibold">Appointments</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Double booking is prevented by the database, not by a check &mdash; two requests for the
-          same slot cannot both succeed.
-        </p>
-      </section>
+      <PageHeader title="Appointments" description="Double booking is prevented by the database, not by a check &mdash; two requests for the same slot cannot both succeed." />
 
       {sync && !sync.enabled ? (
         <p data-testid="calendar-gated" className="rounded border border-dashed p-3 text-sm text-muted-foreground">

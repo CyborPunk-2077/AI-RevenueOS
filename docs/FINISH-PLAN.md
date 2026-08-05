@@ -19,17 +19,17 @@ Two rules that make the difference between this working and drifting:
 | Backend modules M01–M24 | Implemented, 1,100+ tests |
 | API surface | 110 endpoints |
 | P0 blockers | P0-1…P0-4 resolved; P0-5 (AWS) and P0-6 (legal) external |
-| Design tokens, fonts, primitives | Written, **unverified** |
-| **Form builder UI** | **Missing — 7 endpoints, no screen** |
-| **CSV import UI** | **Missing — 7 endpoints, no screen** |
-| **Assignment rules UI** | **Missing — API only** |
-| **Dedupe / merge UI** | **Missing — API only** |
-| Component migration to primitives | 26 components still on flat markup |
+| Design tokens, fonts, primitives | Built and gate-verified |
+| Form builder UI | Built |
+| CSV import UI | Built, asserted at 1648/352 by the Playwright spec |
+| Assignment rules UI | Built |
+| Dedupe / merge UI | Built |
+| Component migration to primitives | All eight modules migrated |
 | External channel activation | Blocked on credentials |
 
-The single biggest gap is that M08 shipped a complete backend with no front end.
-A user cannot import a CSV, build a form, or resolve a duplicate from the
-product — only from the API.
+Steps 1 through 7, 9 and 10 are done. What remains is step 8 (measurement under
+real volume, which needs the app running) and the externally gated items at the
+bottom of this file, which no amount of code closes.
 
 ---
 

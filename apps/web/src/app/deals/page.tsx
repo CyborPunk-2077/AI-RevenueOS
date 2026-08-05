@@ -2,6 +2,7 @@ import { apiFetch } from '@/lib/session';
 import { DealBoard, type BoardStage } from '@/features/crm/deal-board';
 import { money } from '@/lib/money';
 import { NewDealForm } from '@/features/crm/new-deal-form';
+import { PageHeader } from '@/features/ui/primitives';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,29 +47,24 @@ export default async function DealsPage(): Promise<JSX.Element> {
 
   return (
     <div className="space-y-8">
-      <section>
-        <h1 className="text-xl font-semibold">Deals</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Pipeline: {board.pipeline.name}
-        </p>
-      </section>
+      <PageHeader title="Deals" description="Pipeline: {board.pipeline.name}" />
 
       <dl className="grid gap-4 sm:grid-cols-4" data-testid="pipeline-totals">
-        <div className="rounded border p-4">
+        <div className="surface p-5">
           <dt className="text-xs text-muted-foreground">Open deals</dt>
           <dd className="text-lg font-medium">{board.totals.open_count}</dd>
         </div>
-        <div className="rounded border p-4">
+        <div className="surface p-5">
           <dt className="text-xs text-muted-foreground">Open value</dt>
           <dd className="text-lg font-medium">{money(board.totals.open_value_minor)}</dd>
         </div>
-        <div className="rounded border p-4">
+        <div className="surface p-5">
           <dt className="text-xs text-muted-foreground">Weighted</dt>
           <dd className="text-lg font-medium" data-testid="weighted-value">
             {money(board.totals.weighted_value_minor)}
           </dd>
         </div>
-        <div className="rounded border p-4">
+        <div className="surface p-5">
           <dt className="text-xs text-muted-foreground">Won</dt>
           <dd className="text-lg font-medium">{money(board.totals.won_value_minor)}</dd>
         </div>

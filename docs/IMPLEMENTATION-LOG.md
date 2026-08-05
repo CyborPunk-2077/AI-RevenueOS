@@ -404,3 +404,33 @@ fixture (1648/352, with the rejection mix matching the injected defects), the
 assignment selector's round-robin, load-balancing and eligibility filtering, and
 the webchat origin allow-list. The rest awaits a full gate run.
 
+### Analytics stage breakdown and design-system migration (2026-08-04)
+
+**A chart that told the truth about the wrong thing.** `PipelineByStage` was
+plotting three revenue totals - open, won, captured - because
+`/analytics/dashboard` returned `pipeline_amount_minor` as a single aggregate and
+there was no per-stage data to draw. It was labelled honestly, but it was not the
+chart the product needs.
+
+`AnalyticsService.dashboard` now returns `pipeline_by_stage`: name, board
+position, open value and deal count per stage. Two decisions are load-bearing:
+
+- **It joins the scoped deal subquery**, not the deals table. A stage breakdown
+  built on an unscoped query would show a Member the entire tenant's pipeline in
+  a chart, which is precisely the leak `scoped_query` exists to prevent
+  everywhere else.
+- **`is_lost` stages are excluded.** A lost column carries no pipeline, and
+  including it would make the chart total disagree with
+  `pipeline_amount_minor` on the same page - the kind of inconsistency that
+  destroys trust in a dashboard faster than a missing feature.
+
+Pinned by `backend/tests/contract/test_analytics_pipeline_stages.py`, which
+asserts the field exists, lost stages are excluded, the scoped subquery is joined
+and stages come back in board order.
+
+**Design system migration complete.** All eight modules - leads, contacts,
+accounts, deals, inbox, appointments, analytics, settings - now use the shared
+primitives and the interaction vocabulary. Imports were narrowed to what each
+page actually uses, because `noUnusedLocals` is on and a convenience import of
+all four primitives fails the typecheck rather than warning.
+

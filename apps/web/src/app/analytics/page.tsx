@@ -30,6 +30,11 @@ interface Dashboard {
   readonly sla: { readonly tracked: number; readonly resolved: number; readonly breached: number; readonly breach_rate: number };
   readonly team_performance: readonly { readonly assignee_id: string | null; readonly deals_won: number; readonly won_amount_minor: number; readonly open_deals: number }[];
   readonly lead_sources: readonly { readonly source: string; readonly count: number }[];
+  readonly pipeline_by_stage: readonly {
+    readonly stage: string;
+    readonly amount_minor: number;
+    readonly deal_count: number;
+  }[];
   readonly daily: readonly { readonly day: string; readonly leads: number; readonly won_amount_minor: number }[];
   readonly scope: string;
 }
@@ -109,17 +114,16 @@ export default async function AnalyticsPage({ searchParams }: PageProps): Promis
         </div>
       </section>
 
-      <section>
+      <section data-testid="pipeline-by-stage">
         <PipelineByStage
-          rows={[
-            { label: 'Open pipeline', value: data.revenue.pipeline_amount_minor },
-            { label: 'Won', value: data.revenue.won_amount_minor },
-            { label: 'Captured', value: data.revenue.payments_captured_minor },
-          ]}
+          rows={(data.pipeline_by_stage ?? []).map((item) => ({
+            label: item.stage,
+            value: item.amount_minor,
+          }))}
         />
       </section>
 
-      <section className="rounded border p-4">
+      <section className="surface p-5">
         <h2 className="font-medium">Team performance</h2>
         {data.team_performance.length ? (
           <div className="mt-3 overflow-auto">
@@ -127,7 +131,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps): Promis
               <thead><tr><th className="py-2">Assignee</th><th>Won deals</th><th>Won revenue</th><th>Open deals</th></tr></thead>
               <tbody data-testid="team-performance">
                 {data.team_performance.map((item) => (
-                  <tr key={item.assignee_id ?? 'unassigned'} className="border-t">
+                  <tr key={item.assignee_id ?? 'unassigned'} className="row-hover border-t border-border/60">
                     <td className="py-2 font-mono text-xs">{item.assignee_id ?? 'Unassigned'}</td>
                     <td>{item.deals_won}</td><td>{money(item.won_amount_minor)}</td><td>{item.open_deals}</td>
                   </tr>

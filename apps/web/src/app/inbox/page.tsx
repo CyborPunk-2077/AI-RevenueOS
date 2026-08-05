@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { apiFetch } from '@/lib/session';
 import { NewConversationForm } from '@/features/crm/new-conversation-form';
+import { PageHeader } from '@/features/ui/primitives';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,12 +48,7 @@ export default async function InboxPage({
 
   return (
     <div className="space-y-8">
-      <section>
-        <h1 className="text-xl font-semibold">Inbox</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Conversations across every channel. Only your organisation&rsquo;s threads are visible.
-        </p>
-      </section>
+      <PageHeader title="Inbox" description="Conversations across every channel. Only your organisation&rsquo;s threads are visible." />
 
       {unavailable.length > 0 ? (
         <p data-testid="gated-channels" className="rounded border border-dashed p-3 text-sm text-muted-foreground">
@@ -76,7 +72,7 @@ export default async function InboxPage({
       <section aria-labelledby="inbox-list-heading">
         <h2 id="inbox-list-heading" className="sr-only">Conversations</h2>
         {conversations.length === 0 ? (
-          <p data-testid="inbox-empty" className="rounded border border-dashed p-6 text-sm text-muted-foreground">
+          <p data-testid="inbox-empty" className="surface border-dashed p-6 text-center text-sm text-muted-foreground">
             No conversations yet. Open one above.
           </p>
         ) : (

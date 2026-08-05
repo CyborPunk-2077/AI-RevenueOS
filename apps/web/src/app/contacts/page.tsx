@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { apiFetch } from '@/lib/session';
 import { NewContactForm, type AccountOption } from '@/features/crm/new-contact-form';
+import { PageHeader } from '@/features/ui/primitives';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,12 +34,7 @@ export default async function ContactsPage({
 
   return (
     <div className="space-y-8">
-      <section>
-        <h1 className="text-xl font-semibold">Contacts</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Only your organisation&rsquo;s records are visible here.
-        </p>
-      </section>
+      <PageHeader title="Contacts" description="Only your organisation&rsquo;s records are visible here." />
 
       <form method="get" role="search" className="flex gap-2">
         <label htmlFor="search" className="sr-only">
@@ -79,7 +75,7 @@ export default async function ContactsPage({
         {contacts.length === 0 ? (
           <p
             data-testid="contacts-empty"
-            className="rounded border border-dashed p-6 text-sm text-muted-foreground"
+            className="surface border-dashed p-6 text-center text-sm text-muted-foreground"
           >
             {search
               ? `No contacts match “${search}”.`
@@ -89,7 +85,7 @@ export default async function ContactsPage({
           <table className="w-full text-left text-sm">
             <caption className="sr-only">Contacts for your organisation</caption>
             <thead>
-              <tr className="border-b">
+              <tr className="row-hover border-b border-border/60">
                 <th scope="col" className="py-2">
                   Name
                 </th>
