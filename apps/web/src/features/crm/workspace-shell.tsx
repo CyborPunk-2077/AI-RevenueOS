@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { SignOutButton } from '@/features/auth/sign-out-button';
+import { ThemeToggle } from '@/features/ui/theme-toggle';
 
 /**
  * The signed-in chrome, shared by leads, contacts and accounts.
@@ -65,6 +66,7 @@ export function WorkspaceShell({
             <span className="text-muted-foreground" data-testid="tenant-badge">
               {tenantSlug} &middot; {email}
             </span>
+            <ThemeToggle />
             <SignOutButton />
           </div>
         </div>

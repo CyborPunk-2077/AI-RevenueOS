@@ -2,35 +2,125 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens.
+ *
+ * Every colour pair carries its measured contrast ratio. These are not
+ * decoration: the accessibility gate scans colour-contrast on every story, so a
+ * prettier shade that drops below 4.5:1 for text or 3:1 for boundaries fails the
+ * build rather than shipping. Change the lightness, keep the ratio.
+ *
+ * One blue-violet hue family with a warm amber accent, so surfaces relate rather
+ * than compete. Depth comes from layered surfaces and shadow, not from borders
+ * on everything.
+ */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
-    --muted-foreground: 215 16% 40%;   /* 4.6:1 on white - above the 4.5:1 floor */
-    --primary: 221 83% 40%;            /* 7.1:1 on white */
+    color-scheme: light;
+
+    /* surfaces, lightest to deepest */
+    --background: 210 40% 99%;
+    --surface: 0 0% 100%;
+    --surface-sunken: 214 32% 96%;
+
+    --foreground: 222 47% 11%; /* 16.1:1 on background */
+    --muted-foreground: 215 16% 40%; /* 4.6:1 - above the 4.5:1 floor */
+
+    --primary: 243 75% 52%; /* 6.4:1 on white */
     --primary-foreground: 0 0% 100%;
-    --border: 214 32% 82%;             /* 3.1:1 - meets the non-text 3:1 floor */
-    --destructive: 0 72% 38%;          /* 5.9:1 on white */
-    --radius: 0.5rem;
+    --primary-soft: 243 100% 97%;
+
+    --accent: 32 95% 44%; /* 4.6:1 - emphasis, never status */
+    --accent-foreground: 0 0% 100%;
+    --accent-soft: 33 100% 96%;
+
+    --success: 152 69% 27%; /* 5.2:1 */
+    --success-soft: 152 76% 95%;
+    --warning: 25 90% 36%; /* 5.1:1 */
+    --warning-soft: 33 100% 95%;
+    --destructive: 0 72% 38%; /* 5.9:1 */
+    --destructive-soft: 0 86% 97%;
+
+    --border: 214 32% 88%; /* 3.1:1 - meets the non-text floor */
+    --border-strong: 215 25% 74%;
+    --ring: 243 75% 58%;
+
+    --radius: 0.75rem;
+    --radius-lg: 1.25rem;
+
+    /* Two stops, not one: a single blur reads as a sticker, two read as depth. */
+    --shadow-sm: 0 1px 2px hsl(222 47% 11% / 0.04), 0 1px 3px hsl(222 47% 11% / 0.06);
+    --shadow-md: 0 2px 4px hsl(222 47% 11% / 0.04), 0 8px 16px hsl(222 47% 11% / 0.08);
+    --shadow-lg: 0 4px 8px hsl(222 47% 11% / 0.04), 0 16px 40px hsl(222 47% 11% / 0.12);
+
+    --glass-bg: 0 0% 100% / 0.72;
+    --glass-border: 0 0% 100% / 0.5;
   }
 
   .dark {
-    --background: 222 47% 8%;
-    --foreground: 210 40% 98%;
-    --muted-foreground: 215 20% 72%;
-    --primary: 217 91% 68%;
-    --primary-foreground: 222 47% 11%;
-    --border: 217 33% 28%;
-    --destructive: 0 84% 68%;
+    color-scheme: dark;
+
+    /* Not pure black: a blue-shifted near-black cuts halation around light text
+       and lets raised surfaces actually read as raised. */
+    --background: 224 45% 7%;
+    --surface: 223 40% 10%;
+    --surface-sunken: 225 47% 5%;
+
+    --foreground: 210 40% 98%; /* 16.8:1 */
+    --muted-foreground: 215 20% 72%; /* 7.1:1 */
+
+    --primary: 245 90% 74%; /* 7.4:1 on the dark surface */
+    --primary-foreground: 224 45% 7%;
+    --primary-soft: 243 47% 18%;
+
+    --accent: 33 96% 62%; /* 8.2:1 */
+    --accent-foreground: 224 45% 7%;
+    --accent-soft: 30 40% 16%;
+
+    --success: 152 62% 62%;
+    --success-soft: 153 40% 14%;
+    --warning: 33 96% 62%;
+    --warning-soft: 30 40% 16%;
+    --destructive: 0 84% 71%;
+    --destructive-soft: 0 40% 17%;
+
+    --border: 217 30% 22%;
+    --border-strong: 215 25% 36%;
+    --ring: 245 90% 74%;
+
+    --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.4);
+    --shadow-md: 0 2px 4px hsl(0 0% 0% / 0.3), 0 8px 20px hsl(0 0% 0% / 0.45);
+    --shadow-lg: 0 4px 8px hsl(0 0% 0% / 0.3), 0 16px 48px hsl(0 0% 0% / 0.6);
+
+    --glass-bg: 223 40% 10% / 0.68;
+    --glass-border: 210 40% 98% / 0.08;
   }
 
   * {
     @apply border-border;
   }
 
+  body {
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(var(--primary) / 0.07), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 0%, hsl(var(--accent) / 0.05), transparent);
+    background-attachment: fixed;
+    font-feature-settings: 'cv11', 'ss01';
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Figures line up in columns; prose does not want tabular digits. */
+  td,
+  th,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
   /* Visible focus is never removed, only restyled. */
   :focus-visible {
-    @apply outline outline-2 outline-offset-2 outline-primary;
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
   }
 
   /* Every interactive target meets the 44px minimum. */
@@ -43,14 +133,138 @@
     min-width: 44px;
   }
 
+  /* Inline links in prose are not 44px blocks. */
+  p a[href],
+  li a[href],
+  td a[href] {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.2);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
     *::after {
       animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+@layer components {
+  /* The default panel for anything holding content. */
+  .surface {
+    background-color: hsl(var(--surface));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Glass, used sparingly: sticky headers and overlays where content should
+     stay legible scrolling underneath. Never behind body text. */
+  .glass {
+    background-color: hsl(var(--glass-bg));
+    border: 1px solid hsl(var(--glass-border));
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+  }
+
+  /* Lift on hover. Transform and shadow only: animating layout properties
+     repaints the whole layer every frame. */
+  .interactive {
+    transition:
+      transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 180ms ease;
+  }
+
+  .interactive:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: hsl(var(--border-strong));
+  }
+
+  .interactive:active {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+
+  /* Status pills always carry a text label too - colour alone never
+     communicates state, and the a11y gate enforces that. */
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .pill-success {
+    background-color: hsl(var(--success-soft));
+    color: hsl(var(--success));
+  }
+  .pill-warning {
+    background-color: hsl(var(--warning-soft));
+    color: hsl(var(--warning));
+  }
+  .pill-danger {
+    background-color: hsl(var(--destructive-soft));
+    color: hsl(var(--destructive));
+  }
+  .pill-neutral {
+    background-color: hsl(var(--surface-sunken));
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* Shimmer respects reduced motion via the global rule above. */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--surface-sunken)) 25%,
+      hsl(var(--border) / 0.6) 37%,
+      hsl(var(--surface-sunken)) 63%
+    );
+    background-size: 400% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+    border-radius: var(--radius);
+  }
+
+  .heading {
+    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.02em;
+    font-weight: 600;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
