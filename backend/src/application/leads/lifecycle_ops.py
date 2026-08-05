@@ -80,9 +80,9 @@ def _row(lead: Lead) -> dict[str, Any]:
 async def deduplicate(
     *,
     tenant_id: UUID,
-    actor_id: UUID,
+    actor_id: UUID,  # noqa: ARG001
     lead_id: UUID,
-    persist: bool = True,  # noqa: ARG001
+    persist: bool = True,
 ) -> dict[str, Any]:
     """Score candidates and record them, so a human can decide later.
 

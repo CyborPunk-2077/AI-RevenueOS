@@ -170,7 +170,7 @@ export function AssignmentRules({ rules }: { rules: AssignmentRule[] }): JSX.Ele
                       type="button"
                       onClick={() => void move(index, -1)}
                       disabled={busy || index === 0}
-                      className="rounded border border-border px-2 py-1 text-xs disabled:opacity-40"
+                      className="btn btn-ghost px-2 py-1 text-xs"
                     >
                       ↑<span className="sr-only"> Move {rule.name} up</span>
                     </button>
@@ -178,7 +178,7 @@ export function AssignmentRules({ rules }: { rules: AssignmentRule[] }): JSX.Ele
                       type="button"
                       onClick={() => void move(index, 1)}
                       disabled={busy || index === order.length - 1}
-                      className="rounded border border-border px-2 py-1 text-xs disabled:opacity-40"
+                      className="btn btn-ghost px-2 py-1 text-xs"
                     >
                       ↓<span className="sr-only"> Move {rule.name} down</span>
                     </button>
@@ -186,7 +186,7 @@ export function AssignmentRules({ rules }: { rules: AssignmentRule[] }): JSX.Ele
                       type="button"
                       onClick={() => void toggle(rule)}
                       disabled={busy}
-                      className="rounded border border-border px-3 py-1 text-xs"
+                      className="btn btn-ghost px-3 py-1 text-xs"
                     >
                       {rule.is_active ? 'Pause' : 'Activate'}
                       <span className="sr-only"> {rule.name}</span>

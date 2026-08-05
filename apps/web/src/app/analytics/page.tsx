@@ -1,5 +1,7 @@
 import { apiFetch } from '@/lib/session';
 import { money } from '@/lib/money';
+import { PageHeader, Stat } from '@/features/ui/primitives';
+import { LeadSourceMix, PipelineByStage, WonOverTime } from '@/features/analytics/charts';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,68 +55,68 @@ export default async function AnalyticsPage({ searchParams }: PageProps): Promis
   const data = result.data;
   return (
     <div className="space-y-8">
-      <section>
-        <h1 className="text-xl font-semibold">Analytics</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Tenant and role scoped · {data.period.timezone} · {data.scope}
-        </p>
-      </section>
+      <PageHeader
+        title="Analytics"
+        description={`Tenant and role scoped · ${data.period.timezone} · ${data.scope}`}
+      />
 
-      <form method="get" className="flex flex-wrap items-end gap-4 rounded border p-4">
+      <form method="get" className="surface flex flex-wrap items-end gap-4 p-4">
         <label className="grid gap-1 text-sm">
           Start date
-          <input className="rounded border px-3 py-2" type="date" name="start" defaultValue={data.period.start} />
+          <input className="field" type="date" name="start" defaultValue={data.period.start} />
         </label>
         <label className="grid gap-1 text-sm">
           End date
-          <input className="rounded border px-3 py-2" type="date" name="end" defaultValue={data.period.end} />
+          <input className="field" type="date" name="end" defaultValue={data.period.end} />
         </label>
-        <button className="rounded bg-primary px-4 py-2 text-primary-foreground" type="submit">
+        <button className="btn btn-primary" type="submit">
           Apply range
         </button>
       </form>
 
-      <dl className="dashboard-grid grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="analytics-totals">
-        <Metric label="Leads" value={String(data.leads.created)} />
-        <Metric label="Converted" value={String(data.leads.converted)} />
-        <Metric label="Won revenue" value={money(data.revenue.won_amount_minor)} />
-        <Metric label="Open pipeline" value={money(data.revenue.pipeline_amount_minor)} />
-        <Metric label="Appointments" value={String(data.appointments.scheduled)} />
-        <Metric label="Inbound messages" value={String(data.conversations.inbound)} />
-        <Metric label="Captured payments" value={money(data.revenue.payments_captured_minor)} />
-        <Metric label="Refunds" value={money(data.revenue.refunds_minor)} />
-        <Metric label="Hot leads" value={String(data.leads.hot)} />
-        <Metric label="SLA breaches" value={String(data.sla.breached)} />
-      </dl>
+      <div
+        className="dashboard-grid stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        data-testid="analytics-totals"
+      >
+        <Stat label="Leads" value={String(data.leads.created)} />
+        <Stat label="Converted" value={String(data.leads.converted)} />
+        <Stat label="Won revenue" value={money(data.revenue.won_amount_minor)} />
+        <Stat label="Open pipeline" value={money(data.revenue.pipeline_amount_minor)} />
+        <Stat label="Appointments" value={String(data.appointments.scheduled)} />
+        <Stat label="Inbound messages" value={String(data.conversations.inbound)} />
+        <Stat label="Captured payments" value={money(data.revenue.payments_captured_minor)} />
+        <Stat label="Refunds" value={money(data.revenue.refunds_minor)} />
+        <Stat label="Hot leads" value={String(data.leads.hot)} />
+        <Stat label="SLA breaches" value={String(data.sla.breached)} />
+      </div>
 
+      {/* The chart components carry their own table equivalent, so the data is
+          still reachable without sight of the graphic. The test ids the suites
+          select on are preserved on wrappers. */}
       <section className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded border p-4">
-          <h2 className="font-medium">Lead sources</h2>
-          {data.lead_sources.length ? (
-            <ul className="mt-3 space-y-2 text-sm" data-testid="lead-sources">
-              {data.lead_sources.map((item) => (
-                <li key={item.source} className="flex justify-between">
-                  <span>{item.source}</span><strong>{item.count}</strong>
-                </li>
-              ))}
-            </ul>
-          ) : <p className="mt-3 text-sm text-muted-foreground">No leads in this range.</p>}
+        <div data-testid="lead-sources">
+          <LeadSourceMix
+            rows={data.lead_sources.map((item) => ({ label: item.source, value: item.count }))}
+          />
         </div>
-        <div className="rounded border p-4">
-          <h2 className="font-medium">Daily trend</h2>
-          <div className="mt-3 max-h-64 overflow-auto">
-            <table className="w-full text-left text-sm">
-              <thead><tr><th className="py-2">Day</th><th>Leads</th><th>Won</th></tr></thead>
-              <tbody data-testid="daily-trend">
-                {data.daily.map((item) => (
-                  <tr key={item.day} className="border-t">
-                    <td className="py-2">{item.day}</td><td>{item.leads}</td><td>{money(item.won_amount_minor)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div data-testid="daily-trend">
+          <WonOverTime
+            rows={data.daily.map((item) => ({
+              label: item.day.slice(5),
+              value: item.won_amount_minor,
+            }))}
+          />
         </div>
+      </section>
+
+      <section>
+        <PipelineByStage
+          rows={[
+            { label: 'Open pipeline', value: data.revenue.pipeline_amount_minor },
+            { label: 'Won', value: data.revenue.won_amount_minor },
+            { label: 'Captured', value: data.revenue.payments_captured_minor },
+          ]}
+        />
       </section>
 
       <section className="rounded border p-4">
@@ -147,8 +149,4 @@ export default async function AnalyticsPage({ searchParams }: PageProps): Promis
       </aside>
     </div>
   );
-}
-
-function Metric({ label, value }: { readonly label: string; readonly value: string }): JSX.Element {
-  return <div className="rounded border p-4"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="text-lg font-medium">{value}</dd></div>;
 }
