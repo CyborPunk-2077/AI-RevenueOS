@@ -8,6 +8,18 @@ running system, they are wrong.
 
 Last updated: **2026-08-13** (session 3: founder dogfooding).
 
+## Accepted checkpoints
+
+Both are annotated tags on `master`; neither has been rewritten.
+
+| Tag | Commit | What it is |
+| --- | --- | --- |
+| `sangam-baseline-session02` | `405e227` | First commercial slice with truthful first-response measurement |
+| `sangam-founder-dogfood-session03` | `d293425` | **Current.** The founders can enter real prospects: quick add, CSV import, duplicate matching, honest outreach recording, daily work queue |
+
+`master` is at the session-3 tag. Session branches are kept rather than deleted,
+so `sangam-first-slice` and `sangam-founder-dogfood` still point at their work.
+
 ---
 
 ## 1. Name
