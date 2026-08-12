@@ -89,6 +89,23 @@ async def bulk_update_leads(
     return success(result, request_id=getattr(request.state, "correlation_id", None))
 
 
+@router.get("/response-metrics", summary="Leakage figures for the caller's scope")
+async def response_metrics(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    """Counts and response times behind the operational dashboard.
+
+    Declared before `/{lead_id}` so the literal path is not swallowed by the UUID
+    route.
+    """
+    principal.require("lead", "list")
+    principal.require("task", "list")
+    from application.leads.metrics import LeadMetricsService
+
+    service = LeadMetricsService.for_principal(principal)
+    metrics = await service.response_metrics()
+    metrics["overdue_follow_ups"] = await service.overdue_task_count()
+    return success(metrics, request_id=getattr(request.state, "correlation_id", None))
+
+
 @router.get("/{lead_id}", summary="Read a lead")
 async def read_lead(
     lead_id: UUID, request: Request, response: Response, principal: CurrentPrincipal

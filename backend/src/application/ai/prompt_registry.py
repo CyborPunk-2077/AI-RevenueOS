@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -24,7 +25,23 @@ from shared.utils.ids import uuid7
 from shared.utils.text import canonical_json
 from shared.utils.timeutil import utcnow
 
-PROMPT_ROOT = Path(__file__).resolve().parents[4] / "prompts"
+def _default_prompt_root() -> Path:
+    """Where the versioned prompt files live.
+
+    Counting four directories up finds `<repo>/prompts` from a source checkout.
+    That is the wrong answer inside the API container, which mounts `backend/` at
+    `/app` and leaves the rest of the repository outside - the count lands on `/`
+    and the registry then reports that no prompts exist at all. `PROMPT_ROOT`
+    exists so the deployment can state the location instead of the layout being
+    inferred, which is what compose now does.
+    """
+    override = os.environ.get("PROMPT_ROOT")
+    if override:
+        return Path(override)
+    return Path(__file__).resolve().parents[4] / "prompts"
+
+
+PROMPT_ROOT = _default_prompt_root()
 
 
 def _require_platform(principal: Any, action: str) -> None:

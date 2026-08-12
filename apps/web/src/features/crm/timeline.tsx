@@ -9,6 +9,7 @@ export interface TimelineEntry {
   readonly kind: 'activity' | 'note';
   readonly id: string;
   readonly activity_type?: string;
+  readonly direction?: string | null;
   readonly subject?: string;
   readonly body: string | null;
   readonly actor_name: string | null;
@@ -76,6 +77,9 @@ export function Timeline({
       activity_type: String(form.get('activity_type') ?? 'call'),
       subject: String(form.get('subject') ?? ''),
       body: String(form.get('activity_body') ?? '') || null,
+      // Only an outbound contact counts as answering a prospect, so the server
+      // needs to be told which this was rather than assuming.
+      direction: String(form.get('direction') ?? 'outbound'),
     });
     element.reset();
   }
@@ -136,6 +140,21 @@ export function Timeline({
               <option value="email">Email</option>
               <option value="whatsapp">WhatsApp</option>
               <option value="task">Task</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="direction" className="block text-sm">
+              Who got in touch
+            </label>
+            <select
+              id="direction"
+              name="direction"
+              defaultValue="outbound"
+              data-testid="activity-direction"
+              className="mt-1 w-full rounded border px-3 py-2"
+            >
+              <option value="outbound">We contacted them</option>
+              <option value="inbound">They contacted us</option>
             </select>
           </div>
           <div>
@@ -223,6 +242,14 @@ export function Timeline({
                       <span className="rounded bg-muted px-2 py-0.5 text-xs uppercase">
                         {entry.activity_type}
                       </span>{' '}
+                      {/* Which way it went, because "we called them" and "they
+                          called us" are different events and only one of them
+                          answers an enquiry. */}
+                      {entry.direction ? (
+                        <span className="mr-1 text-xs text-muted-foreground">
+                          {entry.direction === 'inbound' ? 'they contacted us ·' : 'we contacted them ·'}
+                        </span>
+                      ) : null}
                       {entry.subject}
                     </>
                   ) : (

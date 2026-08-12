@@ -1,7 +1,7 @@
 # Sangam — feature reality map
 
-Last established: **2026-08-12**, against the running local stack at commit
-`dd7c8e8` plus this session's work.
+Last established: **2026-08-12** (second session), against the running local
+stack at commit `cc5e9aa` plus this session's work.
 
 This file records what is *actually true when the product is running*, not what
 the specification intends. Where something was checked in a browser this session
@@ -29,13 +29,15 @@ trust.
 | Authentication | VERIFIED-USABLE | Sign-in, sign-out, session cookie, rate limiting. Browser-verified. MFA and Google sign-in exist but are untested this session (Google is PROVIDER-GATED). |
 | Tenant isolation | VERIFIED-USABLE | Three enforcement layers including forced Postgres RLS. Covered by existing e2e tests. |
 | Users and roles | VERIFIED-USABLE | Owner/manager/member with global/team/self scope, seeded and signed in as. `GET /users/members` added this session to feed assignee pickers. |
-| Today (operational dashboard) | VERIFIED-USABLE | **New this session.** Counts untouched, unassigned, no-next-action and overdue. Every figure links to its rows. Verified that closing a follow-up decrements the overdue count. |
+| Today (operational dashboard) | VERIFIED-USABLE | Counts waiting-for-reply, unassigned, no-next-action and overdue, **all computed server-side in the caller's scope** by `application/leads/metrics.py`. Every figure links to the filtered list that makes it up. Verified that closing a follow-up decrements the overdue count and that answering a prospect decrements the waiting count. |
+| First-response measurement | VERIFIED-USABLE | **New this session.** `first_response_at` is set automatically, in the same transaction as the activity that justifies it, the first time an *outbound* contact on a customer-reaching channel is logged against a lead. Idempotent by conditional UPDATE, never overwritten, never backfilled. Rule lives in `domain/leads/first_response.py` so real provider events can feed it unchanged. Nine-assertion browser acceptance test. |
+| Response-time reporting | VERIFIED-USABLE | Per-prospect time to first reply, plus tenant median and longest current wait. Median, not mean. Derived only from logged contact, so it moves when behaviour moves and at no other time. |
 | Prospects (leads) list | VERIFIED-USABLE | **Rebuilt this session** to show owner, next action, age and a "no reply yet" flag. |
 | Prospect detail | VERIFIED-USABLE | **Rebuilt this session** into a workbench: requirement, ownership, qualification, follow-ups, history, duplicates. |
 | Assignment | VERIFIED-USABLE | Manual assignment to a named person, with optimistic-concurrency check. Rule-based auto-assignment exists at `/leads/{id}/assign` and in a settings screen — not exercised this session. |
 | Qualification | VERIFIED-USABLE | Rule-based scoring with visible reasons and missing fields, working with **no AI provider**. Manual override present. |
 | Follow-ups / tasks | VERIFIED-USABLE | **New queue screen this session** with all/overdue/mine filters and inline completion. Overdue is decided server-side. Tasks can now hang off a lead, not only contacts and deals. |
-| Activity history | VERIFIED-USABLE | **Extended to leads this session**, so history predates conversion instead of restarting at it. Activities are append-only, enforced by a database trigger. |
+| Activity history | VERIFIED-USABLE | Extended to leads, so history predates conversion instead of restarting at it. Activities are append-only, enforced by a database trigger. **Now carries a direction** ("we contacted them" / "they contacted us"), shown in the timeline, because only outbound contact answers an enquiry. |
 | Notes | VERIFIED-USABLE | Editable by their author only, enforced server-side. |
 | Contacts and accounts | VERIFIED-USABLE | Pre-existing; list, search, create, edit, timeline. |
 | Deals and pipeline | VERIFIED-USABLE | Board by stage, stage moves, won/lost with loss reason. Seeded and viewed this session; stage-move interaction not re-exercised. |
@@ -70,7 +72,32 @@ trust.
 
 ---
 
-## Defects found and fixed this session
+## Defects found and fixed in session 2 (measurement)
+
+1. **`first_response_at` was seed-only.** Nothing in normal use ever set it, so
+   the headline leakage metric would have been permanently wrong the moment a
+   founder used Sangam for real prospecting. Now written automatically from logged
+   outbound contact.
+2. **The AI prompt registry could not find its prompts inside the container.**
+   `PROMPT_ROOT` was inferred by counting four directories up from the module,
+   which lands on `/` when only `backend/` is mounted. A genuine runtime path bug
+   that had been showing up as two "failing tests". Fixed with an explicit
+   `PROMPT_ROOT` environment variable and a read-only `./prompts:/prompts` mount.
+3. **The launcher could hang forever on a half-started Docker.** `docker version`
+   does not always fail fast — while Docker Desktop is coming up the named pipe
+   can exist without answering, and the CLI blocks indefinitely. The probe is now
+   bounded and the wait loop is visible. (Found by actually killing Docker and
+   running the launcher cold.)
+4. **`$ErrorActionPreference = 'Stop'` turned the Docker check into a crash.**
+   Windows PowerShell wraps a native command's stderr in an ErrorRecord, so
+   `docker version 2>$null` *terminated* the launcher on the very line whose job
+   was to detect that Docker was down.
+5. **Seeded first-response times had no evidence behind them.** The seed set the
+   timestamp without writing the call that justified it. It now writes the
+   outbound activity at exactly that moment, so every demo figure reconciles to a
+   record the owner can open.
+
+## Defects found and fixed in session 1 (workflow)
 
 1. **Only the Owner could record that a call happened.** `activity:create` was
    withheld from admin, manager and member, so the salespeople who make the calls
@@ -96,6 +123,11 @@ trust.
   candidate has no email, which is exactly the case the seeded duplicate
   demonstrates. It should fall back to the phone number and captured company.
 - Analytics figures are unreconciled (above).
+- **Sangam measures what is recorded, not what happened.** A call that nobody logs
+  leaves the prospect showing as waiting. This is the honest behaviour — the
+  alternative is guessing — but it makes the metric a measure of the recording
+  habit as much as of the responding habit. Worth saying out loud to any pilot
+  customer.
 - **`crm-contacts.spec.ts` "create an account, create a contact against it, edit
   and persist" fails** at `getByLabel('Job title').nth(1)` — the contact detail
   page no longer renders a second field with that label. **Confirmed
@@ -108,8 +140,10 @@ trust.
   that, so a full run produces spurious `waitForURL` timeouts. Run one spec file
   at a time. The clean fix is a per-worker storage-state fixture that signs in
   once and reuses the cookie.
-- 19 backend tests fail **inside the API container only**, because the container
-  mounts `backend/` at `/app` and those tests resolve repo-root paths
-  (`/prompts`, `/backend/requirements.lock`, `infra/`, `.github/`). They are
-  environment artefacts, not regressions; run them from the repo root on the
-  host.
+- ~~19 backend tests fail inside the API container only.~~ **Resolved.** Two
+  different causes were hiding behind one symptom. The prompt tests were a real
+  path bug in production code, now fixed and mounted. The rest assert on files
+  that genuinely live outside `backend/` (Terraform, workflows, alert rules, lock
+  files); they now locate the checkout by marker file and **skip with a reason**
+  when it is absent, instead of failing. Nothing was weakened — running pytest
+  from the repository root on the host still executes every one of them.

@@ -1,6 +1,8 @@
 from pathlib import Path
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+from tests.repo_layout import repository_root
+
+REPOSITORY_ROOT = repository_root()
 BACKEND_ROOT = REPOSITORY_ROOT / "backend"
 
 

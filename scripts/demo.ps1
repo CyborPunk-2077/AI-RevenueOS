@@ -52,6 +52,9 @@
 param(
     [string]$Password,
     [switch]$SkipBuild,
+    # Opening a browser is right for the double-click path and wrong for CI and
+    # for the browser tests, which drive their own.
+    [switch]$NoBrowser,
     [int]$TimeoutSeconds = 300
 )
 
@@ -246,6 +249,170 @@ function Test-DemoLogin {
     Write-Ok "$Email signs in"
 }
 
+function Find-DockerDesktop {
+    <#
+        Where Docker Desktop is installed, or $null if it is not.
+
+        The registry is asked first because it is where the installer records the
+        real location, which is not always Program Files. The fixed paths are a
+        fallback for installs that did not write that key.
+    #>
+    $candidates = @()
+    foreach ($key in @(
+            'HKLM:\SOFTWARE\Docker Inc.\Docker\1.0',
+            'HKLM:\SOFTWARE\WOW6432Node\Docker Inc.\Docker\1.0')) {
+        try {
+            $path = (Get-ItemProperty -Path $key -Name AppPath -ErrorAction Stop).AppPath
+            if ($path) { $candidates += (Join-Path $path 'Docker Desktop.exe') }
+        } catch { $null = $_ }
+    }
+    $candidates += @(
+        (Join-Path $env:ProgramFiles 'Docker\Docker\Docker Desktop.exe'),
+        (Join-Path ${env:ProgramFiles(x86)} 'Docker\Docker\Docker Desktop.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Docker\Docker Desktop.exe')
+    )
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) { return $candidate }
+    }
+    return $null
+}
+
+function Test-DockerEngine {
+    <#
+        The engine version string when the daemon answers, otherwise $null.
+
+        `docker version --format '{{.Server.Version}}'` is the right probe: it
+        talks to the daemon. `docker --version` reports only the client and
+        succeeds happily while Docker Desktop is still starting.
+
+        The error handling is not defensive padding. This script runs under
+        `$ErrorActionPreference = 'Stop'`, and Windows PowerShell wraps a native
+        command's stderr in an ErrorRecord - so when the daemon is down, docker
+        writing "cannot find the pipe" to stderr became a *terminating* error and
+        killed the launcher on the very line whose job is to discover that the
+        daemon is down. Silencing the preference locally and reading $LASTEXITCODE
+        is what makes "not running" an answer instead of a crash.
+    #>
+    param([int]$TimeoutMs = 10000)
+
+    # Bounded, because `docker version` does not always fail fast. While Docker
+    # Desktop is starting the named pipe can exist but never answer, and the CLI
+    # then blocks indefinitely - which made the launcher look frozen at "Starting
+    # it for you" rather than waiting visibly. Anything that has not answered
+    # inside the timeout is treated as "not ready yet", and the caller tries again.
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = 'docker'
+    $info.Arguments = 'version --format {{.Server.Version}}'
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+
+    $process = $null
+    try {
+        $process = [System.Diagnostics.Process]::Start($info)
+        if (-not $process.WaitForExit($TimeoutMs)) {
+            try { $process.Kill() } catch { $null = $_ }
+            return $null
+        }
+        if ($process.ExitCode -ne 0) { return $null }
+        $text = $process.StandardOutput.ReadToEnd().Trim()
+        if (-not $text) { return $null }
+        return $text
+    } catch {
+        # `docker` not on PATH lands here, and is a legitimate "no engine".
+        return $null
+    } finally {
+        if ($process) { $process.Dispose() }
+        $Error.Clear()
+    }
+}
+
+function Start-DockerEngine {
+    <#
+        Bring the Docker daemon up, starting Docker Desktop if it is not running.
+
+        The owner should not have to know what a daemon is, so this does the whole
+        job: it launches Docker Desktop, waits for the engine to actually answer,
+        and only gives up with a plain-English message. It never touches
+        containers or volumes belonging to other projects - starting the engine is
+        the entire scope.
+    #>
+    param([int]$Timeout = 240)
+
+    $version = Test-DockerEngine
+    if ($version) {
+        Write-Ok "Docker engine $version"
+        return
+    }
+
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        throw @'
+Docker Desktop does not appear to be installed on this computer.
+
+Sangam runs inside Docker, so it is needed once. Install Docker Desktop from
+https://www.docker.com/products/docker-desktop/ , restart the computer if it asks
+you to, then double-click RUN_DEMO.cmd again. Nothing else is required.
+'@
+    }
+
+    $exe = Find-DockerDesktop
+    if (-not $exe) {
+        throw @'
+The docker command exists but Docker Desktop could not be found to start it.
+
+Start Docker Desktop from the Start menu, wait for the whale icon to stop
+animating, then double-click RUN_DEMO.cmd again.
+'@
+    }
+
+    Write-Warn 'Docker Desktop is not running yet. Starting it for you.'
+    try {
+        Start-Process -FilePath $exe -ArgumentList '-Autostart' -ErrorAction Stop | Out-Null
+    } catch {
+        throw "Could not start Docker Desktop automatically: $($_.Exception.Message)"
+    }
+
+    # First start after a reboot genuinely takes a couple of minutes, so this
+    # waits patiently and says so rather than looking frozen.
+    $deadline = (Get-Date).AddSeconds($Timeout)
+    $frames = @('|', '/', '-', '\')
+    $i = 0
+    while ((Get-Date) -lt $deadline) {
+        Write-Host "`r    waiting for Docker to finish starting $($frames[$i % 4])" -NoNewline
+        $i = $i + 1
+        # Short probe timeout inside the loop so the spinner keeps moving and the
+        # overall deadline is respected even when the CLI is hanging.
+        $version = Test-DockerEngine -TimeoutMs 5000
+        if ($version) {
+            Write-Host "`r    Docker engine $version                              " -ForegroundColor Green
+            return
+        }
+        Start-Sleep -Seconds 2
+    }
+    Write-Host ''
+    throw @"
+Docker Desktop was started but its engine did not come up within $Timeout seconds.
+
+This usually means it is still finishing a first-time setup or an update. Give it
+another minute, then double-click RUN_DEMO.cmd again.
+"@
+}
+
+function Open-Sangam {
+    <#
+        Open the app in the default browser. Best-effort by design: a machine with
+        no default browser must not turn a working demo into a failed run.
+    #>
+    param([Parameter(Mandatory)][string]$Url)
+    try {
+        Start-Process $Url -ErrorAction Stop | Out-Null
+        Write-Ok "Opened $Url in your browser"
+    } catch {
+        Write-Warn "Could not open a browser automatically. Go to $Url yourself."
+    }
+}
+
 function New-DemoPassword {
     # RandomNumberGenerator.Create().GetBytes works on both Windows PowerShell 5.1
     # and PowerShell 7; the newer static Fill() does not exist on 5.1.
@@ -261,12 +428,7 @@ $generated = $false
 try {
     # --- preflight ---------------------------------------------------------
     Write-Step 'Checking Docker'
-    $engine = & docker version --format '{{.Server.Version}}' 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Err 'Docker Desktop is not running. Start it, wait for the whale to settle, and run this again.'
-        exit 1
-    }
-    Write-Ok "Docker engine $engine"
+    Start-DockerEngine
 
     if (-not $Password) {
         $Password = New-DemoPassword
@@ -369,14 +531,23 @@ try {
     Write-Host '  Logs        docker compose logs -f api web'
     Write-Host $rule -ForegroundColor Green
     Write-Host ''
+
+    # Last, so the credentials are already on screen when the browser appears.
+    if (-not $NoBrowser) { Open-Sangam -Url $WebUrl }
 }
 catch {
     Write-Host ''
     Write-Err $_.Exception.Message
+    # The container hints only help once there is a daemon to ask. Printing
+    # "docker compose logs" at somebody who has just been told Docker is not
+    # installed is how a clear message becomes a confusing one.
+    if (Test-DockerEngine) {
+        Write-Host ''
+        Write-Warn 'Troubleshooting:'
+        Write-Warn '  docker compose logs api web      show what failed'
+        Write-Warn '  RESET_DEMO.cmd                   start from an empty database (destructive)'
+    }
     Write-Host ''
-    Write-Warn 'Troubleshooting:'
-    Write-Warn '  docker compose logs api web      show what failed'
-    Write-Warn '  RESET_DEMO.cmd                   start from an empty database (destructive)'
     exit 1
 }
 finally {

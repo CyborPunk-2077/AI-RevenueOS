@@ -6,7 +6,7 @@ reality map). Older documents in `docs/` predate 2026-08-12 and describe the
 product under its previous name; where they disagree with this file or with the
 running system, they are wrong.
 
-Last updated: **2026-08-12**.
+Last updated: **2026-08-12** (session 2: measurement and startup).
 
 ---
 
@@ -80,6 +80,18 @@ is — qualification is rule-based and no model provider is configured.
   connects as a role that is neither superuser nor table owner, on purpose.
 - `app.activities` and the audit log are **append-only**, enforced by a database
   trigger. Do not disable the trigger — including for seed or test convenience.
+- **What counts as answering a customer is defined once**, in
+  `domain/leads/first_response.py`: outbound direction, on a channel that reaches
+  the customer. Do not re-implement that test anywhere else. When a real provider
+  is switched on, feed its events through
+  `application/leads/first_response.record_first_response` rather than writing
+  `first_response_at` directly.
+- **`first_response_at` is never backfilled and never overwritten.** It is set by
+  a conditional `UPDATE ... WHERE first_response_at IS NULL`, in the same
+  transaction as the activity that justifies it.
+- **Operational numbers are computed server-side, in the caller's scope**, in
+  `application/leads/metrics.py`. Do not re-derive a count in a page component; two
+  definitions of "open" will disagree and the owner will stop believing both.
 - Every state change writes to the transactional outbox in the same transaction.
 - No provider may ever fabricate success. An unconfigured channel returns
   "not configured" or "queued", never "sent".
@@ -95,6 +107,15 @@ Browser-verified end to end this session, in the Sangam workspace:
 Concretely: Today (operational dashboard), Prospects list and detail, assignment,
 rule-based qualification, follow-up queue with overdue filter, activity timeline
 on leads, contacts, accounts, deals board, and the Test Centre.
+
+**The workflow now measures itself.** Waiting-for-first-reply, time to first
+reply, the tenant median, longest current wait, overdue follow-ups, unassigned
+prospects and prospects with no next action all come from normal product use, are
+computed server-side in the caller's scope, and each count links to the filtered
+list of records behind it. `sangam-first-response.spec.ts` proves in a browser
+that assignment, qualification, an internal task, an internal note and an
+*inbound* call all leave a prospect waiting, that the first outbound contact
+records the response, and that a second contact does not move the timestamp.
 
 See `docs/CURRENT-REALITY.md` for the full module-by-module map, including what
 is partial, backend-only, provider-gated and spec-only.
@@ -139,10 +160,21 @@ behind. Use `RESET_DEMO.cmd` for a genuinely empty slate.
 
 ## 9. How it runs
 
-Double-click **`RUN_DEMO.cmd`** with Docker Desktop running. The launcher starts
-the stack, waits for health, migrates, seeds reference data, seeds both demo
-tenants and the Sangam workspace, then proves a sign-in works before printing
-anything.
+Double-click **`RUN_DEMO.cmd`**. Nothing else. If Docker Desktop is installed but
+closed, the launcher starts it and waits; if it is not installed, it says so in
+plain English with the download link rather than throwing. It then starts the
+stack, waits for health, migrates, seeds reference data, seeds both demo tenants
+and the Sangam workspace, proves a sign-in works, prints the credentials and
+opens the browser. `-NoBrowser` suppresses the last step for CI and for the
+Playwright runs, which drive their own browser.
+
+Two traps worth remembering before touching that script:
+
+- `docker version` can **hang** rather than fail while Docker Desktop is starting,
+  so every probe is bounded by `Test-DockerEngine -TimeoutMs`.
+- The script runs under `$ErrorActionPreference = 'Stop'`, and Windows PowerShell
+  turns a native command's stderr into a terminating error. Any new `docker ...`
+  call that is allowed to fail needs the same treatment as `Test-DockerEngine`.
 
 - App: http://localhost:3000 — API docs: http://localhost:8000/v1/docs
 - Data lives in the `airevenueos_pgdata` volume and survives restarts.
@@ -195,23 +227,30 @@ photographs it, so a screenshot can only exist if the step actually worked.
 4. **CSV import is untested** against real data despite having a spec.
 5. **Invitations cannot reach anybody** — the email channel is gated, so the link
    must be handed over manually.
+6. **Response measurement depends on the recording habit.** A call nobody logs
+   leaves the prospect showing as waiting. Honest, but say it out loud to any
+   pilot customer before they read the number as "our team ignored these people".
 
 ## 13. Exact next recommended task
 
-**Make the "no reply yet" claim measurable: record first response automatically.**
+**Give the numbers a "before and after": record a weekly snapshot of the
+operational metrics, and show the trend.**
 
-`first_response_at` is the field the whole leakage story rests on — the Today
-dashboard, the "no reply yet" flag and any future before/after measurement all
-read it. It is currently only ever set by the seed script. Logging a call,
-sending a message or completing the first follow-up against a prospect does not
-set it, so the moment a real founder uses Sangam for real prospecting the number
-is wrong and quietly stays wrong.
+Sangam can now say truthfully what is happening *today* — who is waiting, how
+long, what is overdue. It cannot yet say whether that is better or worse than last
+week, and "fewer enquiries fall through the cracks" is a claim about change over
+time. Without a stored history, the moment a pilot SME asks "has this actually
+helped?" the honest answer is "we do not know", and every figure gets recomputed
+from scratch on every page load.
 
-Set it in the application layer the first time an outbound activity is recorded
-against a lead, expose "time to first response" per prospect and as a tenant
-median, and cover it with a test that proves a second activity does not move it.
-That converts the headline metric from seeded fiction into something we could
-honestly show a real SME.
+Write a small weekly rollup (the same figures `application/leads/metrics.py`
+already computes, per tenant, stamped and stored), display the last several weeks
+on Today as a plain table, and be explicit that the first week is a baseline and
+not an improvement. That is the smallest step that turns the current measurement
+into evidence, and it is the prerequisite for a shadow pilot.
+
+Explicitly **not** next: WhatsApp, email, payments, documents, or broadening
+analytics. Those add surface without making the one workflow more provable.
 
 ---
 

@@ -43,6 +43,30 @@ interface BoardTotals {
   readonly open_value_minor: number;
 }
 
+/**
+ * Computed server-side over the caller's own scope, so a salesperson sees the
+ * leakage in their own book. Counting these in the page would mean re-deriving
+ * "open" a second time, in a second place, from one page of results.
+ */
+interface ResponseMetrics {
+  readonly open_total: number;
+  readonly awaiting_first_response: number;
+  readonly unassigned: number;
+  readonly no_next_action: number;
+  readonly answered_total: number;
+  readonly median_first_response_minutes: number | null;
+  readonly longest_wait_minutes: number | null;
+  readonly overdue_follow_ups: number;
+}
+
+/** Whole units, because "1h 47m" invites precision nobody acts on. */
+function duration(minutes: number | null): string {
+  if (minutes === null) return '—';
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60 * 48) return `${Math.round(minutes / 60)} hrs`;
+  return `${Math.round(minutes / (60 * 24))} days`;
+}
+
 function hoursSince(iso: string | null): number | null {
   if (!iso) return null;
   return Math.floor((Date.now() - new Date(iso).getTime()) / 3_600_000);
@@ -71,10 +95,11 @@ function taskHref(task: Task): string {
 }
 
 export default async function TodayPage(): Promise<JSX.Element> {
-  const [leadsResult, tasksResult, boardResult] = await Promise.all([
+  const [leadsResult, tasksResult, boardResult, metricsResult] = await Promise.all([
     apiFetch<{ leads: Lead[] }>('/leads?page_size=100'),
     apiFetch<{ tasks: Task[] }>('/tasks?status=open&page_size=100'),
     apiFetch<{ totals: BoardTotals }>('/deals/board'),
+    apiFetch<ResponseMetrics>('/leads/response-metrics'),
   ]);
 
   const leads = leadsResult.data?.leads ?? [];
@@ -82,16 +107,15 @@ export default async function TodayPage(): Promise<JSX.Element> {
   // The server already excludes won and lost from these, so re-deriving them
   // here would only be a second, disagreeing definition of "open".
   const totals = boardResult.data?.totals ?? { open_count: 0, open_value_minor: 0 };
+  const metrics = metricsResult.data ?? null;
 
+  // The lists below are the rows *behind* the counts. They come from the same
+  // open-status definition the metrics service uses, so the tile and the table
+  // under it cannot disagree.
   const openLeads = leads.filter(
     (l) => l.status !== 'converted' && l.status !== 'disqualified' && l.status !== 'archived',
   );
   const noReply = openLeads.filter((l) => l.first_response_at === null);
-  const unassigned = openLeads.filter((l) => l.assignee_id === null);
-  const withFollowUp = new Set(
-    tasks.filter((t) => t.entity_type === 'lead' && t.entity_id).map((t) => t.entity_id as string),
-  );
-  const noNextAction = openLeads.filter((l) => !withFollowUp.has(l.id));
 
   const overdue = tasks.filter((t) => t.is_overdue);
   const dueToday = tasks.filter((t) => !t.is_overdue && isToday(t.due_at));
@@ -111,31 +135,76 @@ export default async function TodayPage(): Promise<JSX.Element> {
           <Link href="/follow-ups?filter=overdue" className="block" data-testid="stat-overdue">
             <Stat
               label="Overdue follow-ups"
-              value={String(overdue.length)}
+              value={String(metrics?.overdue_follow_ups ?? overdue.length)}
               hint="Promised by a date that has passed"
             />
           </Link>
-          <Link href="/leads" className="block" data-testid="stat-no-reply">
+          <Link href="/leads?filter=awaiting" className="block" data-testid="stat-no-reply">
             <Stat
-              label="Enquiries with no reply"
-              value={String(noReply.length)}
-              hint="Nobody has responded yet"
+              label="Waiting for a first reply"
+              value={String(metrics?.awaiting_first_response ?? noReply.length)}
+              hint="Nobody has contacted them yet"
             />
           </Link>
-          <Link href="/leads" className="block" data-testid="stat-unassigned">
+          <Link href="/leads?filter=unassigned" className="block" data-testid="stat-unassigned">
             <Stat
               label="Unassigned prospects"
-              value={String(unassigned.length)}
+              value={String(metrics?.unassigned ?? 0)}
               hint="No named owner"
             />
           </Link>
-          <Link href="/leads" className="block" data-testid="stat-no-next-action">
+          <Link
+            href="/leads?filter=no-next-action"
+            className="block"
+            data-testid="stat-no-next-action"
+          >
             <Stat
               label="No next action"
-              value={String(noNextAction.length)}
+              value={String(metrics?.no_next_action ?? 0)}
               hint="Open, but nothing is scheduled"
             />
           </Link>
+        </div>
+      </section>
+
+      {/* Response speed, kept separate from the backlog above: these describe how
+          the team is doing, not what is on fire right now. Both are derived from
+          logged outbound contact, so each one is answerable by opening a
+          prospect and reading its timeline. */}
+      <section aria-labelledby="speed-heading" className="space-y-3">
+        <h2 id="speed-heading" className="text-sm font-medium text-muted-foreground">
+          How quickly enquiries are answered
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div data-testid="stat-median-response">
+            <Stat
+              label="Typical time to first reply"
+              value={duration(metrics?.median_first_response_minutes ?? null)}
+              hint={
+                metrics && metrics.answered_total > 0
+                  ? `Middle value across ${metrics.answered_total} answered ${
+                      metrics.answered_total === 1 ? 'enquiry' : 'enquiries'
+                    }`
+                  : 'No enquiry has been answered yet'
+              }
+            />
+          </div>
+          <div data-testid="stat-longest-wait">
+            <Stat
+              label="Longest anyone is waiting"
+              value={duration(metrics?.longest_wait_minutes ?? null)}
+              hint="Oldest enquiry with no reply yet"
+            />
+          </div>
+          <div data-testid="stat-answered">
+            <Stat
+              label="Enquiries answered"
+              value={
+                metrics ? `${metrics.answered_total} of ${metrics.answered_total + metrics.awaiting_first_response}` : '—'
+              }
+              hint="Counted from logged calls, emails and messages"
+            />
+          </div>
         </div>
       </section>
 

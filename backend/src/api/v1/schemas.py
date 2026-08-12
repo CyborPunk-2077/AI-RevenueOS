@@ -370,6 +370,11 @@ class ActivityLogRequest(StrictModel):
     activity_type: Literal["call", "email", "meeting", "note", "task", "whatsapp"]
     subject: Annotated[str, Field(min_length=1, max_length=300)]
     body: Annotated[str | None, Field(max_length=10_000)] = None
+    # Decides whether this counts as answering the prospect. Defaults to outbound
+    # because somebody typing a call into the timeline is recording that they made
+    # it; an inbound call is the enquiry, not the reply, and must not clear the
+    # "waiting for a first reply" warning.
+    direction: Literal["outbound", "inbound"] | None = None
 
 
 class NoteCreateRequest(StrictModel):

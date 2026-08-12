@@ -8,7 +8,9 @@ from typing import Any
 import hcl2
 import yaml
 
-ROOT = Path(__file__).resolve().parents[3]
+from tests.repo_layout import repository_root
+
+ROOT = repository_root()
 RULES_PATH = ROOT / "infra" / "monitoring" / "alerts.yml"
 PROMETHEUS_PATH = ROOT / "infra" / "monitoring" / "prometheus.yml"
 RUNBOOK_PATH = ROOT / "docs" / "runbooks" / "alerts.md"

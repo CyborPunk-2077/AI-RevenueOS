@@ -24,8 +24,22 @@ interface Lead {
   readonly qualification_score: number | null;
   readonly category: string | null;
   readonly assignee_id: string | null;
+  readonly first_response_at: string | null;
   readonly capture: Record<string, unknown> | null;
   readonly created_at: string | null;
+}
+
+const OPEN_STATUSES = new Set(['new', 'contacted', 'qualified', 'nurturing']);
+
+function minutesBetween(from: string | null, to: string | null): number | null {
+  if (!from || !to) return null;
+  return Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 60_000));
+}
+
+function duration(minutes: number): string {
+  if (minutes < 60) return `${minutes} minutes`;
+  if (minutes < 60 * 48) return `${Math.round(minutes / 60)} hours`;
+  return `${Math.round(minutes / (60 * 24))} days`;
 }
 
 const STATUS_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'danger'> = {
@@ -79,6 +93,8 @@ export default async function LeadDetailPage({
   const openTasks = tasks.filter((t) => t.status === 'open' || t.status === 'in_progress');
   const nextAction = openTasks[0] ?? null;
   const age = ageInDays(lead.created_at);
+  const replyMinutes = minutesBetween(lead.created_at, lead.first_response_at);
+  const isOpen = OPEN_STATUSES.has(lead.status);
 
   return (
     <div className="space-y-8">
@@ -146,7 +162,38 @@ export default async function LeadDetailPage({
             members={membersResult.data?.members ?? []}
           />
         </div>
-        <p data-testid="lead-next-action" className="mt-4 text-sm">
+        {/* Stated on the record, not only counted on the dashboard. The line
+            below is the one a salesperson reads before deciding what to do, and
+            it is the same fact the Today tile counts. */}
+        <p data-testid="lead-first-response" className="mt-4 text-sm">
+          {lead.first_response_at ? (
+            <>
+              <span className="text-muted-foreground">First reply: </span>
+              {replyMinutes === null ? (
+                'recorded'
+              ) : (
+                <>
+                  <span className="font-medium" data-testid="lead-response-time">
+                    {duration(replyMinutes)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {' '}
+                    after the enquiry arrived, on {formatDate(lead.first_response_at)}
+                  </span>
+                </>
+              )}
+            </>
+          ) : isOpen ? (
+            <span className="text-destructive" data-testid="lead-awaiting-response">
+              Waiting for a first reply. Assigning, scoring or scheduling does not count &mdash;
+              log the call, email or message below once you have actually contacted them.
+            </span>
+          ) : (
+            <span className="text-muted-foreground">No first reply was ever recorded.</span>
+          )}
+        </p>
+
+        <p data-testid="lead-next-action" className="mt-3 text-sm">
           {nextAction ? (
             <>
               <span className="text-muted-foreground">Next action: </span>

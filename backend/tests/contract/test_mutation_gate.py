@@ -7,7 +7,9 @@ from pathlib import Path
 
 import yaml
 
-ROOT = Path(__file__).resolve().parents[3]
+from tests.repo_layout import repository_root
+
+ROOT = repository_root()
 
 
 def test_mutmut_is_pinned_and_scoped_to_domain_including_auth() -> None:

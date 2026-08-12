@@ -1015,6 +1015,31 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
                 )
             )
             counts["leads"] += 1
+
+            # Every seeded first response is backed by the outbound activity that
+            # justifies it, written at exactly that moment. Otherwise the demo
+            # would show a "time to first response" with no call behind it, which
+            # is precisely the kind of unbacked number this workspace exists to
+            # let the founders stop trusting.
+            if responded is not None:
+                channel = "whatsapp" if row["source"] == "whatsapp" else "call"
+                session.add(
+                    Activity(
+                        id=uuid7(),
+                        tenant_id=SANGAM_ID,
+                        activity_type=channel,
+                        subject=f"First contact with {row['first_name']}",
+                        body=("Got back to the enquiry and confirmed what they are trying to fix."),
+                        entity_type="lead",
+                        entity_id=lead_id,
+                        actor_id=users.get(row["owner"]) if row["owner"] else None,
+                        actor_type="user",
+                        metadata_json={"direction": "outbound"},
+                        created_at=responded,
+                        updated_at=responded,
+                    )
+                )
+                counts["activities"] += 1
         await session.flush()
 
         # The duplicate is recorded, not silently merged: a human decides.
@@ -1141,7 +1166,9 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
                     entity_id=lead_ids[entry["lead"]],
                     actor_id=users[entry["actor"]],
                     actor_type="user",
-                    metadata_json={},
+                    # These are all the business reaching out; recorded as such so
+                    # the timeline and the first-response rule read the same field.
+                    metadata_json={"direction": "outbound"},
                     created_at=when,
                     updated_at=when,
                 )

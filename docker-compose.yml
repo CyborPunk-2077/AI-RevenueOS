@@ -58,8 +58,17 @@ services:
       # Prometheus runs only under the optional `monitoring` profile. Compose
       # networks use RFC1918 ranges; the endpoint remains unavailable publicly.
       METRICS_ALLOWED_CIDRS: 127.0.0.1/32,10.0.0.0/8,172.16.0.0/12
+      # The versioned prompt files live at the repository root, outside the
+      # backend directory this container mounts, so the registry cannot infer
+      # their location from the source layout. Stated explicitly rather than
+      # counting directories upwards and landing on `/`.
+      PROMPT_ROOT: /prompts
     ports: ["8000:8000"]
-    volumes: ["./backend:/app"]
+    volumes:
+      - ./backend:/app
+      # Read-only: prompts are versioned in Git and promoted deliberately. The
+      # application must never be able to edit its own prompt definitions.
+      - ./prompts:/prompts:ro
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -83,7 +92,11 @@ services:
       REDIS_URL: redis://redis:6379/0
       LOG_JSON: "false"
       ENCRYPTION_MASTER_KEY: local_development_only_master_key_32_bytes_min
-    volumes: ["./backend:/app"]
+      # Same reason as the API: the AI pools resolve prompts from here.
+      PROMPT_ROOT: /prompts
+    volumes: &worker_volumes
+      - ./backend:/app
+      - ./prompts:/prompts:ro
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -98,7 +111,7 @@ services:
   worker-ai:
     build: {context: ./backend, target: development}
     environment: *worker_env
-    volumes: ["./backend:/app"]
+    volumes: *worker_volumes
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -113,7 +126,7 @@ services:
   worker-general:
     build: {context: ./backend, target: development}
     environment: *worker_env
-    volumes: ["./backend:/app"]
+    volumes: *worker_volumes
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -128,7 +141,7 @@ services:
   worker-bulk:
     build: {context: ./backend, target: development}
     environment: *worker_env
-    volumes: ["./backend:/app"]
+    volumes: *worker_volumes
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -145,7 +158,7 @@ services:
   beat:
     build: {context: ./backend, target: development}
     environment: *worker_env
-    volumes: ["./backend:/app"]
+    volumes: *worker_volumes
     depends_on:
       # `service_started` only proves the process was launched. The pools carry a
       # real readiness probe (broker + database), so wait for it: Beat firing the

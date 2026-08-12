@@ -9,6 +9,8 @@ from typing import Any
 
 import pytest
 
+from tests.repo_layout import repository_root
+
 
 class FakeWaiter:
     def __init__(self, calls: list[tuple[str, dict[str, Any]]], name: str) -> None:
@@ -170,7 +172,7 @@ def test_cleanup_refuses_an_instance_without_exact_ownership_tags() -> None:
 
 
 def test_nightly_restore_is_gated_to_a_private_runner_and_preserves_real_evidence() -> None:
-    repository = Path(__file__).resolve().parents[3]
+    repository = repository_root()
     workflow = (repository / ".github" / "workflows" / "nightly.yml").read_text(encoding="utf-8")
     wrapper = (repository / "infra" / "scripts" / "verify-restore.sh").read_text(encoding="utf-8")
 

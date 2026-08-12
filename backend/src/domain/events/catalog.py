@@ -17,6 +17,8 @@ LEAD_CONVERTED: Final = "lead.converted"
 LEAD_ASSIGNED: Final = "lead.assigned"
 LEAD_QUALIFIED: Final = "lead.qualified"
 LEAD_DISQUALIFIED: Final = "lead.disqualified"
+# Emitted exactly once per lead, when somebody first gets back to the customer.
+LEAD_FIRST_RESPONSE_RECORDED: Final = "lead.first_response_recorded"
 OPPORTUNITY_CREATED: Final = "opportunity.created"
 OPPORTUNITY_UPDATED: Final = "opportunity.updated"
 OPPORTUNITY_STAGE_CHANGED: Final = "opportunity.stage_changed"
@@ -135,6 +137,7 @@ INTERNAL_EVENT_TYPES: Final[frozenset[str]] = frozenset(
     {
         LEAD_QUALIFIED,
         LEAD_DISQUALIFIED,
+        LEAD_FIRST_RESPONSE_RECORDED,
         CONVERSATION_HANDOFF,
         CONSENT_GRANTED,
         CONSENT_REVOKED,

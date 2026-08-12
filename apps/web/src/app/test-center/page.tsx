@@ -145,6 +145,49 @@ const CORE: readonly Feature[] = [
   },
 ];
 
+const MEASUREMENTS: readonly { name: string; source: string; trusted: boolean }[] = [
+  {
+    name: 'Waiting for a first reply',
+    source: 'Prospects with no outbound call, email or message logged against them.',
+    trusted: true,
+  },
+  {
+    name: 'Time to first reply',
+    source: 'The gap between the enquiry arriving and that first outbound contact.',
+    trusted: true,
+  },
+  {
+    name: 'Typical time to first reply',
+    source: 'The middle value across every answered enquiry you can see.',
+    trusted: true,
+  },
+  {
+    name: 'Overdue follow-ups',
+    source: 'Follow-ups past their due date, judged by the server clock, not the browser.',
+    trusted: true,
+  },
+  {
+    name: 'Unassigned prospects',
+    source: 'Open prospects with nobody’s name against them.',
+    trusted: true,
+  },
+  {
+    name: 'No next action',
+    source: 'Open prospects with no follow-up scheduled.',
+    trusted: true,
+  },
+  {
+    name: 'Open pipeline value',
+    source: 'The total of deals not yet won or lost. A total, not a forecast.',
+    trusted: true,
+  },
+  {
+    name: 'Charts on the Reports page',
+    source: 'Not yet reconciled against the underlying records. Do not quote these.',
+    trusted: false,
+  },
+];
+
 const SCENARIOS: readonly { title: string; steps: string; href: string }[] = [
   {
     title: 'A new enquiry arrives and gets picked up',
@@ -152,9 +195,15 @@ const SCENARIOS: readonly { title: string; steps: string; href: string }[] = [
     href: '/leads',
   },
   {
-    title: 'Nobody has replied to three enquiries',
+    title: 'Nobody has replied to these enquiries',
     steps: 'Today shows them with how long they have waited. Open one and log the call.',
-    href: '/today',
+    href: '/leads?filter=awaiting',
+  },
+  {
+    title: 'Prove the waiting count cannot be gamed',
+    steps:
+      'Open a waiting prospect. Assign it, score it, add a follow-up and a note — it still says waiting. Only logging a real call, email or message clears it.',
+    href: '/leads?filter=awaiting',
   },
   {
     title: 'A promise was missed',
@@ -200,16 +249,64 @@ export default async function TestCenterPage(): Promise<JSX.Element> {
       />
 
       <Card>
-        <h2 className="font-medium">The workflow we are currently backing</h2>
+        <h2 className="font-medium">
+          The commercial workflow we are currently backing: prospect follow-up and leakage
+          prevention
+        </h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Enquiry &rarr; owner &rarr; qualification &rarr; next action &rarr; follow-up &rarr;
-          history &rarr; deal. This is the one path that has been built end to end and checked in a
-          browser. Everything else on this page is either supporting it or not ready.
+          history &rarr; deal. This is the one path built end to end and checked in a browser.
+          Everything else on this page is either supporting it or not ready.
         </p>
         <p className="mt-3 text-sm">
           <Link href="/today" className="text-primary underline-offset-2 hover:underline">
             Start at Today
           </Link>
+        </p>
+      </Card>
+
+      {/* The distinction the founders asked for: which figures come from people
+          using the product, and which are still assumptions. */}
+      <Card>
+        <h2 className="font-medium">Which numbers come from real use</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          These are counted from what people actually did in Sangam. Each one can be traced to
+          records you can open and read.
+        </p>
+        <table className="mt-4 w-full text-left text-sm">
+          <caption className="sr-only">Measurement sources</caption>
+          <thead>
+            <tr className="border-b border-border text-xs uppercase text-muted-foreground">
+              <th scope="col" className="py-2 pr-4">
+                Measurement
+              </th>
+              <th scope="col" className="py-2 pr-4">
+                Where it comes from
+              </th>
+              <th scope="col" className="py-2">
+                Trust
+              </th>
+            </tr>
+          </thead>
+          <tbody data-testid="measurement-rows">
+            {MEASUREMENTS.map((row) => (
+              <tr key={row.name} className="border-b border-border/60">
+                <td className="py-2 pr-4 font-medium">{row.name}</td>
+                <td className="py-2 pr-4 text-muted-foreground">{row.source}</td>
+                <td className="py-2">
+                  <StatusPill tone={row.trusted ? 'success' : 'warning'}>
+                    {row.trusted ? 'From real use' : 'Not checked'}
+                  </StatusPill>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-4 text-sm text-muted-foreground">
+          &ldquo;Waiting for a first reply&rdquo; only clears when somebody records an actual call,
+          email or message <em>out</em> to the customer. Assigning a prospect, scoring it, writing
+          an internal note, scheduling a follow-up, or logging a call that came <em>in</em> all
+          leave it waiting &mdash; because none of those means the customer heard back.
         </p>
       </Card>
 

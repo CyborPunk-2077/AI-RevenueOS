@@ -7,12 +7,15 @@ You do not need to type any commands.
 
 ## 1. Start it
 
-1. Start **Docker Desktop** and wait for the whale icon in the system tray to
-   stop animating.
-2. Double-click **`RUN_DEMO.cmd`** in the project folder.
-3. Wait. The first run of the day takes a minute or two; after that it is quick.
-4. When it finishes it prints a box with a web address and a password.
-5. Open **http://localhost:3000** in your browser.
+1. Double-click **`RUN_DEMO.cmd`** in the project folder.
+2. Wait. If Docker is not running, Sangam starts it for you and says so; that
+   takes a couple of minutes the first time. After that it is quick.
+3. When it finishes it prints a box with a web address and a password, and opens
+   your browser at **http://localhost:3000**.
+
+That is the whole procedure. You do not need to start Docker yourself, and you
+do not need to type any commands. If Docker Desktop is not installed at all, the
+window tells you so in plain English and gives you the download link.
 
 Sign in as:
 
@@ -59,14 +62,21 @@ You land on **Today**. Read the four boxes across the top.
 
 - **Overdue follow-ups** — somebody promised to do something by a date that has
   passed.
-- **Enquiries with no reply** — somebody asked about your business and nobody has
-  responded at all.
+- **Waiting for a first reply** — somebody asked about your business and nobody
+  has actually got back to them.
 - **Unassigned prospects** — nobody's name is against them, so everybody assumes
   somebody else is calling.
 - **No next action** — the enquiry is live but nothing is scheduled.
 
 *This is the whole product in four numbers.* Every one of them is a count of
-records you can open. Click a box and it takes you to the list behind it.
+records you can open. **Click any box** and it takes you to exactly the prospects
+that make up that number — the count and the list always agree.
+
+Underneath is a second row: **how quickly enquiries are answered**. Typical time
+to first reply, the longest anyone is currently waiting, and how many of your
+enquiries have been answered at all. These are worked out from the calls and
+messages your team recorded, so they change when the team's behaviour changes and
+at no other time.
 
 Below, look at **Enquiries waiting for a first reply**. Shreya Bhat from
 SmileCraft Dental Care has been waiting two days. Nobody has called her.
@@ -103,6 +113,11 @@ Note the sentence underneath: no AI is connected. This is arithmetic on what was
 captured with the enquiry. It gives the same answer every time and you can argue
 with it. When we do connect an AI later, this still works if the AI is down.
 
+**Look at the red line again.** It still says she is waiting for a first reply.
+You have now given her an owner and scored her, and Sangam has correctly refused
+to treat either as answering her. This is the single most important behaviour in
+the product: the number cannot be improved by tidying your own records.
+
 ### Step 5 — Promise a follow-up
 
 Under **Tasks**, type what you will do next — "Call Shreya about the three
@@ -111,15 +126,30 @@ branches" — pick a date, and click **Add task**.
 Look up: the red warning is gone and the next action now appears against the
 record.
 
-### Step 6 — Write down what was said
+### Step 6 — Actually answer her, and watch the measurement appear
 
-Under **Timeline**, choose **Call**, put a subject and a couple of lines of
-detail, and click **Log activity**.
+This is the step the whole product is built around.
 
-It appears with your name and the time on it. **You cannot edit or delete it
-afterwards, and neither can anyone else.** A record of a call that can be
-rewritten later is not a record. Notes are separate and *can* be edited — but
-only by the person who wrote them.
+Under **Timeline**, choose **Call**, leave **Who got in touch** on *We contacted
+them*, put a subject and a couple of lines of detail, and click **Log activity**.
+
+Now look back up at the ownership panel. The red "waiting for a first reply" line
+has been replaced by something like **First reply: 3 hours after the enquiry
+arrived**. Sangam measured it from what you just recorded — not from anything
+that was set up in advance.
+
+Two things worth trying, because they are what make the number honest:
+
+- Log a second call. The first-reply time **does not change**. The first response
+  stays the first one; it cannot be quietly restated later to look better.
+- On another waiting prospect, log a call but set **Who got in touch** to *They
+  contacted us*. It stays waiting — because the customer ringing you is the
+  enquiry, not your reply to it.
+
+The activity itself appears with your name and the time on it. **You cannot edit
+or delete it afterwards, and neither can anyone else.** A record of a call that
+can be rewritten later is not a record. Notes are separate and *can* be edited —
+but only by the person who wrote them, and a note never counts as a reply.
 
 This history stays with the customer when they stop being a prospect and become
 a customer. The context does not restart.
@@ -204,15 +234,27 @@ Being blunt is the point of this section.
 - **Automations** run underneath, but there is no screen to build a rule.
 
 The trustworthy part today is: **enquiry → owner → score → next action →
-follow-up → history → deal.** That one path has been walked end to end in a
-browser, and the screenshots of it are in `artifacts/visual-evidence/`.
+follow-up → history → deal**, and the measurements that come out of it — who is
+waiting, how long they waited, what is overdue, what has no owner and what has no
+next action. That path has been walked end to end in a browser, and the
+screenshots are in `artifacts/visual-evidence/`.
+
+One caution worth stating plainly: Sangam measures **what your team records**. If
+somebody phones a customer and never logs it, Sangam will keep saying that
+customer is waiting. That is the honest behaviour — the alternative is a system
+that guesses — but it does mean the numbers are only as good as the habit of
+writing things down.
 
 ---
 
 ## 6. If something goes wrong
 
-**The window closes immediately.** Docker Desktop is not running. Start it, wait
-for the whale to settle, try again.
+**It says Docker is not installed.** That is the one thing Sangam cannot do for
+you. Install Docker Desktop from the link in the message, restart the computer if
+it asks, then double-click `RUN_DEMO.cmd` again.
+
+**It sat at "waiting for Docker to finish starting" and then gave up.** Docker was
+part-way through an update. Wait a minute and double-click `RUN_DEMO.cmd` again.
 
 **"Too many attempts."** Sign-in allows five tries per fifteen minutes from one
 computer. Wait a quarter of an hour. This is on purpose — it is what stops

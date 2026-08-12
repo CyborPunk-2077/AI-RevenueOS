@@ -6,7 +6,9 @@ from pathlib import Path
 
 from scripts.generate_evidence import build_report
 
-ROOT = Path(__file__).resolve().parents[3]
+from tests.repo_layout import repository_root
+
+ROOT = repository_root()
 
 
 def test_acceptance_evidence_generator_indexes_all_criteria_without_live_claims() -> None:

@@ -24,6 +24,7 @@ from uuid import UUID
 from application.crm.service import _PrincipalScoped
 from domain.base import DomainEvent
 from domain.events.catalog import ACTIVITY_LOGGED, NOTE_ADDED, NOTE_UPDATED
+from domain.leads.first_response import DIRECTIONS, default_direction
 from infrastructure.logging.setup import get_logger
 from shared.exceptions import Forbidden, NotFound, ValidationError
 from shared.utils.ids import uuid7
@@ -49,6 +50,9 @@ def serialize_activity(row: Any, *, actor_name: str | None = None) -> dict[str, 
         "actor_id": str(row.actor_id) if row.actor_id else None,
         "actor_name": actor_name,
         "actor_type": row.actor_type,
+        # Shown in the timeline so a reader can tell "we called them" from "they
+        # called us" - the distinction the first-response rule turns on.
+        "direction": (row.metadata_json or {}).get("direction"),
         "editable": False,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
@@ -197,11 +201,21 @@ class TimelineService(_PrincipalScoped):
         if not subject:
             raise ValidationError("A subject is required.")
 
+        direction = str(payload.get("direction") or default_direction())
+        if direction not in DIRECTIONS:
+            raise ValidationError(
+                "Direction must say whether this went out or came in.",
+                details={"allowed": sorted(DIRECTIONS)},
+            )
+
         from application.audit.recorder import AuditRecorder
+        from application.leads.first_response import record_first_response
         from infrastructure.database.models.crm import Activity
         from infrastructure.uow.sqlalchemy_uow import SqlAlchemyUnitOfWork
+        from shared.utils.timeutil import utcnow
 
         activity_id = uuid7()
+        occurred_at = utcnow()
         async with SqlAlchemyUnitOfWork(self.tenant_id) as uow:
             uow.session.add(
                 Activity(
@@ -214,9 +228,28 @@ class TimelineService(_PrincipalScoped):
                     entity_id=entity_id,
                     actor_id=self.user_id,
                     actor_type="user",
-                    metadata_json={},
+                    # Direction lives on the record, not only in the decision it
+                    # triggered, so "why is this prospect marked answered?" is
+                    # answerable from the timeline months later.
+                    metadata_json={"direction": direction},
+                    created_at=occurred_at,
                 )
             )
+
+            # Same transaction as the evidence. A first-response timestamp that
+            # could outlive a rolled-back activity is the bug this design exists
+            # to prevent.
+            if entity_type == "lead":
+                await record_first_response(
+                    uow,
+                    tenant_id=self.tenant_id,
+                    lead_id=entity_id,
+                    channel=activity_type,
+                    direction=direction,
+                    occurred_at=occurred_at,
+                    actor_id=self.user_id,
+                    source="activity.log",
+                )
             AuditRecorder(uow.session).record(
                 action="activity.log",
                 resource_type="activity",
@@ -234,6 +267,7 @@ class TimelineService(_PrincipalScoped):
                     actor_id=self.user_id,
                     payload={
                         "activity_type": activity_type,
+                        "direction": direction,
                         "entity_type": entity_type,
                         "entity_id": str(entity_id),
                     },

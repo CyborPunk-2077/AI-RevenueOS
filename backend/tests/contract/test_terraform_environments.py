@@ -16,7 +16,9 @@ from typing import Any
 import hcl2
 import pytest
 
-ROOT = Path(__file__).resolve().parents[3]
+from tests.repo_layout import repository_root
+
+ROOT = repository_root()
 ENVS = ROOT / "infra" / "terraform" / "envs"
 NON_PRODUCTION = ("dev", "staging", "sandbox")
 ALL_ENVIRONMENTS = ("prod", *NON_PRODUCTION)

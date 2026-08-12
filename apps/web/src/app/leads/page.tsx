@@ -49,7 +49,35 @@ function days(iso: string | null): number | null {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
 }
 
-export default async function LeadsPage(): Promise<JSX.Element> {
+function minutesBetween(from: string | null, to: string | null): number | null {
+  if (!from || !to) return null;
+  return Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 60_000));
+}
+
+function duration(minutes: number | null): string {
+  if (minutes === null) return '—';
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60 * 48) return `${Math.round(minutes / 60)} hrs`;
+  return `${Math.round(minutes / (60 * 24))} days`;
+}
+
+// Matches the metrics service. A prospect stops being "open work" once it is
+// converted, disqualified or archived.
+const OPEN_STATUSES = new Set(['new', 'contacted', 'qualified', 'nurturing']);
+
+type Filter = 'all' | 'awaiting' | 'unassigned' | 'no-next-action';
+
+const FILTER_LABEL: Record<Exclude<Filter, 'all'>, string> = {
+  awaiting: 'Waiting for a first reply',
+  unassigned: 'Unassigned',
+  'no-next-action': 'No next action',
+};
+
+export default async function LeadsPage({
+  searchParams,
+}: {
+  searchParams: { filter?: string };
+}): Promise<JSX.Element> {
   // One call for the follow-ups rather than one per row: a list of fifty prospects
   // must not become fifty-one requests.
   const [result, tasksResult, membersResult] = await Promise.all([
@@ -58,7 +86,7 @@ export default async function LeadsPage(): Promise<JSX.Element> {
     apiFetch<{ members: Member[] }>('/users/members'),
   ]);
 
-  const leads = result.data?.leads ?? [];
+  const all = result.data?.leads ?? [];
   const owners = new Map((membersResult.data?.members ?? []).map((m) => [m.id, m.full_name]));
 
   const nextActions = new Map<string, Task>();
@@ -68,18 +96,53 @@ export default async function LeadsPage(): Promise<JSX.Element> {
     if (!nextActions.has(task.entity_id)) nextActions.set(task.entity_id, task);
   }
 
-  const untouched = leads.filter((l) => l.first_response_at === null && l.status === 'new').length;
+  // The filters exist so a count on Today leads to the rows that make it up. They
+  // apply the same open-status and first-response rules the metrics service uses;
+  // if these two ever drift, a tile will say 4 and show 3 rows, and the owner will
+  // rightly stop believing both.
+  const filter: Filter =
+    searchParams.filter === 'awaiting' ||
+    searchParams.filter === 'unassigned' ||
+    searchParams.filter === 'no-next-action'
+      ? searchParams.filter
+      : 'all';
+
+  const openLeads = all.filter((l) => OPEN_STATUSES.has(l.status));
+  const leads =
+    filter === 'awaiting'
+      ? openLeads.filter((l) => l.first_response_at === null)
+      : filter === 'unassigned'
+        ? openLeads.filter((l) => l.assignee_id === null)
+        : filter === 'no-next-action'
+          ? openLeads.filter((l) => !nextActions.has(l.id))
+          : all;
+
+  const untouched = openLeads.filter((l) => l.first_response_at === null).length;
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Prospects"
         description={
-          untouched > 0
-            ? `${untouched} ${untouched === 1 ? 'enquiry has' : 'enquiries have'} had no reply yet.`
-            : 'Every enquiry here has had a first reply.'
+          filter !== 'all'
+            ? `Showing only: ${FILTER_LABEL[filter].toLowerCase()}.`
+            : untouched > 0
+              ? `${untouched} ${untouched === 1 ? 'enquiry has' : 'enquiries have'} had no reply yet.`
+              : 'Every open enquiry here has had a first reply.'
         }
       />
+
+      {filter !== 'all' ? (
+        <p>
+          <Link
+            href="/leads"
+            data-testid="clear-filter"
+            className="text-sm text-primary underline-offset-2 hover:underline"
+          >
+            &larr; Show all prospects
+          </Link>
+        </p>
+      ) : null}
 
       <NewLeadForm />
 
@@ -114,6 +177,9 @@ export default async function LeadsPage(): Promise<JSX.Element> {
                     Next action
                   </th>
                   <th scope="col" className="px-5 py-3">
+                    First reply
+                  </th>
+                  <th scope="col" className="px-5 py-3">
                     Age
                   </th>
                   <th scope="col" className="px-5 py-3">
@@ -125,7 +191,9 @@ export default async function LeadsPage(): Promise<JSX.Element> {
                 {leads.map((lead) => {
                   const next = nextActions.get(lead.id) ?? null;
                   const age = days(lead.created_at);
-                  const noReply = lead.first_response_at === null && lead.status === 'new';
+                  const open = OPEN_STATUSES.has(lead.status);
+                  const noReply = lead.first_response_at === null && open;
+                  const replyMinutes = minutesBetween(lead.created_at, lead.first_response_at);
                   const settled = lead.status === 'converted' || lead.status === 'disqualified';
                   return (
                     <tr
@@ -178,6 +246,15 @@ export default async function LeadsPage(): Promise<JSX.Element> {
                           <span className="text-muted-foreground">—</span>
                         ) : (
                           <span className="text-xs font-medium text-destructive">None set</span>
+                        )}
+                      </td>
+                      <td className="tabular px-5 py-3" data-testid={`first-reply-${lead.id}`}>
+                        {replyMinutes !== null ? (
+                          <span className="text-muted-foreground">{duration(replyMinutes)}</span>
+                        ) : noReply ? (
+                          <span className="text-xs font-medium text-destructive">Not yet</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </td>
                       <td className="tabular px-5 py-3 text-muted-foreground">
