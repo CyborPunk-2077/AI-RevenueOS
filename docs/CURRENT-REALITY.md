@@ -147,3 +147,6 @@ trust.
   files); they now locate the checkout by marker file and **skip with a reason**
   when it is absent, instead of failing. Nothing was weakened — running pytest
   from the repository root on the host still executes every one of them.
+  **Confirmed 2026-08-12:** the container run is 862 passed / 6 skipped / 0
+  failed, and those same 6 modules give 62 passed when run with the checkout
+  mounted.

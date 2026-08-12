@@ -165,7 +165,9 @@ closed, the launcher starts it and waits; if it is not installed, it says so in
 plain English with the download link rather than throwing. It then starts the
 stack, waits for health, migrates, seeds reference data, seeds both demo tenants
 and the Sangam workspace, proves a sign-in works, prints the credentials and
-opens the browser. `-NoBrowser` suppresses the last step for CI and for the
+opens the browser. **Verified from a genuinely cold Docker on 2026-08-12**: the
+volume kept its original creation date, both seeds reported the existing data
+untouched, and every service reached healthy. `-NoBrowser` suppresses the last step for CI and for the
 Playwright runs, which drive their own browser.
 
 Two traps worth remembering before touching that script:
@@ -189,20 +191,22 @@ For a fixed password (needed by the browser tests):
 
 | Gate | Result |
 | --- | --- |
-| Backend ruff + format | Clean, 220 files |
-| Backend mypy (strict) | Clean, 220 source files |
+| Backend ruff + format | Clean, 223 files |
+| Backend mypy (strict) | Clean, 223 source files |
 | import-linter | 6 contracts kept, 0 broken |
-| Backend unit + contract | **856 passed**, excluding the container-path suites below |
+| Backend unit + contract **in the container** | **862 passed, 6 skipped, 0 failed** |
+| Repo-layout suites, checkout mounted | **62 passed** (the 6 skips above, run where their files exist) |
 | Permission/RBAC subset | 41 passed |
 | Web typecheck | Clean |
 | Web lint | Clean, 0 warnings |
-| Browser e2e (`sangam-first-slice`) | **1 passed** — full business journey, 11 screenshots |
+| Browser e2e (`sangam-first-slice`) | 1 passed — full business journey, 11 screenshots |
+| Browser e2e (`sangam-first-response`) | **1 passed** — 9 measurement assertions, 6 screenshots |
+| Cold-start launcher | **Verified**: Docker closed → `RUN_DEMO.cmd` → app open in browser |
 
-**19 backend tests fail inside the API container only.** The container mounts
-`backend/` at `/app`, so tests resolving repo-root paths (`/prompts`,
-`/backend/requirements.lock`, `infra/`, `.github/`) cannot find them. Environment
-artefact, not a regression — verified by inspecting the failures. Run the full
-suite from the repo root on the host to get a true result.
+The container run is now clean. The 6 skips are whole modules that assert on files
+outside `backend/` (terraform, workflows, alert rules, lock files); they name the
+reason and they pass when run with the checkout mounted, which is how the 62 above
+were confirmed. Nothing is hidden.
 
 ## 11. Visual evidence
 
