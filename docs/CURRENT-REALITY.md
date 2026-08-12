@@ -1,7 +1,7 @@
 # Sangam — feature reality map
 
-Last established: **2026-08-13** (session 3: founder dogfooding), against the
-running local stack at commit `405e227` plus this session's work.
+Last established: **2026-08-13** (session 4: dogfooding repairs), against the
+running local stack at commit `394f192` plus this session's work.
 
 This file records what is *actually true when the product is running*, not what
 the specification intends. Where something was checked in a browser this session
@@ -28,13 +28,13 @@ trust.
 | --- | --- | --- |
 | Authentication | VERIFIED-USABLE | Sign-in, sign-out, session cookie, rate limiting. Browser-verified. MFA and Google sign-in exist but are untested this session (Google is PROVIDER-GATED). |
 | Tenant isolation | VERIFIED-USABLE | Three enforcement layers including forced Postgres RLS. Covered by existing e2e tests. |
-| Users and roles | VERIFIED-USABLE | Owner/manager/member with global/team/self scope, seeded and signed in as. `GET /users/members` added this session to feed assignee pickers. |
+| Users and roles | VERIFIED-USABLE | Owner/manager/member with global/team/self scope. **Repaired in session 4:** roles and team membership are read with tenant context bound, so a manager is no longer silently issued a member's scope and a team-scoped user is no longer filtering on an empty set. Branches, a Sales team and memberships are seeded, and a new prospect inherits its creator's team. |
 | Today (operational dashboard) | VERIFIED-USABLE | Counts waiting-for-reply, unassigned, no-next-action and overdue, **all computed server-side in the caller's scope** by `application/leads/metrics.py`. Every figure links to the filtered list that makes it up. Verified that closing a follow-up decrements the overdue count and that answering a prospect decrements the waiting count. |
 | First-response measurement | VERIFIED-USABLE | **New this session.** `first_response_at` is set automatically, in the same transaction as the activity that justifies it, the first time an *outbound* contact on a customer-reaching channel is logged against a lead. Idempotent by conditional UPDATE, never overwritten, never backfilled. Rule lives in `domain/leads/first_response.py` so real provider events can feed it unchanged. Nine-assertion browser acceptance test. |
 | Response-time reporting | VERIFIED-USABLE | Per-prospect time to first reply, plus tenant median and longest current wait. Median, not mean. Derived only from logged contact, so it moves when behaviour moves and at no other time. |
 | Prospects (leads) list | VERIFIED-USABLE | **Rebuilt this session** to show owner, next action, age and a "no reply yet" flag. |
 | Prospect detail | VERIFIED-USABLE | **Rebuilt this session** into a workbench: requirement, ownership, qualification, follow-ups, history, duplicates. |
-| Assignment | VERIFIED-USABLE | Manual assignment to a named person, with optimistic-concurrency check. Rule-based auto-assignment exists at `/leads/{id}/assign` and in a settings screen — not exercised this session. |
+| Assignment | VERIFIED-USABLE | Manual assignment to a named person, with optimistic-concurrency check. **Repaired in session 4:** reassigning a prospect away from yourself used to report "Lead not found" while saving anyway. Browser-proven for an owner and for a team-scoped colleague, including that a stale version is still refused with 412. Rule-based auto-assignment exists but is not exercised. |
 | Qualification | VERIFIED-USABLE | Rule-based scoring with visible reasons and missing fields, working with **no AI provider**. Manual override present. |
 | Follow-ups / tasks | VERIFIED-USABLE | **New queue screen this session** with all/overdue/mine filters and inline completion. Overdue is decided server-side. Tasks can now hang off a lead, not only contacts and deals. |
 | Activity history | VERIFIED-USABLE | Extended to leads, so history predates conversion instead of restarting at it. Activities are append-only, enforced by a database trigger. **Now carries a direction** ("we contacted them" / "they contacted us"), shown in the timeline, because only outbound contact answers an enquiry. |
@@ -63,7 +63,7 @@ trust.
 | Workflows / automations | BACKEND-ONLY | Engine, schedules and outbox all run. No builder screen, no logs screen. |
 | Forms and capture | PARTIAL | Builder and publish-snapshot exist with a publish permission. Publishing puts an unauthenticated write surface on the internet, so it is treated as a sensitive permission. Not exercised this session. |
 | CSV prospect import | VERIFIED-USABLE | **Proven in a browser this session.** Upload, column mapping, cleaned-up preview values, duplicate matching against existing records, per-row rejection reasons, and a created/already-had/unusable summary. CSV only; nothing claims XLSX. The template download uses the founders' own column names. |
-| Quick prospect capture | VERIFIED-USABLE | **Rebuilt this session.** Business name plus one contact route is the whole required form; contact person, area, industry, website, source, pain and owner sit behind "More details". A business with no named contact is a first-class record. |
+| Quick prospect capture | VERIFIED-USABLE | Business name plus one contact route is the whole required form; contact person, area, industry, website, source, pain and owner sit behind "More details". A business with no named contact is a first-class record. **Repaired in session 4:** invalid phone, email or amount now produce a specific message on the offending field, keyed off the API's structured faults, with the typed values kept. |
 | Import duplicate matching | VERIFIED-USABLE | Matches on email *and* phone (last ten digits, so `+91 98450 12201` and `09845012201` are the same number). The existing record is never touched; the incoming row is kept as a source event pointing at what it matched. Nothing is merged automatically. |
 | Recording outreach made outside Sangam | VERIFIED-USABLE | Channel, direction, outcome, note and the next action with a due date, in one save. Feeds the session-2 first-response measurement unchanged. Sangam sends nothing and says so on the form. |
 | AI / copilot | PROVIDER-GATED | Gateway, prompt registry, evals and degradation paths exist. No model provider is configured. Every AI-touching path has a rule-based fallback; qualification proves it. |
@@ -74,6 +74,41 @@ trust.
 | Deployment | SPEC-ONLY | Terraform for four environments, statically validated only. No AWS account. Nothing has ever been deployed. |
 
 ---
+
+## Defects found and fixed in session 4 (found by the founder, by hand)
+
+These were not found by a test. The founder used the accepted session-3 build for
+real and hit them within minutes, which is the whole argument for dogfooding.
+
+1. **Reassigning a prospect said "Lead not found" while saving the change
+   anyway.** Two independent causes, both real:
+   - *Roles and team membership were read under a platform-scoped session*, where
+     row-level security hides `roles`, `user_roles`, `teams` and `team_members`.
+     The role lookup silently fell back to "member", quietly demoting every
+     manager and admin to self scope, and the team lookup returned nothing, so a
+     team-scoped principal filtered on an empty set and matched no record at all.
+     Both now resolve inside `tenant_session`, in `load_roles_and_scope`.
+   - *`LeadService.update` re-read the record under the caller's scope after
+     mutating it.* Reassigning a prospect away from yourself moved it out of your
+     own scope, so the re-read raised "Lead not found" for a write that had
+     already committed. It now returns the committed state from inside the
+     transaction.
+   The scope check itself was never wrong and has not been relaxed; it was being
+   asked to filter on identifiers nobody had supplied.
+2. **A prospect created in the UI carried no team**, so a team-scoped manager
+   could not see even the records they had just added themselves. A new prospect
+   now inherits its creator's team and branch when they belong to exactly one.
+3. **The seeded workspace was internally inconsistent**: managers had `team` scope
+   and no team existed. The seed now creates a branch, a Sales team, memberships
+   and stamps seeded prospects with the team.
+4. **Invalid input showed "The request payload failed validation".** The API had
+   been returning a structured per-field list all along and the form ignored it.
+   Faults are now mapped to the field they belong to, in the founders' language,
+   with `aria-invalid` and `aria-describedby` so the message reaches a screen
+   reader and does not depend on the red outline. Entered values are preserved.
+   Server-side validation is unchanged and remains the authority; the one
+   client-only rule (the rough value) is client-only because the server stores
+   that field as free-form captured text and has no opinion on it.
 
 ## Defects found and fixed in session 3 (founder dogfooding)
 

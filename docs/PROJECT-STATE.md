@@ -6,7 +6,7 @@ reality map). Older documents in `docs/` predate 2026-08-12 and describe the
 product under its previous name; where they disagree with this file or with the
 running system, they are wrong.
 
-Last updated: **2026-08-13** (session 3: founder dogfooding).
+Last updated: **2026-08-13** (session 4: dogfooding repairs).
 
 ## Accepted checkpoints
 
@@ -104,6 +104,14 @@ is — qualification is rule-based and no model provider is configured.
 - **Operational numbers are computed server-side, in the caller's scope**, in
   `application/leads/metrics.py`. Do not re-derive a count in a page component; two
   definitions of "open" will disagree and the owner will stop believing both.
+- **Roles and team membership must be read inside `tenant_session`.** Those tables
+  are tenant-owned and RLS-protected, so a platform-scoped session sees none of
+  them - which silently demoted every manager to member scope and left team-scoped
+  users matching nothing. `application/auth/service.load_roles_and_scope` is the
+  one place that resolves them.
+- **A mutation returns the state from inside its transaction, never a fresh scoped
+  read.** Re-reading after a change that moves a record out of the caller's scope
+  reports "not found" for a write that succeeded.
 - **Browser tests run in the `sangam-e2e` tenant, never in `sangam`.** The
   founders' workspace is real working data now. Isolation is a tenant, not an
   `is_test` column and not a cleanup step - activities and source events are
@@ -237,7 +245,8 @@ For a fixed password (needed by the browser tests):
 | Web lint | Clean, 0 warnings |
 | Browser e2e (`sangam-first-slice`) | 1 passed — full business journey, 11 screenshots |
 | Browser e2e (`sangam-first-response`) | 1 passed — 9 measurement assertions, 6 screenshots |
-| Browser e2e (`sangam-founder-prospecting`) | **1 passed** — import + duplicates + outreach, 7 screenshots |
+| Browser e2e (`sangam-founder-prospecting`) | 1 passed — import + duplicates + outreach, 7 screenshots |
+| Browser e2e (`sangam-dogfood-repairs`) | **3 passed** — reassignment, team scope, field-level validation, 7 screenshots |
 | Founder workspace isolation | Verified: `sangam` held 15 prospects before and after two full browser runs |
 | Cold-start launcher | **Verified**: Docker closed → `RUN_DEMO.cmd` → app open in browser |
 
@@ -275,7 +284,8 @@ photographs it, so a screenshot can only exist if the step actually worked.
 
 ## 13. Next task
 
-**Pending project-head review after the founder-dogfooding baseline.**
+**Pending project-head review.** Session 4 repaired the two defects the founder
+found by hand; it chose no new roadmap item.
 
 Session 3 delivered what the founders need to start entering real prospects. The
 next task is deliberately not chosen here; the project head decides it after

@@ -48,7 +48,7 @@ from infrastructure.database.models.crm import (
     Task,
 )
 from infrastructure.database.models.leads import Lead, LeadDuplicateCandidate
-from infrastructure.database.models.tenancy import Tenant
+from infrastructure.database.models.tenancy import Branch, Team, TeamMember, Tenant
 from infrastructure.database.models.users import Role as RoleRow
 from infrastructure.database.models.users import RolePermission, User, UserRole
 from infrastructure.database.session import admin_session, tenant_session
@@ -898,6 +898,70 @@ async def _ensure_tenant_and_people(
     return users
 
 
+async def _ensure_sales_team(session: Any, tenant_id: UUID, users: dict[str, UUID]) -> UUID:
+    """One branch, one team, and everybody who is not global-scoped inside it.
+
+    A manager's role scope is `team`, and the repository layer filters on the
+    teams in their token - correctly failing closed when there are none. Seeding
+    managers without a team therefore produced a user who could not see or
+    reassign a single prospect, and was told "not found" for every one of them.
+    The workspace has to be internally consistent, not merely populated.
+    """
+    branch_id = (
+        await session.execute(
+            select(Branch.id).where(Branch.tenant_id == tenant_id, Branch.code == "HQ")
+        )
+    ).scalar_one_or_none()
+    if branch_id is None:
+        branch_id = uuid7()
+        session.add(
+            Branch(
+                id=branch_id,
+                tenant_id=tenant_id,
+                name="Bengaluru",
+                code="HQ",
+                address={"city": "Bengaluru", "state": "Karnataka", "country": "IN"},
+                timezone="Asia/Kolkata",
+                is_headquarters=True,
+                version=1,
+            )
+        )
+        await session.flush()
+
+    team_id = (
+        await session.execute(
+            select(Team.id).where(Team.tenant_id == tenant_id, Team.name == "Sales")
+        )
+    ).scalar_one_or_none()
+    if team_id is None:
+        team_id = uuid7()
+        session.add(
+            Team(
+                id=team_id,
+                tenant_id=tenant_id,
+                branch_id=branch_id,
+                name="Sales",
+                version=1,
+            )
+        )
+        await session.flush()
+
+    for user_id in users.values():
+        existing = (
+            await session.execute(
+                select(TeamMember.id).where(
+                    TeamMember.team_id == team_id, TeamMember.user_id == user_id
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            session.add(
+                TeamMember(id=uuid7(), tenant_id=tenant_id, team_id=team_id, user_id=user_id)
+            )
+
+    return UUID(str(team_id))
+
+
 async def ensure_workspace(password_hash: str) -> dict[str, UUID]:
     """The founders' workspace, plus the empty one the browser tests write to."""
     async with admin_session() as session:
@@ -909,7 +973,9 @@ async def ensure_workspace(password_hash: str) -> dict[str, UUID]:
             team=TEAM,
             password_hash=password_hash,
         )
-        await _ensure_tenant_and_people(
+        await _ensure_sales_team(session, SANGAM_ID, users)
+
+        e2e_users = await _ensure_tenant_and_people(
             session,
             tenant_id=SANGAM_E2E_ID,
             name="Sangam Test Workspace",
@@ -917,6 +983,7 @@ async def ensure_workspace(password_hash: str) -> dict[str, UUID]:
             team=E2E_TEAM,
             password_hash=password_hash,
         )
+        await _ensure_sales_team(session, SANGAM_E2E_ID, e2e_users)
 
     return users
 
@@ -1023,6 +1090,13 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
 
         ids = await _ensure_pipeline(session)
 
+        # Every seeded prospect belongs to the Sales team, so a team-scoped
+        # manager sees the same book the owner does. Without this the records
+        # exist but are invisible to exactly the person meant to run them.
+        sales_team_id = (
+            await session.execute(select(Team.id).where(Team.name == "Sales"))
+        ).scalar_one_or_none()
+
         # --- prospects -------------------------------------------------------
         lead_ids: dict[str, UUID] = {}
         for row in PROSPECTS:
@@ -1066,6 +1140,7 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
                     status=row["status"],
                     disqualify_reason=row.get("disqualify_reason"),
                     assignee_id=users.get(row["owner"]) if row["owner"] else None,
+                    team_id=sales_team_id,
                     dedupe_key=f"p:{row['phone']}",
                     first_response_at=responded,
                     created_at=created,

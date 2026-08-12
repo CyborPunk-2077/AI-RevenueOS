@@ -10,6 +10,54 @@ interface Member {
   readonly is_active: boolean;
 }
 
+interface FieldFault {
+  readonly field: string;
+  readonly reason: string;
+}
+
+/**
+ * What to say about each field when the server rejects it.
+ *
+ * The API answers with a structured list of faults, but the `reason` in it is
+ * Pydantic's own wording ("Value error, ..."), which is written for whoever is
+ * reading a stack trace. A founder should never see that, so the field name -
+ * which is stable and part of the API contract - selects the sentence instead.
+ */
+const FIELD_MESSAGE: Record<string, string> = {
+  phone: 'Enter a valid phone number, for example +91 98450 12201.',
+  email: 'Enter a valid email address, for example name@business.in.',
+  first_name: 'Enter the business name or the contact person.',
+  last_name: 'That surname is too long.',
+  source: 'Keep "How we found them" shorter.',
+  assignee_id: 'Choose one of the people listed.',
+};
+
+/** The form control a server field name belongs to. */
+const FIELD_INPUT: Record<string, string> = {
+  phone: 'phone',
+  email: 'email',
+  first_name: 'company',
+  last_name: 'last_name',
+  source: 'source',
+  assignee_id: 'assignee_id',
+};
+
+function readFaults(payload: unknown): Record<string, string> {
+  const faults = (payload as { error?: { details?: { fields?: FieldFault[] } } })?.error?.details
+    ?.fields;
+  if (!Array.isArray(faults)) return {};
+  const mapped: Record<string, string> = {};
+  for (const fault of faults) {
+    const input = FIELD_INPUT[fault.field] ?? fault.field;
+    // First fault per field wins; a second sentence about the same box helps
+    // nobody.
+    if (!mapped[input]) {
+      mapped[input] = FIELD_MESSAGE[fault.field] ?? 'Check this value and try again.';
+    }
+  }
+  return mapped;
+}
+
 /**
  * Adding a business you have just decided to approach.
  *
@@ -29,26 +77,46 @@ export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Eleme
   const [open, setOpen] = useState(false);
   const [detailed, setDetailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+
+  function clearErrors(): void {
+    setError(null);
+    setFieldErrors({});
+  }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const element = event.currentTarget;
     setBusy(true);
-    setError(null);
+    clearErrors();
 
     const form = new FormData(element);
     const text = (key: string): string => String(form.get(key) ?? '').trim();
 
     const company = text('company');
     const person = text('first_name');
+
+    // Checked here for immediacy only. Every one of these is enforced again by
+    // the API, and the mapping below shows whatever the server says - the browser
+    // is never the authority on what is acceptable.
+    const local: Record<string, string> = {};
     if (!company && !person) {
-      setError('Give at least the business name or a contact person.');
-      setBusy(false);
-      return;
+      local.company = 'Enter the business name, or a contact person under More details.';
     }
     if (!text('phone') && !text('email')) {
-      setError('Add a phone number or an email, otherwise nobody can contact them.');
+      local.phone = 'Add a phone number or an email, otherwise nobody can contact them.';
+    }
+    const amountText = text('estimated_value');
+    if (amountText && !/^[\d,. ]+$/.test(amountText)) {
+      // The server stores this as free-form captured text and has no opinion on
+      // it, so this check is the only one there is. Said plainly rather than
+      // pretending a rule exists further down.
+      local.estimated_value = 'Enter an amount using numbers only, for example 25000.';
+    }
+    if (Object.keys(local).length > 0) {
+      setFieldErrors(local);
+      setError(null);
       setBusy(false);
       return;
     }
@@ -81,14 +149,26 @@ export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Eleme
     });
 
     if (!response.ok) {
-      const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
-      setError(body.error?.message ?? 'Could not add the prospect.');
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string; code?: string };
+      };
+      const faults = readFaults(body);
+      if (Object.keys(faults).length > 0) {
+        // Nothing is reset: the founder keeps everything they typed and fixes
+        // the one box that is wrong.
+        setFieldErrors(faults);
+        setError(null);
+      } else {
+        setFieldErrors({});
+        setError(body.error?.message ?? 'Could not add the prospect. Please try again.');
+      }
       setBusy(false);
       return;
     }
     setBusy(false);
     setOpen(false);
     setDetailed(false);
+    clearErrors();
     element.reset();
     router.refresh();
   }
@@ -107,6 +187,26 @@ export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Eleme
   }
 
   const field = 'mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm';
+  const bad = 'mt-1 w-full rounded-md border-2 border-destructive bg-background px-3 py-2 text-sm';
+
+  /**
+   * Wires a control to its message. `aria-invalid` and `aria-describedby` are what
+   * make the error reach a screen reader, and the message is a sentence rather
+   * than a red outline, so nobody has to see colour to know what went wrong.
+   */
+  const attrs = (
+    name: string,
+  ): { className: string; 'aria-invalid'?: true; 'aria-describedby'?: string } =>
+    fieldErrors[name]
+      ? { className: bad, 'aria-invalid': true, 'aria-describedby': `${name}-error` }
+      : { className: field };
+
+  const Fault = ({ name }: { name: string }): JSX.Element | null =>
+    fieldErrors[name] ? (
+      <p id={`${name}-error`} data-testid={`error-${name}`} className="mt-1 text-sm text-destructive">
+        {fieldErrors[name]}
+      </p>
+    ) : null;
 
   return (
     <form onSubmit={onSubmit} className="surface space-y-4 p-5" noValidate>
@@ -117,19 +217,22 @@ export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Eleme
           <label htmlFor="company" className="block text-sm font-medium">
             Business name
           </label>
-          <input id="company" name="company" data-testid="lead-company" className={field} />
+          <input id="company" name="company" data-testid="lead-company" {...attrs('company')} />
+          <Fault name="company" />
         </div>
         <div>
           <label htmlFor="phone" className="block text-sm font-medium">
             Phone
           </label>
-          <input id="phone" name="phone" data-testid="lead-phone-input" className={field} />
+          <input id="phone" name="phone" data-testid="lead-phone-input" {...attrs('phone')} />
+          <Fault name="phone" />
         </div>
         <div>
           <label htmlFor="email" className="block text-sm font-medium">
             Email
           </label>
-          <input id="email" name="email" type="email" className={field} />
+          <input id="email" name="email" type="email" {...attrs('email')} />
+          <Fault name="email" />
         </div>
       </div>
 
@@ -144,13 +247,15 @@ export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Eleme
               <label htmlFor="first_name" className="block text-sm font-medium">
                 Contact person
               </label>
-              <input id="first_name" name="first_name" className={field} />
+              <input id="first_name" name="first_name" {...attrs('first_name')} />
+              <Fault name="first_name" />
             </div>
             <div>
               <label htmlFor="last_name" className="block text-sm font-medium">
                 Surname
               </label>
-              <input id="last_name" name="last_name" className={field} />
+              <input id="last_name" name="last_name" {...attrs('last_name')} />
+              <Fault name="last_name" />
             </div>
             <div>
               <label htmlFor="city" className="block text-sm font-medium">
@@ -177,7 +282,8 @@ export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Eleme
               <label htmlFor="source" className="block text-sm font-medium">
                 How we found them
               </label>
-              <input id="source" name="source" placeholder="Referral" className={field} />
+              <input id="source" name="source" placeholder="Referral" {...attrs('source')} />
+              <Fault name="source" />
             </div>
           </div>
 
@@ -199,7 +305,13 @@ export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Eleme
               <label htmlFor="estimated_value" className="block text-sm font-medium">
                 Rough value (₹)
               </label>
-              <input id="estimated_value" name="estimated_value" inputMode="numeric" className={field} />
+              <input
+                id="estimated_value"
+                name="estimated_value"
+                inputMode="numeric"
+                {...attrs('estimated_value')}
+              />
+              <Fault name="estimated_value" />
             </div>
           </div>
 
@@ -232,9 +344,20 @@ export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Eleme
         </button>
       )}
 
+      {/* Form-level fallback for anything that is not about one box - a network
+          failure, or a rejection the server did not attribute to a field. */}
       {error ? (
         <p role="alert" data-testid="new-lead-error" className="text-sm text-destructive">
           {error}
+        </p>
+      ) : null}
+
+      {/* Announced once for the whole form, so a screen-reader user is told there
+          is something to fix without every field shouting separately. */}
+      {Object.keys(fieldErrors).length > 0 ? (
+        <p role="alert" data-testid="new-lead-field-errors" className="text-sm text-destructive">
+          Please correct the highlighted {Object.keys(fieldErrors).length === 1 ? 'field' : 'fields'}{' '}
+          above.
         </p>
       ) : null}
 

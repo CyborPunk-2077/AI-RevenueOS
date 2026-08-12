@@ -49,6 +49,14 @@ class LeadService:
             team_ids=principal.team_ids,
         )
 
+    def _own_team_id(self) -> UUID | None:
+        """The creator's team, when there is exactly one."""
+        return UUID(next(iter(self.team_ids))) if len(self.team_ids) == 1 else None
+
+    def _own_branch_id(self) -> UUID | None:
+        """The creator's branch, when there is exactly one."""
+        return UUID(next(iter(self.branch_ids))) if len(self.branch_ids) == 1 else None
+
     def permissions_scope(self) -> EffectivePermissions:
         """The scope predicate this principal's queries must be filtered by."""
         return EffectivePermissions(
@@ -127,8 +135,14 @@ class LeadService:
                 # their own create request. An unassigned row would disappear
                 # under the same scoped repository used by every later read.
                 assignee_id=payload.get("assignee_id") or self.user_id,
-                branch_id=payload.get("branch_id"),
-                team_id=payload.get("team_id"),
+                branch_id=payload.get("branch_id") or self._own_branch_id(),
+                # Same reasoning as the assignee above, one level up: a
+                # team-scoped manager who adds a prospect must be able to see it
+                # afterwards. Without a team the row is invisible to the very
+                # person who created it. Only inherited when the creator belongs
+                # to exactly one team - guessing between several would put the
+                # record in front of the wrong people.
+                team_id=payload.get("team_id") or self._own_team_id(),
                 created_by=self.user_id,
                 version=1,
             )
@@ -219,7 +233,15 @@ class LeadService:
                     payload={"changed": sorted(changes)},
                 )
             )
-        return await self.get(lead_id)
+        # The state from inside the transaction, not a fresh scoped read.
+        #
+        # Re-reading was a real bug with a nasty shape: a self- or team-scoped
+        # user who reassigns a prospect *away from themselves* commits the change
+        # and then can no longer see the record, so the re-read raised "Lead not
+        # found" and the browser reported failure for a save that had already
+        # happened. `after` is the committed row; returning it is both accurate
+        # and one query cheaper.
+        return after
 
     async def bulk_update(
         self,

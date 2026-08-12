@@ -106,8 +106,12 @@ async def load_principal(tenant_id: UUID, user_id: UUID) -> tuple[Tenant, list[R
         if user is None or user.status != "active" or user.tenant_id != tenant_id:
             raise Unauthenticated("This account can no longer sign in.")
         tenant = (await session.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
-        roles = await _load_roles(session, user)
-        return tenant, roles, user.email, user.full_name
+        is_owner, email, full_name = user.is_owner, user.email, user.full_name
+
+    roles, _branch_ids, _team_ids = await load_roles_and_scope(
+        tenant_id, user_id, is_owner=is_owner
+    )
+    return tenant, roles, email, full_name
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,6 +149,88 @@ async def _load_roles(session: Any, user: User) -> list[Role]:
     return roles
 
 
+async def load_roles_and_scope(
+    tenant_id: UUID, user_id: UUID, *, is_owner: bool
+) -> tuple[list[Role], list[str], list[str]]:
+    """Roles, branches and teams, read with the tenant context bound.
+
+    `roles`, `user_roles`, `teams` and `team_members` are all tenant-owned and
+    protected by row-level security, so a platform-scoped session sees none of
+    them. Reading roles there returned an empty list and silently fell back to
+    "member", which quietly demoted every manager and admin to self scope; reading
+    team membership there returned nothing, which left a team-scoped principal
+    filtering on an empty set and unable to see a single record.
+
+    Both lookups therefore happen here, inside `tenant_session`, once the tenant is
+    known. The fallback below is kept for genuinely role-less accounts, but it is
+    no longer reached by ordinary sign-ins.
+    """
+    from infrastructure.database.models.tenancy import Team, TeamMember
+    from infrastructure.database.models.users import Role as RoleRow
+    from infrastructure.database.models.users import UserRole
+
+    async with tenant_session(tenant_id) as session:
+        names = (
+            (
+                await session.execute(
+                    select(RoleRow.name)
+                    .join(UserRole, UserRole.role_id == RoleRow.id)
+                    .where(UserRole.user_id == user_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        rows = (
+            await session.execute(
+                select(TeamMember.team_id, Team.branch_id)
+                .join(Team, Team.id == TeamMember.team_id)
+                .where(TeamMember.user_id == user_id, Team.deleted_at.is_(None))
+            )
+        ).all()
+
+    roles: list[Role] = []
+    for name in names:
+        try:
+            roles.append(Role(name))
+        except ValueError:
+            continue
+    if not roles:
+        roles = [Role.OWNER] if is_owner else [Role.MEMBER]
+
+    team_ids = sorted({str(team_id) for team_id, _ in rows})
+    branch_ids = sorted({str(branch_id) for _, branch_id in rows if branch_id})
+    return roles, branch_ids, team_ids
+
+
+async def _load_scope_ids(session: Any, user_id: UUID) -> tuple[list[str], list[str]]:
+    """The branches and teams this user actually belongs to.
+
+    Without this the token carries no scope identifiers at all, and the repository
+    layer - which fails closed by design - matches nothing. The visible effect was
+    that a manager, whose role scope is `team`, could not see or reassign a single
+    prospect and was told "Lead not found" for every one of them. The scope check
+    was doing exactly what it should; it was being asked to filter on an empty set.
+
+    Owners and admins are global-scoped and never consult these, but the claim is
+    populated for everyone so that changing somebody's role does not also require
+    remembering to re-issue their token differently.
+    """
+    from infrastructure.database.models.tenancy import Team, TeamMember
+
+    rows = (
+        await session.execute(
+            select(TeamMember.team_id, Team.branch_id)
+            .join(Team, Team.id == TeamMember.team_id)
+            .where(TeamMember.user_id == user_id, Team.deleted_at.is_(None))
+        )
+    ).all()
+
+    team_ids = sorted({str(team_id) for team_id, _ in rows})
+    branch_ids = sorted({str(branch_id) for _, branch_id in rows if branch_id})
+    return branch_ids, team_ids
+
+
 def _claims_for_values(
     user_id: UUID,
     tenant_id: UUID,
@@ -154,6 +240,8 @@ def _claims_for_values(
     roles: list[Role],
     session_id: str,
     mfa_verified: bool = False,
+    branch_ids: list[str] | None = None,
+    team_ids: list[str] | None = None,
 ) -> AccessClaims:
     return AccessClaims(
         sub=str(user_id),
@@ -167,6 +255,8 @@ def _claims_for_values(
         # (and therefore the session cookie) exceed the HTTP header limit.
         permissions=[],
         scope=widest_scope(roles).value,
+        branch_ids=branch_ids or [],
+        team_ids=team_ids or [],
         session_id=session_id,
         # A property of this session, not of the account: it is true only when
         # this sign-in actually completed an MFA challenge. Step-up protected
@@ -314,6 +404,14 @@ async def issue_session(
     tenant_id = tenant.id
     await enforce_session_cap(tenant_id=tenant_id, user_id=user_id)
 
+    # Resolved here rather than trusted from the caller: every caller reads the
+    # user under a platform-scoped session, where row-level security hides the
+    # role tables. Doing it once, in the one place that mints the token, is what
+    # stops a manager being silently issued a member's scope.
+    roles, branch_ids, team_ids = await load_roles_and_scope(
+        tenant_id, user_id, is_owner=Role.OWNER in roles
+    )
+
     plaintext, token_hash, jti = generate_refresh_token()
     family_id = uuid7()
     async with tenant_session(tenant_id) as session:
@@ -346,6 +444,8 @@ async def issue_session(
             roles,
             str(family_id),
             mfa_verified=mfa_verified,
+            branch_ids=branch_ids,
+            team_ids=team_ids,
         )
     )
     return AuthResult(
@@ -444,9 +544,15 @@ async def refresh(refresh_token: str, tokens: TokenService) -> AuthResult:
         tenant = (
             await session.execute(select(Tenant).where(Tenant.id == user.tenant_id))
         ).scalar_one()
-        roles = await _load_roles(session, user)
+        is_owner = user.is_owner
         profile_email, profile_name = user.email, user.full_name
         tenant_slug, tenant_name = tenant.slug, tenant.name
+
+    # Re-resolved on every rotation, so adding somebody to a team takes effect on
+    # their next refresh rather than requiring a fresh sign-in.
+    roles, branch_ids, team_ids = await load_roles_and_scope(
+        tenant_id, user_id, is_owner=is_owner
+    )
 
     plaintext, token_hash, new_jti = generate_refresh_token()
     async with tenant_session(tenant_id) as session:
@@ -478,7 +584,15 @@ async def refresh(refresh_token: str, tokens: TokenService) -> AuthResult:
 
     access_token, expires_at = tokens.issue_access_token(
         _claims_for_values(
-            user_id, tenant_id, tenant_slug, profile_email, profile_name, roles, str(family_id)
+            user_id,
+            tenant_id,
+            tenant_slug,
+            profile_email,
+            profile_name,
+            roles,
+            str(family_id),
+            branch_ids=branch_ids,
+            team_ids=team_ids,
         )
     )
     return AuthResult(
