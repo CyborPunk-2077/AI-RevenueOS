@@ -668,6 +668,11 @@ def _serialize(lead: Any) -> dict[str, Any]:
         "reviewer_state": lead.reviewer_state,
         "capture": lead.capture,
         "assignee_id": str(lead.assignee_id) if lead.assignee_id else None,
+        # Exposed because "nobody has replied to this yet" is the single fact the
+        # leakage dashboard is built on, and a null here is the whole signal.
+        "first_response_at": (
+            lead.first_response_at.isoformat() if lead.first_response_at else None
+        ),
         "version": lead.version,
         "created_at": lead.created_at.isoformat() if lead.created_at else None,
         "updated_at": lead.updated_at.isoformat() if lead.updated_at else None,

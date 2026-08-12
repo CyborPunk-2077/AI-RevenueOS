@@ -1,0 +1,227 @@
+# Trying Sangam yourself
+
+Written for the owner, not for an engineer. About ten to fifteen minutes.
+You do not need to type any commands.
+
+---
+
+## 1. Start it
+
+1. Start **Docker Desktop** and wait for the whale icon in the system tray to
+   stop animating.
+2. Double-click **`RUN_DEMO.cmd`** in the project folder.
+3. Wait. The first run of the day takes a minute or two; after that it is quick.
+4. When it finishes it prints a box with a web address and a password.
+5. Open **http://localhost:3000** in your browser.
+
+Sign in as:
+
+| Sign in as | You are | You see |
+| --- | --- | --- |
+| `abhishek@sangam.co.in` | The owner | Everything |
+| `priya@sangam.co.in` | A sales manager | Her team's prospects |
+| `kiran@sangam.co.in` | A salesperson | Only what is assigned to him |
+
+The password is the one printed in the box.
+
+**Start with `abhishek@sangam.co.in`.** Try the other two later — the point of
+them is that they see *less*, which is how you keep a new salesperson away from
+the whole customer book on their first day.
+
+Closing the window does not delete anything. Run it again tomorrow and your
+records are still there.
+
+---
+
+## 2. What you are looking at
+
+This is a workspace for a fictional business: **Sangam**, an automation
+consultancy in Bengaluru selling to other small businesses — the business we
+ourselves are building.
+
+The prospects in it are **invented but realistic**: a dental chain in
+Indiranagar, a coaching institute in Jayanagar, a logistics operator in Peenya.
+None of these people exist. Nothing has been sent to anybody. No message, no
+email, no WhatsApp has left this machine.
+
+They are there so you can judge the screens as they would look on a Tuesday
+morning in a real office — including the parts that are going wrong, because a
+tool for stopping enquiries falling through the cracks cannot be judged on data
+with no cracks in it.
+
+---
+
+## 3. The ten-minute walk
+
+### Step 1 — Today
+
+You land on **Today**. Read the four boxes across the top.
+
+- **Overdue follow-ups** — somebody promised to do something by a date that has
+  passed.
+- **Enquiries with no reply** — somebody asked about your business and nobody has
+  responded at all.
+- **Unassigned prospects** — nobody's name is against them, so everybody assumes
+  somebody else is calling.
+- **No next action** — the enquiry is live but nothing is scheduled.
+
+*This is the whole product in four numbers.* Every one of them is a count of
+records you can open. Click a box and it takes you to the list behind it.
+
+Below, look at **Enquiries waiting for a first reply**. Shreya Bhat from
+SmileCraft Dental Care has been waiting two days. Nobody has called her.
+
+### Step 2 — Open the one nobody called
+
+Click **Shreya Bhat**.
+
+Read what you get before you would pick up the phone:
+
+- what she actually asked for, in her words
+- her number and email
+- how big her business is
+- that she is **unassigned**
+- that **no follow-up is scheduled** — said in red, because that is the problem
+
+### Step 3 — Give it an owner
+
+Under **Ownership and next action**, pick a name from the dropdown and click
+**Assign**. It now says who owns it.
+
+This is the least impressive-looking thing on the screen and the one that
+prevents the most lost business. "I thought you were calling him" is not a
+software problem until somebody writes down whose job it was.
+
+### Step 4 — Score her
+
+Click **Score with rules**.
+
+You get a score out of 100, a warm/hot/cold label, and — importantly — **why**,
+plus what is still missing.
+
+Note the sentence underneath: no AI is connected. This is arithmetic on what was
+captured with the enquiry. It gives the same answer every time and you can argue
+with it. When we do connect an AI later, this still works if the AI is down.
+
+### Step 5 — Promise a follow-up
+
+Under **Tasks**, type what you will do next — "Call Shreya about the three
+branches" — pick a date, and click **Add task**.
+
+Look up: the red warning is gone and the next action now appears against the
+record.
+
+### Step 6 — Write down what was said
+
+Under **Timeline**, choose **Call**, put a subject and a couple of lines of
+detail, and click **Log activity**.
+
+It appears with your name and the time on it. **You cannot edit or delete it
+afterwards, and neither can anyone else.** A record of a call that can be
+rewritten later is not a record. Notes are separate and *can* be edited — but
+only by the person who wrote them.
+
+This history stays with the customer when they stop being a prospect and become
+a customer. The context does not restart.
+
+### Step 7 — The shared queue
+
+Click **Follow-ups** in the menu.
+
+This is everything anybody has promised to do, soonest first, with who owns it.
+Click **Overdue**. These are the broken promises.
+
+Click **Done** on one.
+
+### Step 8 — Watch the number move
+
+Click **Today**.
+
+The **Overdue follow-ups** count has gone down by one.
+
+That is the test of whether a dashboard is real. If closing a task does not
+change the figure the owner is judged on, the figure is decoration.
+
+### Step 9 — The duplicate
+
+Go to **Prospects**. Notice there are two Farhans — "Farhan Qureshi" from
+NestCraft Interiors and a bare "Farhan" from Nestcraft Interior Designs. Same
+person, enquired twice, once by referral and once through the website chat.
+
+Open either one and scroll to **Possible duplicates**. It is flagged with the
+reason and how confident the match is, and left for a person to decide.
+
+It is deliberately *not* merged automatically. Silently merging two customers who
+turn out to be different people is much harder to undo than merging them by hand.
+
+### Step 10 — The pipeline
+
+Click **Deals**.
+
+Deals by stage, in rupees. One was won. One was lost — and the lost one records
+*why*, which is the only part of a lost deal worth keeping.
+
+### Step 11 — What is and is not real
+
+Go to **Settings**, then **Test Centre**.
+
+This is an internal page. It lists every part of the product and says honestly
+whether it is usable, half-built, or waiting on an outside account. The bottom
+table is checked live each time you open it — so when it says WhatsApp cannot
+send, that is the system reporting its own state, not a claim we typed in.
+
+---
+
+## 4. The isolation check — worth doing once
+
+This is the one that matters if you ever sell this.
+
+1. Sign in as `abhishek@sangam.co.in` and open any prospect.
+2. Copy the web address from the browser bar.
+3. Sign out. Sign in as `ravi@globex.test`.
+4. You see none of Sangam's records.
+5. Paste the address you copied. You get **Not found** — not the record.
+
+That is not the screen hiding things. It is enforced three separate times,
+including inside the database itself, so even a mistake in our own code cannot
+show one business another business's customers.
+
+---
+
+## 5. What is deliberately not there yet
+
+Being blunt is the point of this section.
+
+- **WhatsApp, email and SMS cannot send.** The plumbing exists; no account is
+  connected. Nothing will ever say "sent" when it was not.
+- **No AI.** Qualification is rules-based. Everything above works without it.
+- **No file uploads or payments.** Both need external accounts we have not opened.
+- **Appointments** can be recorded but no calendar is connected.
+- **Reports** draw charts, but the numbers behind them have not been checked
+  against the records yet. Do not quote them to anybody.
+- **Importing a spreadsheet** exists but has not been run on real data. Treat it
+  as untested.
+- **Automations** run underneath, but there is no screen to build a rule.
+
+The trustworthy part today is: **enquiry → owner → score → next action →
+follow-up → history → deal.** That one path has been walked end to end in a
+browser, and the screenshots of it are in `artifacts/visual-evidence/`.
+
+---
+
+## 6. If something goes wrong
+
+**The window closes immediately.** Docker Desktop is not running. Start it, wait
+for the whale to settle, try again.
+
+**"Too many attempts."** Sign-in allows five tries per fifteen minutes from one
+computer. Wait a quarter of an hour. This is on purpose — it is what stops
+somebody guessing passwords.
+
+**You want a clean slate.** Double-click `RESET_DEMO.cmd`. It makes you type the
+word "reset" first, because it deletes everything.
+
+**You want the demo prospects back the way they started** (with the overdue items
+freshly overdue), without deleting your own records elsewhere — ask for the
+workspace to be refreshed; it is one command and it only touches the Sangam
+workspace.

@@ -14,7 +14,7 @@ export default function OnboardingLayout({
     <div className="min-h-screen bg-background">
       <header className="border-b border-border">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4">
-          <p className="text-sm font-semibold">AI RevenueOS</p>
+          <p className="text-sm font-semibold">Sangam</p>
           <p className="text-xs text-muted-foreground">Setting up your workspace</p>
         </div>
       </header>

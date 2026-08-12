@@ -105,6 +105,11 @@ ALL_PERMISSIONS: Final[frozenset[str]] = frozenset(perm(r, a) for r in RESOURCES
 
 _CRUD = ("create", "read", "update", "delete", "list")
 _RU = ("read", "list")
+# Activities are append-only: the table rejects edits and deletes, so granting
+# `create` cannot be used to rewrite history. Withholding it meant only the owner
+# could record that a call happened, which makes the follow-up trail a record of
+# who has the biggest role rather than of what was actually done.
+_LOG = ("create", "read", "list")
 
 
 def _expand(spec: dict[str, tuple[str, ...]]) -> frozenset[str]:
@@ -156,7 +161,7 @@ _ADMIN = _expand(
         "pipeline": (*_CRUD,),
         "task": (*_CRUD, "assign"),
         "note": (*_CRUD,),
-        "activity": _RU,
+        "activity": _LOG,
         "tag": (*_CRUD,),
         "custom_field": (*_CRUD,),
         "saved_view": (*_CRUD,),
@@ -206,7 +211,7 @@ _MANAGER = _expand(
         "pipeline": _RU,
         "task": (*_CRUD, "assign"),
         "note": (*_CRUD,),
-        "activity": _RU,
+        "activity": _LOG,
         "tag": ("create", "read", "list"),
         "custom_field": _RU,
         "saved_view": (*_CRUD,),
@@ -249,7 +254,7 @@ _MEMBER = _expand(
         "pipeline": _RU,
         "task": ("create", "read", "update", "list"),
         "note": (*_CRUD,),
-        "activity": _RU,
+        "activity": _LOG,
         "tag": ("read", "list"),
         "custom_field": _RU,
         "saved_view": (*_CRUD,),

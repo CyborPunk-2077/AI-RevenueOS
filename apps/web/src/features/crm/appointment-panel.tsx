@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
+import { formatDateTime } from '@/lib/dates';
 
 export interface AppointmentEntry {
   readonly id: string;
@@ -20,7 +21,7 @@ export interface AppointmentEntry {
 }
 
 export function when(iso: string): string {
-  return new Date(iso).toLocaleString();
+  return formatDateTime(iso);
 }
 
 /**

@@ -27,13 +27,13 @@ export default function LoginPage(): JSX.Element {
       setBusy(false);
       return;
     }
-    router.push('/leads');
+    router.push('/today');
     router.refresh();
   }
 
   return (
     <main id="main-content" className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
-      <h1 className="text-2xl font-semibold">AI RevenueOS</h1>
+      <h1 className="text-2xl font-semibold">Sangam</h1>
       <p className="mt-1 text-sm text-muted-foreground">Sign in to your organisation.</p>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4" noValidate>

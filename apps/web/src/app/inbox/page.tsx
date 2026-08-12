@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { apiFetch } from '@/lib/session';
 import { NewConversationForm } from '@/features/crm/new-conversation-form';
 import { PageHeader } from '@/features/ui/primitives';
+import { formatDateTime } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -98,7 +99,7 @@ export default async function InboxPage({
                     </span>
                   ) : null}
                   {conversation.last_message_at ? (
-                    <p className="mt-1">{new Date(conversation.last_message_at).toLocaleString()}</p>
+                    <p className="mt-1">{formatDateTime(conversation.last_message_at)}</p>
                   ) : null}
                 </div>
               </li>

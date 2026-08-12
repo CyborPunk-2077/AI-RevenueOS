@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
+import { formatDateTime } from '@/lib/dates';
 
 export interface TimelineEntry {
   readonly kind: 'activity' | 'note';
@@ -19,11 +20,15 @@ export interface TimelineEntry {
 
 function when(iso: string | null): string {
   if (!iso) return '';
-  return new Date(iso).toLocaleString();
+  return formatDateTime(iso);
 }
 
 /**
- * The activity and note timeline for one contact or account.
+ * The activity and note timeline for one lead, contact or account.
+ *
+ * Leads are included deliberately: the call that happened while somebody was
+ * still a prospect is the same record after they become a customer, so the
+ * history does not restart at conversion.
  *
  * `editable` comes from the server, which knows who wrote each note. The button
  * is hidden when it is false and the API refuses the edit regardless, so the two
@@ -34,7 +39,7 @@ export function Timeline({
   parentId,
   entries,
 }: {
-  parent: 'contacts' | 'accounts';
+  parent: 'leads' | 'contacts' | 'accounts';
   parentId: string;
   entries: TimelineEntry[];
 }): JSX.Element {
@@ -60,25 +65,30 @@ export function Timeline({
     router.refresh();
   }
 
+  // Both handlers capture the form element before awaiting. React nulls
+  // `currentTarget` once a handler yields, so touching it after the await threw a
+  // TypeError and left the submitted text sitting in the boxes.
   async function onLogActivity(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const element = event.currentTarget;
+    const form = new FormData(element);
     await post(`/api/${parent}/${parentId}/activities`, {
       activity_type: String(form.get('activity_type') ?? 'call'),
       subject: String(form.get('subject') ?? ''),
       body: String(form.get('activity_body') ?? '') || null,
     });
-    event.currentTarget.reset();
+    element.reset();
   }
 
   async function onAddNote(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const element = event.currentTarget;
+    const form = new FormData(element);
     await post(`/api/${parent}/${parentId}/notes`, {
       body: String(form.get('note_body') ?? ''),
       is_pinned: form.get('is_pinned') === 'on',
     });
-    event.currentTarget.reset();
+    element.reset();
   }
 
   async function onSaveNote(entry: TimelineEntry): Promise<void> {

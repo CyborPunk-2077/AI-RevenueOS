@@ -312,27 +312,48 @@ try {
     )
     Write-Ok 'Demo tenants seeded'
 
+    # The founders' own workspace, filled with realistic Bengaluru prospects.
+    # Additive and idempotent: if it already holds prospects nothing is rewritten,
+    # because this tenant is meant to be used for real prospecting. Rebuild the
+    # synthetic rows deliberately with:
+    #   docker compose exec api python src/scripts/seed_sangam.py --refresh
+    Write-Step 'Seeding the Sangam workspace'
+    Invoke-Compose -ComposeArgs @(
+        'exec', '-T', '-e', "DEMO_PASSWORD=$Password", 'api', 'python', 'src/scripts/seed_sangam.py'
+    )
+    Write-Ok 'Sangam workspace seeded'
+
     # --- wait for the web app ---------------------------------------------
     Write-Step 'Waiting for the web app (first request compiles the route)'
     Wait-ForUrl -Url "$WebUrl/login" -Name 'web'
 
     # --- prove the printed credentials actually work -----------------------
-    Write-Step 'Verifying both demo sign-ins through the web app'
-    Test-DemoLogin -Email 'asha@acme.test'   -DemoPassword $Password
-    Test-DemoLogin -Email 'ravi@globex.test' -DemoPassword $Password
+    # One verification, not three. Sign-in is rate limited to five attempts per IP
+    # per fifteen minutes, and every attempt the launcher spends is one the person
+    # at the keyboard no longer has - verifying all three accounts left them able
+    # to sign in twice before being locked out of their own demo. One successful
+    # sign-in proves the whole credential path: same password, same seed, same
+    # cookie handling.
+    Write-Step 'Verifying the sign-in through the web app'
+    Test-DemoLogin -Email 'abhishek@sangam.co.in' -DemoPassword $Password
 
     # --- done --------------------------------------------------------------
     $rule = ('=' * 68)
     Write-Host ''
     Write-Host $rule -ForegroundColor Green
-    Write-Host '  AI RevenueOS demo is ready' -ForegroundColor Green
+    Write-Host '  Sangam is ready' -ForegroundColor Green
     Write-Host $rule -ForegroundColor Green
     Write-Host ''
     Write-Host "  Open        $WebUrl"
     Write-Host "  API docs    $ApiUrl/v1/docs"
     Write-Host ''
-    Write-Host '  Sign in as either tenant:' -ForegroundColor Cyan
-    Write-Host '    asha@acme.test     tenant acme    (has sample leads)'
+    Write-Host '  START HERE - the Sangam workspace:' -ForegroundColor Cyan
+    Write-Host '    abhishek@sangam.co.in   sees everything (owner)'
+    Write-Host '    priya@sangam.co.in      sees her team''s prospects (manager)'
+    Write-Host '    kiran@sangam.co.in      sees only his own (salesperson)'
+    Write-Host ''
+    Write-Host '  Also available, for the tenant-isolation check:' -ForegroundColor Cyan
+    Write-Host '    asha@acme.test     tenant acme    (a few sample leads)'
     Write-Host '    ravi@globex.test   tenant globex  (empty, which is the point)'
     Write-Host ''
     Write-Host "  Password    $Password" -ForegroundColor Yellow
@@ -341,8 +362,8 @@ try {
         Write-Host '              pass -Password to choose your own'
     }
     Write-Host ''
-    Write-Host '  Sign in as acme, create a lead, open it, edit it, refresh.'
-    Write-Host '  Then sign in as globex: none of acme''s records are visible.'
+    Write-Host '  Sign in as abhishek@sangam.co.in and start on Today. The guide is'
+    Write-Host '  in docs\OWNER-TEST-GUIDE.md and takes about ten minutes.'
     Write-Host ''
     Write-Host '  Stop        docker compose down'
     Write-Host '  Logs        docker compose logs -f api web'

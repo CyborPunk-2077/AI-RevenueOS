@@ -1,4 +1,19 @@
 ===============================================================================
+SUPERSEDED - 2026-08-12
+===============================================================================
+
+The product is now called Sangam. This file was written on 2026-08-01 and is
+kept for its background on the security and tenancy design, which is unchanged.
+Where it disagrees with the files below, it is out of date.
+
+  If you are the owner and want to try it:  docs\OWNER-TEST-GUIDE.md
+  If you want to know what really works:    docs\CURRENT-REALITY.md
+  If you are picking the project back up:   docs\PROJECT-STATE.md
+
+To run it: start Docker Desktop, then double-click RUN_DEMO.cmd. Sign in as
+abhishek@sangam.co.in with the password it prints.
+
+===============================================================================
 AI RevenueOS - what it is, how to run it, and what is actually finished
 Written 2026-08-01 | Commit 4f6b953
 ===============================================================================

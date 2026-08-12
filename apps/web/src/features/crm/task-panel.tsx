@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
+import { formatDate } from '@/lib/dates';
 
 export interface TaskEntry {
   readonly id: string;
@@ -26,7 +27,7 @@ export function TaskPanel({
   parentId,
   tasks,
 }: {
-  parent: 'contacts' | 'deals';
+  parent: 'leads' | 'contacts' | 'deals';
   parentId: string;
   tasks: TaskEntry[];
 }): JSX.Element {
@@ -34,13 +35,19 @@ export function TaskPanel({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const entityType = parent === 'contacts' ? 'contact' : 'deal';
+  // Singular, because the API names the record and the route names the section.
+  const entityType = { leads: 'lead', contacts: 'contact', deals: 'deal' }[parent];
 
   async function onAdd(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setBusy(true);
     setError(null);
-    const form = new FormData(event.currentTarget);
+    // Captured before the await. React nulls `currentTarget` once the handler
+    // yields, so reaching for it afterwards threw a TypeError that swallowed the
+    // `router.refresh()` below: the follow-up was saved, and the screen still
+    // said "No follow-ups yet" until the page was reloaded by hand.
+    const element = event.currentTarget;
+    const form = new FormData(element);
     const due = String(form.get('due_at') ?? '');
     const response = await mutate('/api/tasks', {
       method: 'POST',
@@ -59,7 +66,7 @@ export function TaskPanel({
       return;
     }
     setBusy(false);
-    event.currentTarget.reset();
+    element.reset();
     router.refresh();
   }
 
@@ -131,7 +138,7 @@ export function TaskPanel({
                 ) : null}
                 {task.due_at ? (
                   <span className="ml-2 text-xs text-muted-foreground">
-                    due {new Date(task.due_at).toLocaleDateString()}
+                    due {formatDate(task.due_at)}
                   </span>
                 ) : null}
               </div>

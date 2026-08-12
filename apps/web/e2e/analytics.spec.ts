@@ -7,7 +7,7 @@ async function signIn(page: import('@playwright/test').Page, email: string): Pro
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByTestId('sign-in').click();
-  await page.waitForURL('**/leads');
+  await page.waitForURL('**/today');
 }
 
 test('analytics is tenant scoped and exports stay honestly disabled', async ({ page }) => {

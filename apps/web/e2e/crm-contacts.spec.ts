@@ -17,7 +17,7 @@ async function signIn(page: import('@playwright/test').Page, email: string): Pro
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByTestId('sign-in').click();
-  await page.waitForURL('**/leads');
+  await page.waitForURL('**/today');
 }
 
 test('create an account, create a contact against it, edit and persist', async ({ page }) => {

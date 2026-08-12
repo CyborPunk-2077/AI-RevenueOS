@@ -348,7 +348,7 @@ class TaskCreate(StrictModel):
     priority: Literal["low", "normal", "high", "urgent"] = "normal"
     due_at: datetime | None = None
     assignee_id: UUID | None = None
-    entity_type: Literal["contact", "account", "deal"] | None = None
+    entity_type: Literal["contact", "account", "deal", "lead"] | None = None
     entity_id: UUID | None = None
     is_next_action: bool = False
 

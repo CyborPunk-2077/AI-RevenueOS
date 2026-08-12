@@ -77,6 +77,16 @@ async def create_invitation(
     return success(body, request_id=_request_id(request))
 
 
+@router.get("/users/members", summary="People in this organisation")
+async def list_members(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    """Feeds every "assign to" control. Read-only and deliberately minimal."""
+    principal.require("user", "read")
+    from application.tenants.members import list_members as _list_members
+
+    rows = await _list_members(tenant_id=principal.tenant_id)
+    return success({"members": rows, "total": len(rows)}, request_id=_request_id(request))
+
+
 @router.get("/users/invitations", summary="List invitations")
 async def list_invitations(
     request: Request,

@@ -5,5 +5,5 @@ import { readSessionCookie } from '@/lib/session';
 export const dynamic = 'force-dynamic';
 
 export default function Home(): never {
-  redirect(readSessionCookie(cookies()) ? '/leads' : '/login');
+  redirect(readSessionCookie(cookies()) ? '/today' : '/login');
 }

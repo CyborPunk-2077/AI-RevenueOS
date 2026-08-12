@@ -31,8 +31,10 @@ logger = get_logger("application.crm.tasks")
 STATUSES = ("open", "in_progress", "completed", "cancelled")
 OPEN_STATUSES = frozenset({"open", "in_progress"})
 PRIORITIES = ("low", "normal", "high", "urgent")
-# A task may hang off any of these, or off nothing at all.
-ENTITY_TYPES = frozenset({"contact", "account", "deal"})
+# A task may hang off any of these, or off nothing at all. Leads are included
+# because the follow-up that stops a prospect going cold is created before the
+# prospect is ever converted to a contact.
+ENTITY_TYPES = frozenset({"contact", "account", "deal", "lead"})
 
 
 def serialize_task(
@@ -76,11 +78,13 @@ class TaskService(_PrincipalScoped):
 
         from application.crm.deals import DealService
         from application.crm.service import AccountService, ContactService
+        from application.leads.service import LeadService
 
         factory: Any = {
             "contact": ContactService,
             "account": AccountService,
             "deal": DealService,
+            "lead": LeadService,
         }[entity_type]
         service: Any = factory(
             tenant_id=self.tenant_id,

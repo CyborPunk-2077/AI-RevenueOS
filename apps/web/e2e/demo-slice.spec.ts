@@ -18,7 +18,7 @@ async function signIn(page: import('@playwright/test').Page, email: string): Pro
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByTestId('sign-in').click();
-  await page.waitForURL('**/leads');
+  await page.waitForURL('**/today');
 }
 
 test('sign in, create, open, edit and persist across a refresh', async ({ page }) => {
@@ -26,6 +26,10 @@ test('sign in, create, open, edit and persist across a refresh', async ({ page }
 
   await signIn(page, ACME);
   await expect(page.getByTestId('tenant-badge')).toContainText('acme');
+
+  // Sign-in now lands on Today, which is the operational view. This test is about
+  // the prospect record, so go there.
+  await page.getByTestId('nav-leads').click();
 
   // Seeded records are visible.
   await expect(page.getByTestId('lead-rows')).toContainText('Meera');
@@ -57,6 +61,7 @@ test('sign in, create, open, edit and persist across a refresh', async ({ page }
 
 test('a second tenant cannot see the first tenant\'s record', async ({ page, context }) => {
   await signIn(page, ACME);
+  await page.getByTestId('nav-leads').click();
   await page.getByTestId('new-lead').click();
   await page.getByLabel('First name').fill('AcmePrivate');
   await page.getByLabel('Email').fill(`private-${Date.now()}@example.in`);

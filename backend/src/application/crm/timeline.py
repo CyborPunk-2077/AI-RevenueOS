@@ -34,7 +34,7 @@ logger = get_logger("application.crm.timeline")
 # `status_change` are written by the platform, so accepting them from a client
 # would let anyone forge a system record.
 LOGGABLE_TYPES = frozenset({"call", "email", "meeting", "note", "task", "whatsapp"})
-ENTITY_TYPES = frozenset({"contact", "account"})
+ENTITY_TYPES = frozenset({"contact", "account", "lead"})
 
 
 def serialize_activity(row: Any, *, actor_name: str | None = None) -> dict[str, Any]:
@@ -83,25 +83,22 @@ class TimelineService(_PrincipalScoped):
             raise ValidationError(f"Unsupported entity type: {entity_type!r}.")
 
         from application.crm.service import AccountService, ContactService
+        from application.leads.service import LeadService
 
-        service: Any = (
-            ContactService(
-                tenant_id=self.tenant_id,
-                user_id=self.user_id,
-                permissions=self.permissions,
-                scope=self.scope,
-                branch_ids=self.branch_ids,
-                team_ids=self.team_ids,
-            )
-            if entity_type == "contact"
-            else AccountService(
-                tenant_id=self.tenant_id,
-                user_id=self.user_id,
-                permissions=self.permissions,
-                scope=self.scope,
-                branch_ids=self.branch_ids,
-                team_ids=self.team_ids,
-            )
+        # A lead's history is the same table as a contact's, because the point of
+        # the model is that converting a prospect does not start a new memory.
+        factory: Any = {
+            "contact": ContactService,
+            "account": AccountService,
+            "lead": LeadService,
+        }[entity_type]
+        service: Any = factory(
+            tenant_id=self.tenant_id,
+            user_id=self.user_id,
+            permissions=self.permissions,
+            scope=self.scope,
+            branch_ids=self.branch_ids,
+            team_ids=self.team_ids,
         )
         await service.get(entity_id)
 

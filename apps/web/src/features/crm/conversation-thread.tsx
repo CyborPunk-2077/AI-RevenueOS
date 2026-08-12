@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
+import { formatDateTime } from '@/lib/dates';
 
 export interface ThreadMessage {
   readonly id: string;
@@ -99,7 +100,7 @@ export function ConversationThread({
                   {message.direction === 'outbound' ? (message.sender_name ?? 'Agent') : 'Customer'}
                   {' · '}{message.channel}
                 </span>
-                <span>{message.created_at ? new Date(message.created_at).toLocaleString() : ''}</span>
+                <span>{message.created_at ? formatDateTime(message.created_at) : ''}</span>
               </div>
               <p className="mt-1 whitespace-pre-wrap">
                 {message.redacted ? <em className="text-muted-foreground">Message redacted</em> : message.content}

@@ -22,8 +22,8 @@ const display = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: { default: 'AI RevenueOS', template: '%s | AI RevenueOS' },
-  description: 'RevenueOS for Indian SMEs',
+  title: { default: 'Sangam', template: '%s | Sangam' },
+  description: 'Connected customer and revenue operations for Indian SMEs',
   robots: { index: false, follow: false },
 };
 

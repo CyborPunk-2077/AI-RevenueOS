@@ -11,6 +11,7 @@ from api.app.envelope import success
 from api.deps.idempotency import IdempotencyContext, idempotency, parse_if_match
 from api.deps.principal import CurrentPrincipal, ListQuery, list_query, rate_limit
 from api.v1.schemas import (
+    ActivityLogRequest,
     LeadBulkUpdateRequest,
     LeadCreate,
     LeadDisqualifyRequest,
@@ -18,6 +19,7 @@ from api.v1.schemas import (
     LeadQualifyRequest,
     LeadReviewRequest,
     LeadUpdate,
+    NoteCreateRequest,
 )
 from domain.leads.lifecycle import (
     duplicate_resolution,
@@ -263,3 +265,58 @@ async def convert_lead(
 
     result = await LeadService.for_principal(principal).convert(lead_id)
     return success(result, request_id=getattr(request.state, "correlation_id", None))
+
+
+# --- history and follow-ups --------------------------------------------------
+#
+# A prospect's history has to exist before conversion, not after it. Logging a
+# call against a lead writes the same activity row a contact would get, so the
+# record survives the conversion instead of restarting from empty.
+
+
+def _timeline(principal: Any) -> Any:
+    from application.crm.timeline import TimelineService
+
+    return TimelineService.for_principal(principal)
+
+
+@router.get("/{lead_id}/timeline", summary="Activities and notes for a lead")
+async def lead_timeline(
+    lead_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("lead", "read")
+    principal.require("activity", "list")
+    entries = await _timeline(principal).timeline("lead", lead_id)
+    return success({"timeline": entries}, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.post(
+    "/{lead_id}/activities", status_code=status.HTTP_201_CREATED, summary="Log an activity"
+)
+async def log_lead_activity(
+    lead_id: UUID, payload: ActivityLogRequest, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("activity", "create")
+    entry = await _timeline(principal).log_activity("lead", lead_id, payload.model_dump())
+    return success(entry, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.post("/{lead_id}/notes", status_code=status.HTTP_201_CREATED, summary="Add a note")
+async def add_lead_note(
+    lead_id: UUID, payload: NoteCreateRequest, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("note", "create")
+    entry = await _timeline(principal).add_note("lead", lead_id, payload.model_dump())
+    return success(entry, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.get("/{lead_id}/tasks", summary="Follow-ups on a lead")
+async def lead_tasks(
+    lead_id: UUID, request: Request, principal: CurrentPrincipal
+) -> dict[str, Any]:
+    principal.require("lead", "read")
+    principal.require("task", "list")
+    from application.crm.tasks import TaskService
+
+    tasks = await TaskService.for_principal(principal).for_entity("lead", lead_id)
+    return success({"tasks": tasks}, request_id=getattr(request.state, "correlation_id", None))

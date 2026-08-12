@@ -20,7 +20,7 @@ async function signIn(page: import('@playwright/test').Page, email: string): Pro
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByTestId('sign-in').click();
-  await page.waitForURL('**/leads');
+  await page.waitForURL('**/today');
 }
 
 test('attach a document to a contact and move it through its states', async ({ page }) => {
