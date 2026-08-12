@@ -29,6 +29,7 @@ export interface Candidate {
     readonly email: string | null;
     readonly phone: string | null;
     readonly status: string;
+    readonly company?: string | null;
   } | null;
 }
 
@@ -47,8 +48,24 @@ const REASON_LABEL: Record<string, string> = {
   fuzzy_name: 'Similar name',
 };
 
-function name(lead: { first_name: string; last_name: string | null }): string {
-  return [lead.first_name, lead.last_name].filter(Boolean).join(' ');
+/**
+ * What to call the other record.
+ *
+ * A prospecting list is full of businesses with a phone number and no named
+ * contact, so the business name is tried first and the person second. Falling
+ * straight through to "Unknown record" - which is what this did - asked somebody
+ * to decide on a merge without telling them what they were merging.
+ */
+function name(lead: {
+  first_name: string;
+  last_name: string | null;
+  company?: string | null;
+}): string {
+  const person = [lead.first_name, lead.last_name].filter(Boolean).join(' ');
+  if (lead.company && lead.company !== person) {
+    return person ? `${lead.company} (${person})` : lead.company;
+  }
+  return person || 'Unnamed prospect';
 }
 
 export function DuplicateReview({
@@ -143,10 +160,12 @@ export function DuplicateReview({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium">
-                    {row.candidate ? name(row.candidate) : 'Unknown record'}
+                    {row.candidate ? name(row.candidate) : 'Record no longer available'}
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    {row.candidate?.email ?? row.candidate?.phone ?? 'no contact details'}
+                    {row.candidate
+                      ? (row.candidate.phone ?? row.candidate.email ?? 'no contact details')
+                      : 'It may have been merged or archived since this match was recorded.'}
                   </p>
                   <p className="mt-1">
                     <StatusPill tone={row.confidence >= 0.9 ? 'warning' : 'neutral'}>

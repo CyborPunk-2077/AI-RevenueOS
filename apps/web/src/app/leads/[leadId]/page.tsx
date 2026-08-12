@@ -111,6 +111,11 @@ export default async function LeadDetailPage({
             {lead.first_name} {lead.last_name ?? ''}
           </h1>
           <StatusPill tone={STATUS_TONE[lead.status] ?? 'neutral'}>{lead.status}</StatusPill>
+          {capture.demo_data ? (
+            <span data-testid="demo-marker" className="text-xs text-muted-foreground">
+              sample business &mdash; not a real prospect
+            </span>
+          ) : null}
         </div>
         <p className="text-sm text-muted-foreground">
           {company ? <span className="font-medium text-foreground">{company}</span> : null}

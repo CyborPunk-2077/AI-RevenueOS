@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Any, Final
 
 from shared.exceptions import ValidationError
+from shared.utils.spreadsheet import neutralise_formula
 
 MAX_ROWS: Final = 10_000
 MAX_COLUMNS: Final = 80
@@ -43,7 +44,20 @@ IMPORTABLE_FIELDS: Final[frozenset[str]] = frozenset(
         "title",
         "city",
         "notes",
+        # Added for founder prospecting. A list of businesses to approach is not a
+        # list of people: what the business does, where to read about it, and why
+        # we think they have a problem worth a call are the columns actually
+        # present in the sheets being imported.
+        "website",
+        "industry",
+        "requirement",
     }
+)
+
+#: Mapped columns kept as descriptive context rather than lead attributes. They
+#: live in `capture`, which is free-form and never interpreted as an identity.
+CAPTURE_FIELDS: Final[frozenset[str]] = frozenset(
+    {"company", "title", "city", "notes", "website", "industry", "requirement"}
 )
 
 REQUIRED_ONE_OF: Final[frozenset[str]] = frozenset({"email", "phone"})
@@ -80,6 +94,28 @@ HEADER_ALIASES: Final[dict[str, str]] = {
     "lead source": "source",
     "notes": "notes",
     "comments": "notes",
+    # Founder prospecting spellings.
+    "business": "company",
+    "business name": "company",
+    "shop name": "company",
+    "firm": "company",
+    "area": "city",
+    "website": "website",
+    "site": "website",
+    "url": "website",
+    "web": "website",
+    "industry": "industry",
+    "category": "industry",
+    "business type": "industry",
+    "sector": "industry",
+    "requirement": "requirement",
+    "pain": "requirement",
+    "problem": "requirement",
+    "reason": "requirement",
+    "why": "requirement",
+    "contact person": "first_name",
+    "owner name": "first_name",
+    "contact": "first_name",
 }
 
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s.]+\.[^@\s]{2,}$")
@@ -163,8 +199,11 @@ def validate_mapping(mapping: dict[str, str | None]) -> dict[str, str]:
 
     if not (seen & REQUIRED_ONE_OF):
         problems.append("Map a column to email or phone; leads must be contactable.")
-    if "first_name" not in seen:
-        problems.append("Map a column to first_name.")
+    # A founder importing businesses to approach often has no named contact yet.
+    # Requiring one would make the common case unimportable, so the business name
+    # is an acceptable identity instead - see `plan_import`, which falls back to it.
+    if not (seen & {"first_name", "company"}):
+        problems.append("Map a column to the contact person or the business name.")
 
     if problems:
         raise ValidationError("This column mapping is not usable.", details={"problems": problems})
@@ -205,19 +244,28 @@ def plan_import(
             cell = str(raw.get(header, "") or "").strip()
             if not cell:
                 continue
-            if target in ("company", "title", "city", "notes"):
-                capture[target] = cell[:500]
+            if target in CAPTURE_FIELDS:
+                capture[target] = neutralise_formula(cell[:500])
             else:
                 values[target] = cell
 
         for header, cell in raw.items():
             if header not in mapping and str(cell or "").strip():
-                capture.setdefault("extra", {})[str(header)[:60]] = str(cell)[:500]
+                capture.setdefault("extra", {})[str(header)[:60]] = neutralise_formula(
+                    str(cell)[:500]
+                )
+
+        if not values.get("first_name") and capture.get("company"):
+            # No named contact yet, which is the normal state of a prospecting
+            # list. The business becomes the record's name, and the substitution
+            # is recorded so nobody later mistakes it for a person.
+            values["first_name"] = str(capture["company"])[:120]
+            capture["name_is_business"] = True
 
         if not values.get("first_name"):
-            reasons.append("first_name is empty")
+            reasons.append("no contact person and no business name")
         else:
-            values["first_name"] = values["first_name"][:120]
+            values["first_name"] = neutralise_formula(values["first_name"][:120])
 
         email = values.get("email", "")
         if email:

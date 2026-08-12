@@ -50,6 +50,10 @@ export function Timeline({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
 
+  // Singular, because the tasks API names the record while the route names the
+  // section.
+  const entityType = { leads: 'lead', contacts: 'contact', accounts: 'account' }[parent];
+
   async function post(path: string, body: unknown): Promise<void> {
     setBusy(true);
     setError(null);
@@ -69,18 +73,46 @@ export function Timeline({
   // Both handlers capture the form element before awaiting. React nulls
   // `currentTarget` once a handler yields, so touching it after the await threw a
   // TypeError and left the submitted text sitting in the boxes.
+  /**
+   * One submit records what happened *and* what happens next.
+   *
+   * A call almost always ends with "I'll send it Tuesday". Making that a second
+   * trip to a different form on the same page is how the follow-up stops being
+   * recorded at all - and an unrecorded follow-up is precisely the leak this
+   * product exists to close. The activity is written first and is never rolled
+   * back if the follow-up fails; a recorded call with no follow-up is a smaller
+   * lie than a follow-up with no call.
+   */
   async function onLogActivity(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const element = event.currentTarget;
     const form = new FormData(element);
+    const outcome = String(form.get('outcome') ?? '').trim();
+    const subject = String(form.get('subject') ?? '');
+
     await post(`/api/${parent}/${parentId}/activities`, {
       activity_type: String(form.get('activity_type') ?? 'call'),
-      subject: String(form.get('subject') ?? ''),
+      // The outcome leads the subject line, because that is what a person scans
+      // the timeline for six weeks later.
+      subject: outcome ? `${outcome} — ${subject}` : subject,
       body: String(form.get('activity_body') ?? '') || null,
       // Only an outbound contact counts as answering a prospect, so the server
       // needs to be told which this was rather than assuming.
       direction: String(form.get('direction') ?? 'outbound'),
     });
+
+    const nextAction = String(form.get('next_action') ?? '').trim();
+    if (nextAction) {
+      const due = String(form.get('next_due') ?? '');
+      await post('/api/tasks', {
+        title: nextAction,
+        due_at: due ? new Date(due).toISOString() : null,
+        priority: 'normal',
+        entity_type: entityType,
+        entity_id: parentId,
+        is_next_action: true,
+      });
+    }
     element.reset();
   }
 
@@ -124,7 +156,11 @@ export function Timeline({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <form onSubmit={onLogActivity} className="space-y-3 rounded border p-4" noValidate>
-          <h3 className="text-sm font-medium">Log an activity</h3>
+          <h3 className="text-sm font-medium">Record an outreach you made</h3>
+          <p className="text-xs text-muted-foreground">
+            You make the call or send the message yourself; Sangam records it. Nothing here sends
+            anything.
+          </p>
           <div>
             <label htmlFor="activity_type" className="block text-sm">
               Type
@@ -169,6 +205,26 @@ export function Timeline({
             />
           </div>
           <div>
+            <label htmlFor="outcome" className="block text-sm">
+              How did it go
+            </label>
+            <select
+              id="outcome"
+              name="outcome"
+              defaultValue=""
+              data-testid="activity-outcome"
+              className="mt-1 w-full rounded border px-3 py-2"
+            >
+              <option value="">Not recorded</option>
+              <option value="Spoke to them">Spoke to them</option>
+              <option value="No answer">No answer</option>
+              <option value="Call back later">Asked to call back later</option>
+              <option value="Wants a demo">Wants a demo</option>
+              <option value="Sent information">Sent information</option>
+              <option value="Not interested">Not interested</option>
+            </select>
+          </div>
+          <div>
             <label htmlFor="activity_body" className="block text-sm">
               Details
             </label>
@@ -179,6 +235,37 @@ export function Timeline({
               className="mt-1 w-full rounded border px-3 py-2"
             />
           </div>
+
+          {/* The next action is part of this form, not a separate errand. Most
+              calls end with a promise, and a promise recorded ten minutes later
+              is usually a promise not recorded. */}
+          <div className="rounded border border-dashed p-3">
+            <label htmlFor="next_action" className="block text-sm font-medium">
+              And what happens next
+            </label>
+            <input
+              id="next_action"
+              name="next_action"
+              placeholder="Send the pricing note"
+              data-testid="next-action-input"
+              className="mt-1 w-full rounded border px-3 py-2"
+            />
+            <label htmlFor="next_due" className="mt-2 block text-sm">
+              By when
+            </label>
+            <input
+              id="next_due"
+              name="next_due"
+              type="datetime-local"
+              data-testid="next-action-due"
+              className="mt-1 w-full rounded border px-3 py-2"
+            />
+            <p className="mt-2 text-xs text-muted-foreground">
+              Leave blank if there is nothing to do next. Anything typed here becomes a follow-up
+              on this prospect.
+            </p>
+          </div>
+
           <button
             type="submit"
             disabled={busy}

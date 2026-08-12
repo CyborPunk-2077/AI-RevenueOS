@@ -352,6 +352,15 @@ async def duplicate_candidates(*, tenant_id: UUID, lead_id: UUID) -> list[dict[s
                     "email": other.email,
                     "phone": other.phone,
                     "status": other.status,
+                    # A prospecting record often has a business and a phone and
+                    # nothing else. Without this the panel had to fall back to
+                    # "Unknown record", which tells the reviewer nothing about the
+                    # thing they are being asked to merge.
+                    "company": (
+                        str(other.capture.get("company"))
+                        if isinstance(other.capture, dict) and other.capture.get("company")
+                        else None
+                    ),
                 }
                 if other is not None
                 else None

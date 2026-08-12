@@ -25,6 +25,7 @@ from shared.utils.ids import uuid7
 from shared.utils.text import canonical_json
 from shared.utils.timeutil import utcnow
 
+
 def _default_prompt_root() -> Path:
     """Where the versioned prompt files live.
 

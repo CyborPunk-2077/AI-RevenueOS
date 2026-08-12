@@ -120,6 +120,18 @@ export default async function TodayPage(): Promise<JSX.Element> {
   const overdue = tasks.filter((t) => t.is_overdue);
   const dueToday = tasks.filter((t) => !t.is_overdue && isToday(t.due_at));
 
+  // "Who did I just speak to?" - the list a founder checks before picking the
+  // phone back up, so they do not ring somebody twice in a week. Answered within
+  // the last seven days, most recent first.
+  const WEEK = 7 * 86_400_000;
+  const recentlyContacted = openLeads
+    .filter((l) => l.first_response_at !== null && Date.now() - new Date(l.first_response_at).getTime() < WEEK)
+    .sort(
+      (a, b) =>
+        new Date(b.first_response_at ?? 0).getTime() - new Date(a.first_response_at ?? 0).getTime(),
+    )
+    .slice(0, 8);
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -336,6 +348,60 @@ export default async function TodayPage(): Promise<JSX.Element> {
           </Card>
         )}
       </section>
+
+      {/* Answers "who have I already spoken to this week", so the founder does
+          not ring the same business twice. */}
+      {recentlyContacted.length > 0 ? (
+        <section aria-labelledby="recent-heading" className="space-y-3">
+          <h2 id="recent-heading" className="text-sm font-medium text-muted-foreground">
+            Contacted in the last week
+          </h2>
+          <Card className="overflow-x-auto p-0">
+            <table className="w-full text-left text-sm">
+              <caption className="sr-only">Prospects contacted in the last seven days</caption>
+              <thead>
+                <tr className="border-b border-border text-xs uppercase text-muted-foreground">
+                  <th scope="col" className="px-5 py-3">
+                    Who
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Business
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    First reply
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody data-testid="recently-contacted">
+                {recentlyContacted.map((lead) => (
+                  <tr key={lead.id} className="border-b border-border/60 hover:bg-surface-sunken">
+                    <td className="px-5 py-3">
+                      <Link
+                        href={`/leads/${lead.id}`}
+                        className="font-medium text-primary underline-offset-2 hover:underline"
+                      >
+                        {lead.first_name} {lead.last_name ?? ''}
+                      </Link>
+                    </td>
+                    <td className="px-5 py-3 text-muted-foreground">
+                      {String(lead.capture?.company ?? '—')}
+                    </td>
+                    <td className="tabular px-5 py-3 text-muted-foreground">
+                      {formatDateTime(lead.first_response_at)}
+                    </td>
+                    <td className="px-5 py-3">
+                      <StatusPill tone="neutral">{lead.status}</StatusPill>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </section>
+      ) : null}
 
       <section aria-labelledby="pipeline-heading" className="space-y-3">
         <div className="flex items-baseline justify-between">

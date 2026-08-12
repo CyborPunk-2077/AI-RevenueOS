@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, Query, Request, UploadFile, status
+from fastapi import APIRouter, File, Form, Query, Request, Response, UploadFile, status
 
 from api.app.envelope import success
 from api.deps.principal import CurrentPrincipal
@@ -36,6 +36,17 @@ def _mapping(raw: str | None) -> dict[str, str | None] | None:
     if not isinstance(parsed, dict):
         raise ValidationError("`mapping` must be a JSON object of column to field.")
     return {str(k): (str(v) if v is not None else None) for k, v in parsed.items()}
+
+
+@router.get("/imports/leads/template", summary="Download the prospect import template")
+async def lead_import_template(principal: CurrentPrincipal) -> Response:
+    """A three-row example sheet using the founders' own column names."""
+    principal.require("import", "create")
+    return Response(
+        content=importer.build_template_csv(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="sangam-prospect-template.csv"'},
+    )
 
 
 @router.post("/imports/leads/preview", summary="Judge a CSV without importing it")

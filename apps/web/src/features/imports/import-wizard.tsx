@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Card, EmptyState, PageHeader, StatusPill } from '@/features/ui/primitives';
+import { mutate } from '@/lib/csrf';
 
 /**
  * CSV import: upload, confirm the mapping, review, commit.
@@ -31,6 +32,22 @@ interface Rejection {
   readonly reasons: string[];
 }
 
+interface DuplicateMatch {
+  readonly row: number;
+  readonly incoming: string;
+  readonly lead_id: string;
+  readonly name: string;
+  readonly matched_on: string;
+  readonly evidence: string;
+  readonly status: string;
+}
+
+interface SampleRow {
+  readonly row: number;
+  readonly values: Record<string, string>;
+  readonly normalized: Record<string, string | null>;
+}
+
 interface Preview {
   readonly headers: string[];
   readonly suggested_mapping: Record<string, string | null>;
@@ -39,16 +56,19 @@ interface Preview {
   readonly accepted: number;
   readonly rejected: number;
   readonly rejections: Rejection[];
-  readonly already_in_crm: string[];
-  readonly sample: { row: number; values: Record<string, string> }[];
+  readonly duplicates: DuplicateMatch[];
+  readonly will_create: number;
+  readonly sample: SampleRow[];
 }
 
 interface Committed {
   readonly batch_id: string;
   readonly created_ids: string[];
+  readonly created: number;
   readonly accepted: number;
   readonly rejected: number;
   readonly rejections: Rejection[];
+  readonly duplicates: DuplicateMatch[];
 }
 
 /** Fields the server will accept a column mapped to. */
@@ -63,6 +83,9 @@ const TARGETS = [
   'city',
   'source',
   'notes',
+  'website',
+  'industry',
+  'requirement',
 ] as const;
 
 type Step = 'upload' | 'mapping' | 'result';
@@ -87,7 +110,7 @@ export function ImportWizard(): JSX.Element {
     [mapping],
   );
   const contactable = mappedTargets.has('email') || mappedTargets.has('phone');
-  const named = mappedTargets.has('first_name');
+  const named = mappedTargets.has('first_name') || mappedTargets.has('company');
 
   function body(withKey: boolean): FormData {
     const form = new FormData();
@@ -111,7 +134,7 @@ export function ImportWizard(): JSX.Element {
     const form = new FormData();
     form.append('file', chosen);
 
-    const response = await fetch('/api/imports/leads/preview', { method: 'POST', body: form });
+    const response = await mutate('/api/imports/leads/preview', { method: 'POST', body: form });
     if (!response.ok) {
       setError(await message(response, 'That file could not be read.'));
       setFile(null);
@@ -135,7 +158,7 @@ export function ImportWizard(): JSX.Element {
     form.append('file', file);
     form.append('mapping', JSON.stringify(next));
 
-    const response = await fetch('/api/imports/leads/preview', { method: 'POST', body: form });
+    const response = await mutate('/api/imports/leads/preview', { method: 'POST', body: form });
     if (!response.ok) {
       setError(await message(response, 'That mapping is not usable.'));
       setBusy(false);
@@ -151,7 +174,7 @@ export function ImportWizard(): JSX.Element {
     setBusy(true);
     setError(null);
 
-    const response = await fetch('/api/imports/leads', { method: 'POST', body: body(true) });
+    const response = await mutate('/api/imports/leads', { method: 'POST', body: body(true) });
     if (!response.ok) {
       setError(await message(response, 'That import could not be committed.'));
       setBusy(false);
@@ -176,7 +199,7 @@ export function ImportWizard(): JSX.Element {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Import leads"
+        title="Import a prospect list"
         description="Nothing is written until you review what the file contains and confirm."
       />
 
@@ -215,6 +238,24 @@ export function ImportWizard(): JSX.Element {
               Reading the file…
             </p>
           ) : null}
+
+          {/* Offered before the upload, not buried in documentation. The columns
+              are the words a founder would use, and the file maps itself. */}
+          <div className="mt-5 border-t border-border pt-4">
+            <p className="text-sm font-medium">Not sure what the file should look like?</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Download the template, replace the three example businesses with your own, and
+              upload it. Columns you do not have can be left empty or deleted.
+            </p>
+            <a
+              href="/api/imports/leads/template"
+              download="sangam-prospect-template.csv"
+              data-testid="download-template"
+              className="btn btn-ghost mt-3 inline-block"
+            >
+              Download the template
+            </a>
+          </div>
         </Card>
       ) : null}
 
@@ -273,7 +314,7 @@ export function ImportWizard(): JSX.Element {
 
             {!named || !contactable ? (
               <p role="alert" className="mt-3 text-sm text-destructive">
-                {!named ? 'Map a column to first_name. ' : ''}
+                {!named ? 'Map a column to the business name or the contact person. ' : ''}
                 {!contactable
                   ? 'Map a column to email or phone, or the leads created cannot be contacted.'
                   : ''}
@@ -290,17 +331,20 @@ export function ImportWizard(): JSX.Element {
                 checked={assign}
                 onChange={(event) => setAssign(event.target.checked)}
               />
-              Run assignment rules on the imported leads
+              Share the new businesses out using the assignment rules
             </label>
 
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"
+                data-testid="commit-import"
                 onClick={() => void commit()}
-                disabled={busy || preview.accepted === 0 || !named || !contactable}
+                disabled={busy || preview.will_create === 0 || !named || !contactable}
                 className="btn btn-primary"
               >
-                {busy ? 'Importing…' : `Import ${preview.accepted} leads`}
+                {busy
+                  ? 'Importing…'
+                  : `Import ${preview.will_create} ${preview.will_create === 1 ? 'business' : 'businesses'}`}
               </button>
               <button
                 type="button"
@@ -318,19 +362,24 @@ export function ImportWizard(): JSX.Element {
         <>
           <Card>
             <h2 className="heading text-base">Import complete</h2>
-            <p className="mt-2 text-sm">
-              <StatusPill tone="success">{committed.accepted} imported</StatusPill>{' '}
-              {committed.rejected > 0 ? (
-                <StatusPill tone="warning">{committed.rejected} skipped</StatusPill>
+            <div className="mt-2 flex flex-wrap gap-2" data-testid="import-summary">
+              <StatusPill tone="success">{committed.created} added</StatusPill>
+              {committed.duplicates.length > 0 ? (
+                <StatusPill tone="neutral">
+                  {committed.duplicates.length} already had
+                </StatusPill>
               ) : null}
-            </p>
+              {committed.rejected > 0 ? (
+                <StatusPill tone="warning">{committed.rejected} unusable</StatusPill>
+              ) : null}
+            </div>
             <p className="mt-3 text-xs text-muted-foreground">Batch {committed.batch_id}</p>
             <div className="mt-4 flex gap-3">
               <a
                 href="/leads"
                 className="btn btn-primary"
               >
-                View leads
+                See the prospects
               </a>
               <button
                 type="button"
@@ -341,6 +390,10 @@ export function ImportWizard(): JSX.Element {
               </button>
             </div>
           </Card>
+
+          {committed.duplicates.length > 0 ? (
+            <DuplicateTable duplicates={committed.duplicates} />
+          ) : null}
 
           {committed.rejections.length > 0 ? (
             <RejectionTable rejections={committed.rejections} total={committed.rejected} />
@@ -392,28 +445,131 @@ function ReviewPanel({ preview }: { preview: Preview }): JSX.Element {
       <Card>
         <h2 className="heading text-base">What will happen</h2>
         <div className="mt-3 flex flex-wrap gap-2">
-          <StatusPill tone="success">{preview.accepted} will be imported</StatusPill>
-          {preview.rejected > 0 ? (
-            <StatusPill tone="warning">{preview.rejected} will be skipped</StatusPill>
-          ) : null}
-          {preview.already_in_crm.length > 0 ? (
+          <StatusPill tone="success">{preview.will_create} new businesses</StatusPill>
+          {preview.duplicates.length > 0 ? (
             <StatusPill tone="neutral">
-              {preview.already_in_crm.length} already in your CRM
+              {preview.duplicates.length} already in Sangam
             </StatusPill>
+          ) : null}
+          {preview.rejected > 0 ? (
+            <StatusPill tone="warning">{preview.rejected} unusable</StatusPill>
           ) : null}
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
           {preview.total_rows} rows read.{' '}
-          {preview.already_in_crm.length > 0
-            ? 'Addresses already in the CRM are still imported: a newer row for an existing person is normal.'
+          {preview.duplicates.length > 0
+            ? 'Rows matching a business you already have are left alone - the existing record keeps its owner and its history.'
             : ''}
         </p>
       </Card>
+
+      {preview.sample.length > 0 ? <NormalisedSample sample={preview.sample} /> : null}
+
+      {preview.duplicates.length > 0 ? (
+        <DuplicateTable duplicates={preview.duplicates} />
+      ) : null}
 
       {preview.rejected > 0 ? (
         <RejectionTable rejections={preview.rejections} total={preview.rejected} />
       ) : null}
     </>
+  );
+}
+
+/**
+ * What will actually be stored, not what the sheet said.
+ *
+ * A founder trusts an import once they have seen `98450 12201` become
+ * `+91 98450 12201` and a stray `  Sri Lakshmi Sweets ` lose its spaces. Showing
+ * the first few rows post-normalisation is the cheapest way to earn that, and it
+ * catches a wrong column mapping before eight hundred rows land.
+ */
+function NormalisedSample({ sample }: { sample: SampleRow[] }): JSX.Element {
+  return (
+    <Card className="overflow-x-auto p-0">
+      <div className="p-5 pb-0">
+        <h2 className="heading text-base">How the first rows will be saved</h2>
+      </div>
+      <table className="mt-3 w-full text-left text-sm">
+        <caption className="sr-only">Normalised preview of the first rows</caption>
+        <thead>
+          <tr className="border-b border-border text-xs uppercase text-muted-foreground">
+            <th scope="col" className="px-5 py-3">Row</th>
+            <th scope="col" className="px-5 py-3">Name</th>
+            <th scope="col" className="px-5 py-3">Business</th>
+            <th scope="col" className="px-5 py-3">Phone</th>
+            <th scope="col" className="px-5 py-3">Email</th>
+            <th scope="col" className="px-5 py-3">Area</th>
+          </tr>
+        </thead>
+        <tbody data-testid="normalised-sample">
+          {sample.map((row) => (
+            <tr key={row.row} className="border-b border-border/60">
+              <td className="tabular px-5 py-3 text-muted-foreground">{row.row}</td>
+              <td className="px-5 py-3">{row.normalized.name ?? '—'}</td>
+              <td className="px-5 py-3 text-muted-foreground">{row.normalized.company ?? '—'}</td>
+              <td className="tabular px-5 py-3">{row.normalized.phone ?? '—'}</td>
+              <td className="px-5 py-3">{row.normalized.email ?? '—'}</td>
+              <td className="px-5 py-3 text-muted-foreground">{row.normalized.city ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
+
+/**
+ * Businesses this file already has in Sangam, with the evidence for the match.
+ *
+ * Never merged automatically. Two shops sharing a landline is ordinary, and an
+ * accidental merge of two real customers is far harder to unpick than a duplicate
+ * row. The incoming row is kept as an import record pointing at what it matched,
+ * so nothing is thrown away either.
+ */
+function DuplicateTable({ duplicates }: { duplicates: DuplicateMatch[] }): JSX.Element {
+  return (
+    <Card className="overflow-x-auto p-0">
+      <div className="p-5 pb-0">
+        <h2 className="heading text-base">Already in Sangam</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          These rows match a business you already have. They will not be imported again and the
+          existing record will not be changed.
+        </p>
+      </div>
+      <table className="mt-3 w-full text-left text-sm">
+        <caption className="sr-only">Rows matching existing prospects</caption>
+        <thead>
+          <tr className="border-b border-border text-xs uppercase text-muted-foreground">
+            <th scope="col" className="px-5 py-3">Row</th>
+            <th scope="col" className="px-5 py-3">In your file</th>
+            <th scope="col" className="px-5 py-3">Already in Sangam</th>
+            <th scope="col" className="px-5 py-3">Matched on</th>
+          </tr>
+        </thead>
+        <tbody data-testid="duplicate-rows">
+          {duplicates.map((match) => (
+            <tr key={`${match.row}-${match.lead_id}`} className="border-b border-border/60">
+              <td className="tabular px-5 py-3 text-muted-foreground">{match.row}</td>
+              <td className="px-5 py-3">{match.incoming}</td>
+              <td className="px-5 py-3">
+                <a
+                  href={`/leads/${match.lead_id}`}
+                  className="text-primary underline-offset-2 hover:underline"
+                >
+                  {match.name || 'Existing prospect'}
+                </a>{' '}
+                <span className="text-xs text-muted-foreground">({match.status})</span>
+              </td>
+              <td className="px-5 py-3 text-muted-foreground">
+                {match.matched_on === 'phone' ? 'Same phone number' : 'Same email address'}
+                <span className="ml-2 text-xs">{match.evidence}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
   );
 }
 
@@ -453,7 +609,7 @@ function RejectionTable({
             </th>
           </tr>
         </thead>
-        <tbody className="stagger">
+        <tbody className="stagger" data-testid="rejection-rows">
           {rejections.map((rejection) => (
             <tr key={rejection.row} className="border-b border-border/60 align-top">
               <th scope="row" className="py-2 font-normal tabular">

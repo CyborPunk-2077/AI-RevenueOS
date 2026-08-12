@@ -1,7 +1,7 @@
 # Sangam — feature reality map
 
-Last established: **2026-08-12** (second session), against the running local
-stack at commit `cc5e9aa` plus this session's work.
+Last established: **2026-08-13** (session 3: founder dogfooding), against the
+running local stack at commit `405e227` plus this session's work.
 
 This file records what is *actually true when the product is running*, not what
 the specification intends. Where something was checked in a browser this session
@@ -41,7 +41,7 @@ trust.
 | Notes | VERIFIED-USABLE | Editable by their author only, enforced server-side. |
 | Contacts and accounts | VERIFIED-USABLE | Pre-existing; list, search, create, edit, timeline. |
 | Deals and pipeline | VERIFIED-USABLE | Board by stage, stage moves, won/lost with loss reason. Seeded and viewed this session; stage-move interaction not re-exercised. |
-| Duplicate detection | PARTIAL | Candidates are detected, surfaced with reason and confidence, and left for a human. The merge path exists in the API but was not exercised, and the candidate panel renders a poor summary ("Unknown record") when the duplicate has no email. |
+| Duplicate detection | VERIFIED-USABLE (detection) / PARTIAL (merge) | Candidates are detected on import and on demand, surfaced with the evidence, and left for a human. The panel now identifies the counterpart by business name, person, phone or email. The merge path exists in the API but has still not been exercised. |
 
 ## Everything else
 
@@ -62,7 +62,10 @@ trust.
 | Payments | PROVIDER-GATED | Razorpay adapter exists. Needs a commercial agreement and KYC. |
 | Workflows / automations | BACKEND-ONLY | Engine, schedules and outbox all run. No builder screen, no logs screen. |
 | Forms and capture | PARTIAL | Builder and publish-snapshot exist with a publish permission. Publishing puts an unauthenticated write surface on the internet, so it is treated as a sensitive permission. Not exercised this session. |
-| CSV import | PARTIAL | Wizard exists with an e2e spec. Never run against real customer data — treat as untested. |
+| CSV prospect import | VERIFIED-USABLE | **Proven in a browser this session.** Upload, column mapping, cleaned-up preview values, duplicate matching against existing records, per-row rejection reasons, and a created/already-had/unusable summary. CSV only; nothing claims XLSX. The template download uses the founders' own column names. |
+| Quick prospect capture | VERIFIED-USABLE | **Rebuilt this session.** Business name plus one contact route is the whole required form; contact person, area, industry, website, source, pain and owner sit behind "More details". A business with no named contact is a first-class record. |
+| Import duplicate matching | VERIFIED-USABLE | Matches on email *and* phone (last ten digits, so `+91 98450 12201` and `09845012201` are the same number). The existing record is never touched; the incoming row is kept as a source event pointing at what it matched. Nothing is merged automatically. |
+| Recording outreach made outside Sangam | VERIFIED-USABLE | Channel, direction, outcome, note and the next action with a due date, in one save. Feeds the session-2 first-response measurement unchanged. Sangam sends nothing and says so on the form. |
 | AI / copilot | PROVIDER-GATED | Gateway, prompt registry, evals and degradation paths exist. No model provider is configured. Every AI-touching path has a rule-based fallback; qualification proves it. |
 | Notifications | BACKEND-ONLY | Events flow through the outbox. No in-product notification surface. |
 | Audit and consent | VERIFIED-USABLE (backend) | Every mutation writes an immutable audit row in the same transaction. Tenant-scoped. No screen to read it. |
@@ -71,6 +74,26 @@ trust.
 | Deployment | SPEC-ONLY | Terraform for four environments, statically validated only. No AWS account. Nothing has ever been deployed. |
 
 ---
+
+## Defects found and fixed in session 3 (founder dogfooding)
+
+1. **Import could never have worked from the browser.** The upload posted without
+   a CSRF token, so every preview returned "CSRF validation failed". This is why
+   the feature had backend tests and no trustworthy end-to-end story. `mutate()`
+   now carries the token and passes `FormData` through untouched, letting the
+   browser set the multipart boundary.
+2. **Import matched duplicates on email only**, so the same business imported from
+   two lists with the same phone and no address was created twice. Phone matching
+   was the difference between catching it and quietly building twins.
+3. **`--refresh` could not run once the tenant had imports.** It deleted
+   `lead_source_events`, which is append-only; it had only ever appeared to work
+   because the table was empty. Removed from the delete list, same as activities.
+4. **Browser tests were filling the founders' workspace.** Ten invented businesses
+   had already accumulated there. Both suites now run in a dedicated `sangam-e2e`
+   tenant, which is the boundary tenancy already enforces.
+5. **A prospecting list could not be imported at all** if it had no named contact,
+   because `first_name` was required. A list of businesses to approach usually has
+   the shop and a number and nothing else.
 
 ## Defects found and fixed in session 2 (measurement)
 
@@ -119,9 +142,10 @@ trust.
 
 ## Known defects not fixed
 
-- The duplicate panel shows "Unknown record — no contact details" when the
-  candidate has no email, which is exactly the case the seeded duplicate
-  demonstrates. It should fall back to the phone number and captured company.
+- ~~The duplicate panel shows "Unknown record".~~ **Fixed this session.** The
+  candidate payload now carries the business name and the panel falls back
+  business → person → phone → email. A genuinely missing counterpart now says so
+  instead of pretending to be an unknown record.
 - Analytics figures are unreconciled (above).
 - **Sangam measures what is recorded, not what happened.** A call that nobody logs
   leaves the prospect showing as waiting. This is the honest behaviour — the

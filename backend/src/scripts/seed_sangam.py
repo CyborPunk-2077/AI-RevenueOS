@@ -61,6 +61,18 @@ logger = get_logger("scripts.seed_sangam")
 
 SANGAM_ID = UUID("01890000-0000-7000-8000-00000005a76a")
 
+#: A second, deliberately empty workspace that exists only for the browser tests.
+#:
+#: The founders are about to run their real prospecting out of the `sangam`
+#: workspace. A browser suite that invents three businesses per run would fill
+#: their prospect list with rubbish within a week, and the obvious workarounds are
+#: worse: deleting rows afterwards fights the append-only activity trail, and an
+#: `is_test` column on every business entity spreads a testing concern through the
+#: data model. Tenancy already draws exactly this boundary and is enforced all the
+#: way down to row-level security, so the tests get their own tenant and the
+#: founders' workspace is never written to.
+SANGAM_E2E_ID = UUID("01890000-0000-7000-8000-0000000e2e00")
+
 # The founders and the one salesperson. Scope differs on purpose: Kiran sees only
 # his own prospects, which is what makes "clear ownership" visible rather than
 # asserted.
@@ -68,6 +80,14 @@ TEAM: tuple[tuple[str, str, Role, str], ...] = (
     ("abhishek@sangam.co.in", "Abhishek Jindal", Role.OWNER, "global"),
     ("priya@sangam.co.in", "Priya Nair", Role.MANAGER, "team"),
     ("kiran@sangam.co.in", "Kiran Deshpande", Role.MEMBER, "self"),
+)
+
+#: The test workspace needs an owner to sign in as and one colleague to assign
+#: work to, and nothing else. It is never seeded with prospects: every scenario
+#: creates exactly what it asserts on.
+E2E_TEAM: tuple[tuple[str, str, Role, str], ...] = (
+    ("owner@sangam-e2e.test", "Test Owner", Role.OWNER, "global"),
+    ("rep@sangam-e2e.test", "Test Rep", Role.MANAGER, "team"),
 )
 
 MINUTE = 60
@@ -806,67 +826,97 @@ async def _ensure_role(session: Any, tenant_id: UUID, role: Role, scope: str) ->
     return role_id
 
 
-async def ensure_workspace(password_hash: str) -> dict[str, UUID]:
-    """Tenant, roles and the three people. Idempotent; re-running resets credentials."""
+async def _ensure_tenant_and_people(
+    session: Any,
+    *,
+    tenant_id: UUID,
+    name: str,
+    slug: str,
+    team: tuple[tuple[str, str, Role, str], ...],
+    password_hash: str,
+) -> dict[str, UUID]:
+    """One workspace and its people. Idempotent; a re-run repairs the credentials."""
     users: dict[str, UUID] = {}
 
-    async with admin_session() as session:
-        exists = (
-            await session.execute(select(Tenant.id).where(Tenant.id == SANGAM_ID))
+    exists = (
+        await session.execute(select(Tenant.id).where(Tenant.id == tenant_id))
+    ).scalar_one_or_none()
+    if not exists:
+        session.add(
+            Tenant(
+                id=tenant_id,
+                name=name,
+                slug=slug,
+                industry_code="other_sme",
+                plan_code="growth",
+                status="active",
+                timezone="Asia/Kolkata",
+                currency="INR",
+                locale="en-IN",
+                version=1,
+            )
+        )
+        await session.flush()
+
+    for email, full_name, role, scope in team:
+        role_id = await _ensure_role(session, tenant_id, role, scope)
+        user = (
+            await session.execute(
+                select(User).where(User.tenant_id == tenant_id, User.email == email)
+            )
         ).scalar_one_or_none()
-        if not exists:
+        if user is None:
+            user_id = uuid7()
             session.add(
-                Tenant(
-                    id=SANGAM_ID,
-                    name="Sangam",
-                    slug="sangam",
-                    industry_code="other_sme",
-                    plan_code="growth",
+                User(
+                    id=user_id,
+                    tenant_id=tenant_id,
+                    email=email,
+                    full_name=full_name,
+                    password_hash=password_hash,
+                    password_changed_at=utcnow(),
                     status="active",
+                    email_verified_at=utcnow(),
+                    is_owner=role is Role.OWNER,
                     timezone="Asia/Kolkata",
-                    currency="INR",
-                    locale="en-IN",
                     version=1,
                 )
             )
-            await session.flush()
+            session.add(UserRole(tenant_id=tenant_id, user_id=user_id, role_id=role_id))
+        else:
+            # A re-run must leave every printed credential working.
+            user.password_hash = password_hash
+            user.status = "active"
+            user.failed_login_count = 0
+            user.locked_until = None
+            user.mfa_enabled = False
+            user.mfa_secret_encrypted = None
+            user.mfa_recovery_codes = []
+            user_id = user.id
+        users[email] = user_id
 
-        for email, full_name, role, scope in TEAM:
-            role_id = await _ensure_role(session, SANGAM_ID, role, scope)
-            user = (
-                await session.execute(
-                    select(User).where(User.tenant_id == SANGAM_ID, User.email == email)
-                )
-            ).scalar_one_or_none()
-            if user is None:
-                user_id = uuid7()
-                session.add(
-                    User(
-                        id=user_id,
-                        tenant_id=SANGAM_ID,
-                        email=email,
-                        full_name=full_name,
-                        password_hash=password_hash,
-                        password_changed_at=utcnow(),
-                        status="active",
-                        email_verified_at=utcnow(),
-                        is_owner=role is Role.OWNER,
-                        timezone="Asia/Kolkata",
-                        version=1,
-                    )
-                )
-                session.add(UserRole(tenant_id=SANGAM_ID, user_id=user_id, role_id=role_id))
-            else:
-                # A re-run must leave every printed credential working.
-                user.password_hash = password_hash
-                user.status = "active"
-                user.failed_login_count = 0
-                user.locked_until = None
-                user.mfa_enabled = False
-                user.mfa_secret_encrypted = None
-                user.mfa_recovery_codes = []
-                user_id = user.id
-            users[email] = user_id
+    return users
+
+
+async def ensure_workspace(password_hash: str) -> dict[str, UUID]:
+    """The founders' workspace, plus the empty one the browser tests write to."""
+    async with admin_session() as session:
+        users = await _ensure_tenant_and_people(
+            session,
+            tenant_id=SANGAM_ID,
+            name="Sangam",
+            slug="sangam",
+            team=TEAM,
+            password_hash=password_hash,
+        )
+        await _ensure_tenant_and_people(
+            session,
+            tenant_id=SANGAM_E2E_ID,
+            name="Sangam Test Workspace",
+            slug="sangam-e2e",
+            team=E2E_TEAM,
+            password_hash=password_hash,
+        )
 
     return users
 
@@ -874,12 +924,15 @@ async def ensure_workspace(password_hash: str) -> dict[str, UUID]:
 async def refresh() -> None:
     """Delete this tenant's synthetic operational rows. Never touches another tenant.
 
-    `app.activities` is deliberately absent from the list. A database trigger makes
-    that table append-only, and the correct response to a guarantee like that is to
-    work with it, not to disable it for the convenience of a seed script. The rows
-    left behind reference leads that no longer exist, so nothing renders them; they
-    are dead weight in a local database and nothing more. For a genuinely empty
-    slate, `RESET_DEMO.cmd` drops the volume.
+    `app.activities` and `app.lead_source_events` are deliberately absent from the
+    list. A database trigger makes both append-only, and the correct response to a
+    guarantee like that is to work with it, not to disable it for the convenience
+    of a seed script. The rows left behind reference leads that no longer exist, so
+    nothing renders them; they are dead weight in a local database and nothing
+    more. For a genuinely empty slate, `RESET_DEMO.cmd` drops the volume.
+
+    (The source-events line used to be in this list and appeared to work, because
+    until imports were used in this tenant there were never any rows to delete.)
     """
     async with admin_session() as session:
         for table in (
@@ -892,7 +945,6 @@ async def refresh() -> None:
             "app.accounts",
             "app.contacts",
             "app.lead_duplicate_candidates",
-            "app.lead_source_events",
             "app.leads",
         ):
             # Fixed, in-repo allowlist; no user input reaches this string.
@@ -993,6 +1045,13 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
                     source=row["source"],
                     source_channel="web",
                     capture={
+                        # Marks this as one of the invented demonstration
+                        # businesses. Once the founders start entering real
+                        # prospects into this same workspace, the two need to be
+                        # tellable apart at a glance - and a flag on the record
+                        # itself beats a separate tenant nobody remembers to
+                        # switch to.
+                        "demo_data": True,
                         "company": row["company"],
                         "industry": row["industry"],
                         "location": row["location"],
@@ -1249,6 +1308,8 @@ async def main() -> int:
     print("=" * 66)  # noqa: T201
     for email, _name, role, _scope in TEAM:
         print(f"  {email:26} {role.value}")  # noqa: T201
+    print("\n  browser tests use a separate, empty workspace:")  # noqa: T201
+    print(f"  {E2E_TEAM[0][0]:26} (sangam-e2e)")  # noqa: T201
     print(f"\n  password: {password}")  # noqa: T201
     if generated:
         print("  (generated for this run only; set DEMO_PASSWORD to choose your own)")  # noqa: T201

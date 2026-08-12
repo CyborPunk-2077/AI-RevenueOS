@@ -11,9 +11,8 @@ import { resolve } from 'node:path';
  * schedule every enquiry in the book and this figure must not move.
  *
  * The prospect is created here, through the UI, rather than borrowed from the
- * seeded workspace. Two reasons: the run is repeatable (the seeded Shreya would
- * already be answered on the second run), and the founders' lived-in demo data is
- * left alone.
+ * seeded workspace: the run has to be repeatable, and a seeded prospect would
+ * already be answered on the second run.
  *
  * Requires the stack running:
  *   .\RUN_DEMO.cmd
@@ -22,7 +21,9 @@ import { resolve } from 'node:path';
  */
 
 const PASSWORD = process.env.DEMO_PASSWORD ?? 'sangam-demo-2026';
-const OWNER = 'abhishek@sangam.co.in';
+// Runs in the browser-test workspace, not the founders' own. See
+// `sangam-founder-prospecting.spec.ts` for why that boundary is a tenant.
+const OWNER = 'owner@sangam-e2e.test';
 
 const EVIDENCE = resolve(__dirname, '../../../artifacts/visual-evidence/session-02-first-response');
 
@@ -74,9 +75,14 @@ test('first response is recorded only by real outbound contact, and only once', 
   // --- 1. a genuinely unanswered prospect arrives ---------------------------
   await page.getByTestId('nav-leads').click();
   await page.getByTestId('new-lead').click();
-  await page.getByLabel('First name').fill('Nikhil');
-  await page.getByLabel('Last name').fill(surname);
+  // Quick add now leads with the business and one way to reach it; the contact
+  // person sits behind "More details", because a prospecting list rarely has one
+  // on day one.
+  await page.getByTestId('lead-company').fill(`Sharma Auto Works ${stamp}`);
   await page.getByLabel('Email').fill(`nikhil-${stamp}@sharmaautoworks.in`);
+  await page.getByTestId('more-details').click();
+  await page.getByLabel('Contact person').fill('Nikhil');
+  await page.getByLabel('Surname').fill(surname);
   await page.getByTestId('create-lead').click();
 
   const row = page.getByRole('link', { name: new RegExp(`Nikhil ${surname}`) });
@@ -94,9 +100,9 @@ test('first response is recorded only by real outbound contact, and only once', 
   const leadUrl = page.url();
 
   // --- 2. assignment is not an answer ---------------------------------------
-  await page.getByTestId('lead-owner-select').selectOption({ label: 'Priya Nair' });
+  await page.getByTestId('lead-owner-select').selectOption({ label: 'Test Rep' });
   await page.getByTestId('assign-lead').click();
-  await expect(page.getByTestId('lead-owner-current')).toContainText('Priya Nair');
+  await expect(page.getByTestId('lead-owner-current')).toContainText('Test Rep');
   await expect(page.getByTestId('lead-awaiting-response')).toBeVisible();
 
   // --- 3. qualification is not an answer ------------------------------------

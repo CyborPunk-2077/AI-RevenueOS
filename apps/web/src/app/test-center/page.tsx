@@ -96,9 +96,9 @@ const CORE: readonly Feature[] = [
     href: '/deals',
   },
   {
-    name: 'Duplicate prospects',
-    status: 'partial',
-    what: 'Likely duplicates are detected and shown for a human to resolve; merging is not finished.',
+    name: 'Duplicate businesses',
+    status: 'usable',
+    what: 'An import matches on phone and email against what you already have, shows the evidence, and leaves the existing record untouched. Merging by hand is not finished.',
     href: '/leads',
   },
   {
@@ -107,9 +107,22 @@ const CORE: readonly Feature[] = [
     what: 'Colleagues can be invited; the invitation email cannot be delivered yet.',
   },
   {
-    name: 'Importing a spreadsheet',
-    status: 'partial',
-    what: 'The import wizard exists. Treat it as untested until it has been run on real data.',
+    name: 'Adding a business by hand',
+    status: 'usable',
+    what: 'Name, phone and one line is enough; the rest is optional and can wait.',
+    href: '/leads',
+  },
+  {
+    name: 'Importing a prospect list',
+    status: 'usable',
+    what: 'CSV only. Preview, column mapping, cleaned-up values, duplicate and unusable rows all shown before anything is saved.',
+    href: '/leads',
+  },
+  {
+    name: 'Recording outreach you made yourself',
+    status: 'usable',
+    what: 'Log the call or message you made outside Sangam, with the outcome and the next action, in one go.',
+    href: '/leads',
   },
   {
     name: 'Reports',
@@ -216,6 +229,12 @@ const SCENARIOS: readonly { title: string; steps: string; href: string }[] = [
     href: '/leads',
   },
   {
+    title: 'Import a list of businesses to approach',
+    steps:
+      'Import: download the template, put three businesses in it, upload. Anything you already have is shown before it saves, and is left alone.',
+    href: '/sangam/imports',
+  },
+  {
     title: 'A deal was won, and one was lost',
     steps: 'The board shows both, and the lost one records why.',
     href: '/deals',
@@ -250,13 +269,20 @@ export default async function TestCenterPage(): Promise<JSX.Element> {
 
       <Card>
         <h2 className="font-medium">
-          The commercial workflow we are currently backing: prospect follow-up and leakage
-          prevention
+          What we currently trust: founder prospecting, follow-up and leakage prevention
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Enquiry &rarr; owner &rarr; qualification &rarr; next action &rarr; follow-up &rarr;
-          history &rarr; deal. This is the one path built end to end and checked in a browser.
-          Everything else on this page is either supporting it or not ready.
+          Add or import a business &rarr; spot the ones you already have &rarr; give it an owner
+          &rarr; see who has never been contacted &rarr; record the call you made &rarr; schedule
+          what happens next &rarr; watch it appear on your day. This is the one path built end to
+          end and checked in a browser. Everything else on this page is supporting it or not ready.
+        </p>
+        <p className="mt-3 rounded-md border border-dashed border-border p-3 text-sm">
+          <span className="font-medium">Sangam does not send anything.</span> You make the call,
+          send the WhatsApp message or write the email yourself, on your own phone or laptop, and
+          then record here what happened. Everything on the Today screen is counted from what you
+          recorded. Automatic sending needs a WhatsApp or email account that nobody has opened yet
+          &mdash; see the table at the bottom of this page.
         </p>
         <p className="mt-3 text-sm">
           <Link href="/today" className="text-primary underline-offset-2 hover:underline">

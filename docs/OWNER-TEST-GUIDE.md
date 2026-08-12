@@ -202,7 +202,101 @@ send, that is the system reporting its own state, not a claim we typed in.
 
 ---
 
-## 4. The isolation check — worth doing once
+## 4. Start using Sangam for our real prospecting
+
+The walk above uses invented businesses. This section is for putting **real** ones
+in. Everything below is ready to use today.
+
+Sample businesses are labelled **sample** in the prospect list, so your own
+entries are never confused with the demonstration ones.
+
+### 1. Add one real business
+
+**Prospects → Add a business.** You need a business name and one way to reach
+them — a phone number is enough. That is the whole required form; it takes about
+fifteen seconds.
+
+Click **More details** if you already know the contact person, the area, what they
+do, or why you think they need us. If you do not, leave it. You can add it later.
+
+### 2. Import a list
+
+**Import** in the menu.
+
+If you have never made one of these files, click **Download the template** first.
+It has three example businesses in it. Delete them, type your own in, save, and
+upload it. Columns you do not have can stay empty or be deleted entirely.
+
+Nothing is saved until you press the button. Before that, Sangam shows you:
+
+- **How the first rows will be saved** — the tidied-up phone numbers and names, so
+  you can see it read your file correctly
+- **Already in Sangam** — businesses you already have, and *why* it thinks so
+- **Rows that will not be imported** — with the reason, so you can fix the file
+
+Only CSV files work. If you have an Excel file, use *Save As → CSV UTF-8*.
+
+### 3. Understand the duplicate warnings
+
+If a business you are importing has the same phone number or email as one you
+already have, Sangam will **not** import it again and will **not** change your
+existing record. It shows you which one it matched and on what.
+
+This is deliberate. Your existing record keeps its owner, its notes and its call
+history. Nothing is ever merged automatically — two shops can genuinely share a
+landline, and an unpicked merge is much harder to undo than a duplicate.
+
+### 4. Find out who to contact today
+
+**Today.** The four boxes at the top are your morning. Click **Waiting for a first
+reply** to get the list of businesses nobody has spoken to yet.
+
+Further down: what is overdue, what is due today, and who you have already
+contacted this week — so you do not ring the same shop twice.
+
+### 5. Make the call yourself
+
+Ring them, send the WhatsApp message, or write the email — on your own phone or
+laptop, as you do now. **Sangam does not send anything.** It is your record of
+what happened, not a sending tool.
+
+### 6. Record what happened
+
+Open the business, go to **Record an outreach you made**, and fill in:
+
+- what kind of contact it was
+- **We contacted them** (or *They contacted us*, if they rang you)
+- how it went
+- a line or two of detail
+- **and what happens next**, with a date
+
+One save does all of it. The next action becomes a follow-up automatically — no
+second form.
+
+The moment you record an outbound contact, that business stops being counted as
+waiting, and Sangam works out how long it took you to get back to them.
+
+### 7. Come back tomorrow
+
+Your promise is on **Today** and in **Follow-ups**. When you have done it, press
+**Done** and the count drops.
+
+If you never record the follow-up, Sangam keeps showing it as overdue. That is the
+entire point of the product.
+
+### 8. When it goes somewhere — or does not
+
+If the business becomes a real opportunity, open **Deals** and add it, with a
+rough value and a stage. Move it along as things progress, and mark it won or
+lost. If it is lost, write *why* — that is the only part of a lost deal worth
+keeping.
+
+If a business is simply not for us, open it, change the status to **disqualified**
+and give a reason. It leaves your daily lists but stays on record.
+
+---
+
+## 5. The isolation check — worth doing once
 
 This is the one that matters if you ever sell this.
 
@@ -218,7 +312,7 @@ show one business another business's customers.
 
 ---
 
-## 5. What is deliberately not there yet
+## 6. What is deliberately not there yet
 
 Being blunt is the point of this section.
 
@@ -247,7 +341,7 @@ writing things down.
 
 ---
 
-## 6. If something goes wrong
+## 7. If something goes wrong
 
 **It says Docker is not installed.** That is the one thing Sangam cannot do for
 you. Install Docker Desktop from the link in the message, restart the computer if

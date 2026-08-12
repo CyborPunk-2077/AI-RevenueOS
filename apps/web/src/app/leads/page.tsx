@@ -32,6 +32,7 @@ interface Task {
 interface Member {
   readonly id: string;
   readonly full_name: string;
+  readonly is_active: boolean;
 }
 
 const STATUS_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'danger'> = {
@@ -144,7 +145,7 @@ export default async function LeadsPage({
         </p>
       ) : null}
 
-      <NewLeadForm />
+      <NewLeadForm members={membersResult.data?.members ?? []} />
 
       <section aria-labelledby="lead-list-heading">
         <h2 id="lead-list-heading" className="sr-only">
@@ -214,6 +215,16 @@ export default async function LeadsPage({
                             className="ml-2 text-xs font-medium text-destructive"
                           >
                             no reply yet
+                          </span>
+                        ) : null}
+                        {/* Invented demonstration businesses, so a founder never
+                            mistakes one for somebody they should ring. */}
+                        {lead.capture?.demo_data ? (
+                          <span
+                            data-testid={`demo-${lead.id}`}
+                            className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                          >
+                            sample
                           </span>
                         ) : null}
                       </td>
