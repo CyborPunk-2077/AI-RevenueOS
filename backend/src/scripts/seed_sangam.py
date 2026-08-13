@@ -36,7 +36,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import select
 
 from application.tenants.demo_data import empty_manifest, record_manifest
-from domain.auth.permissions import ROLE_PERMISSIONS, Role
+from application.tenants.provisioning import (
+    FOUNDER,
+    TEST,
+    Person,
+    WorkspaceSpec,
+    provision_workspace,
+)
+from domain.auth.permissions import Role
 from infrastructure.auth.passwords import hash_password, validate_password
 from infrastructure.database.models.crm import (
     Account,
@@ -49,9 +56,7 @@ from infrastructure.database.models.crm import (
     Task,
 )
 from infrastructure.database.models.leads import Lead, LeadDuplicateCandidate
-from infrastructure.database.models.tenancy import Branch, Team, TeamMember, Tenant
-from infrastructure.database.models.users import Role as RoleRow
-from infrastructure.database.models.users import RolePermission, User, UserRole
+from infrastructure.database.models.tenancy import Team
 from infrastructure.database.session import admin_session, tenant_session
 from infrastructure.logging.setup import configure_logging, get_logger
 from shared.settings import get_settings
@@ -89,6 +94,28 @@ TEAM: tuple[tuple[str, str, Role, str], ...] = (
 E2E_TEAM: tuple[tuple[str, str, Role, str], ...] = (
     ("owner@sangam-e2e.test", "Test Owner", Role.OWNER, "global"),
     ("rep@sangam-e2e.test", "Test Rep", Role.MANAGER, "team"),
+)
+
+#: A third workspace, shaped exactly like a real pilot, that the session-5 browser
+#: acceptance drives.
+#:
+#: It is stamped `test`, not `pilot`, and that is deliberate. A `pilot` workspace
+#: counts as real data everywhere it matters - `founder_data_report.py` counts it,
+#: and `RESET_DEMO` refuses while it exists - so labelling a workspace that
+#: browser tests write to as a pilot would make every reset look dangerous for no
+#: reason, which is how a safety prompt stops being read.
+#:
+#: What it *does* prove is the thing the pilot depends on: it is provisioned by
+#: the same `provision_workspace` call, with all three roles and their real
+#: scopes, so a manager here has a team for the same reason a pilot manager does.
+#: Provisioning of a genuinely pilot-kind workspace is proven separately, against
+#: a throwaway tenant, in `tests/integration/test_pilot_provisioning.py`.
+SANGAM_PILOT_E2E_ID = UUID("01890000-0000-7000-8000-0000000b1107")
+
+PILOT_E2E_TEAM: tuple[tuple[str, str, Role, str], ...] = (
+    ("owner@pilot-e2e.test", "Pilot Owner", Role.OWNER, "global"),
+    ("manager@pilot-e2e.test", "Pilot Manager", Role.MANAGER, "team"),
+    ("sales@pilot-e2e.test", "Pilot Salesperson", Role.MEMBER, "self"),
 )
 
 MINUTE = 60
@@ -801,192 +828,72 @@ def resolve_password() -> tuple[str, bool]:
     return f"sangam-{secrets.token_urlsafe(24)}", True
 
 
-async def _ensure_role(session: Any, tenant_id: UUID, role: Role, scope: str) -> UUID:
-    existing = (
-        await session.execute(
-            select(RoleRow.id).where(RoleRow.tenant_id == tenant_id, RoleRow.name == role.value)
-        )
-    ).scalar_one_or_none()
-    if existing:
-        return UUID(str(existing))
-
-    role_id = uuid7()
-    session.add(
-        RoleRow(
-            id=role_id,
-            tenant_id=tenant_id,
-            name=role.value,
-            description=f"Sangam {role.value}",
-            is_system=True,
-            default_scope=scope,
-            version=1,
-        )
-    )
-    for code in sorted(ROLE_PERMISSIONS[role]):
-        session.add(RolePermission(tenant_id=tenant_id, role_id=role_id, permission_code=code))
-    return role_id
-
-
-async def _ensure_tenant_and_people(
-    session: Any,
+def _spec(
     *,
     tenant_id: UUID,
     name: str,
     slug: str,
     team: tuple[tuple[str, str, Role, str], ...],
-    password_hash: str,
-) -> dict[str, UUID]:
-    """One workspace and its people. Idempotent; a re-run repairs the credentials."""
-    users: dict[str, UUID] = {}
-
-    exists = (
-        await session.execute(select(Tenant.id).where(Tenant.id == tenant_id))
-    ).scalar_one_or_none()
-    if not exists:
-        session.add(
-            Tenant(
-                id=tenant_id,
-                name=name,
-                slug=slug,
-                industry_code="other_sme",
-                plan_code="growth",
-                status="active",
-                timezone="Asia/Kolkata",
-                currency="INR",
-                locale="en-IN",
-                version=1,
-            )
-        )
-        await session.flush()
-
-    for email, full_name, role, scope in team:
-        role_id = await _ensure_role(session, tenant_id, role, scope)
-        user = (
-            await session.execute(
-                select(User).where(User.tenant_id == tenant_id, User.email == email)
-            )
-        ).scalar_one_or_none()
-        if user is None:
-            user_id = uuid7()
-            session.add(
-                User(
-                    id=user_id,
-                    tenant_id=tenant_id,
-                    email=email,
-                    full_name=full_name,
-                    password_hash=password_hash,
-                    password_changed_at=utcnow(),
-                    status="active",
-                    email_verified_at=utcnow(),
-                    is_owner=role is Role.OWNER,
-                    timezone="Asia/Kolkata",
-                    version=1,
-                )
-            )
-            session.add(UserRole(tenant_id=tenant_id, user_id=user_id, role_id=role_id))
-        else:
-            # A re-run must leave every printed credential working.
-            user.password_hash = password_hash
-            user.status = "active"
-            user.failed_login_count = 0
-            user.locked_until = None
-            user.mfa_enabled = False
-            user.mfa_secret_encrypted = None
-            user.mfa_recovery_codes = []
-            user_id = user.id
-        users[email] = user_id
-
-    return users
-
-
-async def _ensure_sales_team(session: Any, tenant_id: UUID, users: dict[str, UUID]) -> UUID:
-    """One branch, one team, and everybody who is not global-scoped inside it.
-
-    A manager's role scope is `team`, and the repository layer filters on the
-    teams in their token - correctly failing closed when there are none. Seeding
-    managers without a team therefore produced a user who could not see or
-    reassign a single prospect, and was told "not found" for every one of them.
-    The workspace has to be internally consistent, not merely populated.
-    """
-    branch_id = (
-        await session.execute(
-            select(Branch.id).where(Branch.tenant_id == tenant_id, Branch.code == "HQ")
-        )
-    ).scalar_one_or_none()
-    if branch_id is None:
-        branch_id = uuid7()
-        session.add(
-            Branch(
-                id=branch_id,
-                tenant_id=tenant_id,
-                name="Bengaluru",
-                code="HQ",
-                address={"city": "Bengaluru", "state": "Karnataka", "country": "IN"},
-                timezone="Asia/Kolkata",
-                is_headquarters=True,
-                version=1,
-            )
-        )
-        await session.flush()
-
-    team_id = (
-        await session.execute(
-            select(Team.id).where(Team.tenant_id == tenant_id, Team.name == "Sales")
-        )
-    ).scalar_one_or_none()
-    if team_id is None:
-        team_id = uuid7()
-        session.add(
-            Team(
-                id=team_id,
-                tenant_id=tenant_id,
-                branch_id=branch_id,
-                name="Sales",
-                version=1,
-            )
-        )
-        await session.flush()
-
-    for user_id in users.values():
-        existing = (
-            await session.execute(
-                select(TeamMember.id).where(
-                    TeamMember.team_id == team_id, TeamMember.user_id == user_id
-                )
-            )
-        ).scalar_one_or_none()
-        if existing is None:
-            session.add(
-                TeamMember(id=uuid7(), tenant_id=tenant_id, team_id=team_id, user_id=user_id)
-            )
-
-    return UUID(str(team_id))
+    kind: str,
+) -> WorkspaceSpec:
+    """This script's terse team tuples, in the shared provisioning vocabulary."""
+    return WorkspaceSpec(
+        tenant_id=tenant_id,
+        name=name,
+        slug=slug,
+        kind=kind,
+        people=tuple(
+            Person(email=email, full_name=full_name, role=role, scope=scope)
+            for email, full_name, role, scope in team
+        ),
+        branch_name="Bengaluru",
+    )
 
 
 async def ensure_workspace(password_hash: str) -> dict[str, UUID]:
-    """The founders' workspace, plus the empty one the browser tests write to."""
+    """The founders' workspace, plus the empty one the browser tests write to.
+
+    The tenant, role, user, branch and team routines this used to carry live in
+    `application.tenants.provisioning` now, because a pilot needs exactly the same
+    ones and a second copy is how a workspace ends up with managers and no team -
+    the defect the founders hit in session 4.
+    """
     async with admin_session() as session:
-        users = await _ensure_tenant_and_people(
+        result = await provision_workspace(
             session,
-            tenant_id=SANGAM_ID,
-            name="Sangam",
-            slug="sangam",
-            team=TEAM,
+            _spec(
+                tenant_id=SANGAM_ID,
+                name="Sangam",
+                slug="sangam",
+                team=TEAM,
+                kind=FOUNDER,
+            ),
             password_hash=password_hash,
         )
-        await _ensure_sales_team(session, SANGAM_ID, users)
-
-        e2e_users = await _ensure_tenant_and_people(
+        await provision_workspace(
             session,
-            tenant_id=SANGAM_E2E_ID,
-            name="Sangam Test Workspace",
-            slug="sangam-e2e",
-            team=E2E_TEAM,
+            _spec(
+                tenant_id=SANGAM_E2E_ID,
+                name="Sangam Test Workspace",
+                slug="sangam-e2e",
+                team=E2E_TEAM,
+                kind=TEST,
+            ),
             password_hash=password_hash,
         )
-        await _ensure_sales_team(session, SANGAM_E2E_ID, e2e_users)
+        await provision_workspace(
+            session,
+            _spec(
+                tenant_id=SANGAM_PILOT_E2E_ID,
+                name="Pilot Test Workspace",
+                slug="sangam-pilot-e2e",
+                team=PILOT_E2E_TEAM,
+                kind=TEST,
+            ),
+            password_hash=password_hash,
+        )
 
-    return users
+    return result.users
 
 
 async def refresh() -> None:

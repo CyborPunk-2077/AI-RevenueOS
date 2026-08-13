@@ -375,6 +375,36 @@ class ActivityLogRequest(StrictModel):
     # it; an inbound call is the enquiry, not the reply, and must not clear the
     # "waiting for a first reply" warning.
     direction: Literal["outbound", "inbound"] | None = None
+    # What actually happened. Optional, because a note has nothing to report, but
+    # decisive when present: a call that rang out, a meeting still in the diary
+    # and a send the provider rejected are not replies, whatever their direction.
+    # The channel/outcome pairing is checked in the application layer against the
+    # domain vocabulary rather than being spelled out twice here.
+    outcome: (
+        Literal[
+            "spoke",
+            "no_answer",
+            "meeting_held",
+            "meeting_scheduled",
+            "sent",
+            "received",
+            "failed",
+            "cancelled",
+            "no_show",
+        ]
+        | None
+    ) = None
+
+
+class StartingBaselineRequest(StrictModel):
+    """Capturing a pilot's 'before' picture.
+
+    `replace` is explicit and defaults to False: a starting baseline that can be
+    overwritten by accident is not a baseline at all.
+    """
+
+    replace: bool = False
+    note: Annotated[str | None, Field(max_length=500)] = None
 
 
 class NoteCreateRequest(StrictModel):

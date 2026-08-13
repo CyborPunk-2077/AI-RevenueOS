@@ -44,14 +44,20 @@ async def record_first_response(
     occurred_at: datetime,
     actor_id: UUID | None,
     source: str,
+    outcome: str | None = None,
 ) -> bool:
     """Stamp first response if this contact qualifies and none is recorded yet.
 
     `uow` is an open unit of work whose session is already scoped to the tenant.
     Returns True only when this call is what set the timestamp, so the caller can
     emit an event exactly once.
+
+    `outcome` is passed straight through to the domain rule and never interpreted
+    here. A missed call, a scheduled meeting and a send the provider rejected all
+    arrive as ordinary calls to this function and are refused there, which is why
+    there is no second opinion about them anywhere in the codebase.
     """
-    if not qualifies_as_first_response(channel=channel, direction=direction):
+    if not qualifies_as_first_response(channel=channel, direction=direction, outcome=outcome):
         return False
 
     from sqlalchemy import update
@@ -86,6 +92,7 @@ async def record_first_response(
             payload={
                 "channel": channel,
                 "direction": direction,
+                "outcome": outcome,
                 "source": source,
                 "occurred_at": occurred_at.isoformat(),
             },

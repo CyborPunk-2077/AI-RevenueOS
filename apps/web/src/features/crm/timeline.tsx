@@ -10,6 +10,8 @@ export interface TimelineEntry {
   readonly id: string;
   readonly activity_type?: string;
   readonly direction?: string | null;
+  readonly outcome?: string | null;
+  readonly outcome_label?: string | null;
   readonly subject?: string;
   readonly body: string | null;
   readonly actor_name: string | null;
@@ -23,6 +25,42 @@ function when(iso: string | null): string {
   if (!iso) return '';
   return formatDateTime(iso);
 }
+
+/**
+ * What each kind of contact can end in, in the words a salesperson would use.
+ *
+ * This mirrors `domain/leads/first_response.OUTCOMES_BY_CHANNEL`. The server
+ * rejects a pairing that is not in its own copy, so the worst a drift here can
+ * do is offer something the API refuses - never record something the dashboard
+ * then misreads.
+ *
+ * The starred options are the ones that mean somebody actually got through. It
+ * is worth the founders knowing which those are: they are exactly the ones that
+ * stop a prospect showing as waiting.
+ */
+const OUTCOMES_BY_TYPE: Record<string, ReadonlyArray<{ value: string; label: string }>> = {
+  call: [
+    { value: 'spoke', label: 'Spoke with them' },
+    { value: 'no_answer', label: 'No answer / missed' },
+  ],
+  meeting: [
+    { value: 'meeting_held', label: 'Meeting happened' },
+    { value: 'meeting_scheduled', label: 'Scheduled for later' },
+    { value: 'no_show', label: 'They did not come' },
+    { value: 'cancelled', label: 'Cancelled' },
+  ],
+  email: [
+    { value: 'sent', label: 'Sent it' },
+    { value: 'received', label: 'They wrote to us' },
+    { value: 'failed', label: 'Could not send' },
+  ],
+  whatsapp: [
+    { value: 'sent', label: 'Sent it' },
+    { value: 'received', label: 'They messaged us' },
+    { value: 'failed', label: 'Could not send' },
+  ],
+  task: [],
+};
 
 /**
  * The activity and note timeline for one lead, contact or account.
@@ -49,6 +87,10 @@ export function Timeline({
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  // Drives which outcomes are offered. "How did it go" only makes sense once you
+  // know what "it" was, and offering "no answer" against an email taught the
+  // founders to ignore the field.
+  const [activityType, setActivityType] = useState('call');
 
   // Singular, because the tasks API names the record while the route names the
   // section.
@@ -88,17 +130,17 @@ export function Timeline({
     const element = event.currentTarget;
     const form = new FormData(element);
     const outcome = String(form.get('outcome') ?? '').trim();
-    const subject = String(form.get('subject') ?? '');
 
     await post(`/api/${parent}/${parentId}/activities`, {
       activity_type: String(form.get('activity_type') ?? 'call'),
-      // The outcome leads the subject line, because that is what a person scans
-      // the timeline for six weeks later.
-      subject: outcome ? `${outcome} — ${subject}` : subject,
+      subject: String(form.get('subject') ?? ''),
       body: String(form.get('activity_body') ?? '') || null,
-      // Only an outbound contact counts as answering a prospect, so the server
-      // needs to be told which this was rather than assuming.
+      // Direction and outcome together decide whether this answered the
+      // prospect, and the server decides that - not this form. It used to paste
+      // the outcome onto the subject line, which meant a call nobody picked up
+      // still cleared the "waiting for a reply" warning.
       direction: String(form.get('direction') ?? 'outbound'),
+      outcome: outcome || null,
     });
 
     const nextAction = String(form.get('next_action') ?? '').trim();
@@ -168,7 +210,9 @@ export function Timeline({
             <select
               id="activity_type"
               name="activity_type"
-              defaultValue="call"
+              value={activityType}
+              onChange={(e) => setActivityType(e.target.value)}
+              data-testid="activity-type"
               className="mt-1 w-full rounded border px-3 py-2"
             >
               <option value="call">Call</option>
@@ -204,26 +248,32 @@ export function Timeline({
               className="mt-1 w-full rounded border px-3 py-2"
             />
           </div>
-          <div>
-            <label htmlFor="outcome" className="block text-sm">
-              How did it go
-            </label>
-            <select
-              id="outcome"
-              name="outcome"
-              defaultValue=""
-              data-testid="activity-outcome"
-              className="mt-1 w-full rounded border px-3 py-2"
-            >
-              <option value="">Not recorded</option>
-              <option value="Spoke to them">Spoke to them</option>
-              <option value="No answer">No answer</option>
-              <option value="Call back later">Asked to call back later</option>
-              <option value="Wants a demo">Wants a demo</option>
-              <option value="Sent information">Sent information</option>
-              <option value="Not interested">Not interested</option>
-            </select>
-          </div>
+          {(OUTCOMES_BY_TYPE[activityType] ?? []).length > 0 ? (
+            <div>
+              <label htmlFor="outcome" className="block text-sm">
+                What actually happened
+              </label>
+              <select
+                id="outcome"
+                name="outcome"
+                defaultValue=""
+                data-testid="activity-outcome"
+                className="mt-1 w-full rounded border px-3 py-2"
+              >
+                <option value="">Not recorded</option>
+                {(OUTCOMES_BY_TYPE[activityType] ?? []).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Only contact that actually reached the customer counts as replying to them. A
+                missed call or a meeting still in the diary leaves this prospect waiting, which is
+                what the Today page will keep telling you.
+              </p>
+            </div>
+          ) : null}
           <div>
             <label htmlFor="activity_body" className="block text-sm">
               Details
@@ -338,6 +388,17 @@ export function Timeline({
                         </span>
                       ) : null}
                       {entry.subject}
+                      {/* What came of it, in plain words. Six weeks later this is
+                          the difference between "we called them" and "we tried
+                          to call them", and only one of those answered anybody. */}
+                      {entry.outcome_label ? (
+                        <span
+                          data-testid={`activity-outcome-${entry.id}`}
+                          className="ml-2 rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                        >
+                          {entry.outcome_label}
+                        </span>
+                      ) : null}
                     </>
                   ) : (
                     <>

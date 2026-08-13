@@ -24,13 +24,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import text
 
 from application.tenants.demo_data import load_manifest
+from application.tenants.provisioning import (
+    REAL_WORKSPACE_KINDS,
+    WORKSPACE_KIND_KEY,
+)
 from infrastructure.database.session import admin_session
 from infrastructure.logging.setup import configure_logging
 
 #: The workspaces a local reset would destroy. The browser-test tenant is listed
 #: because its contents are worthless, not because they are precious - counting it
 #: would make every reset look dangerous and train people to ignore the warning.
-DISPOSABLE_SLUGS = ("sangam-e2e", "acme", "globex")
+#:
+#: This is now only the fallback for a workspace created before workspaces knew
+#: what they were for. A tenant that carries a kind is judged on that instead,
+#: which is what makes a newly provisioned pilot protected on the day it is
+#: created rather than on the day somebody remembers to edit this tuple.
+DISPOSABLE_SLUGS = ("sangam-e2e", "sangam-pilot-e2e", "acme", "globex")
 
 COUNTED_TABLES = ("leads", "contacts", "accounts", "deals", "tasks", "notes")
 
@@ -41,11 +50,21 @@ async def founder_record_count() -> tuple[int, dict[str, int]]:
 
     async with admin_session() as session:
         tenants = (
-            await session.execute(text("SELECT id, slug FROM app.tenants WHERE deleted_at IS NULL"))
+            await session.execute(
+                text("SELECT id, slug, settings FROM app.tenants WHERE deleted_at IS NULL")
+            )
         ).all()
 
-        for tenant_id, slug in tenants:
-            if slug in DISPOSABLE_SLUGS:
+        for tenant_id, slug, settings in tenants:
+            kind = (settings or {}).get(WORKSPACE_KIND_KEY)
+            if kind:
+                # The workspace says what it is. A pilot counts as real data from
+                # the moment it is provisioned, so a reset refuses while one
+                # exists - the founders' workspace is no longer the only thing
+                # somebody could destroy by typing "reset".
+                if kind not in REAL_WORKSPACE_KINDS:
+                    continue
+            elif slug in DISPOSABLE_SLUGS:
                 continue
             manifest = await load_manifest(session, UUID(str(tenant_id)))
             for table in COUNTED_TABLES:
