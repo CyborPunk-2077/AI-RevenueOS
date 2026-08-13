@@ -107,7 +107,9 @@ class TestInternalWork:
     def test_an_outcome_cannot_promote_internal_work(self, channel: str) -> None:
         # Belt and braces: even the strongest engagement outcome must not let a
         # task or a note through.
-        assert not qualifies_as_first_response(channel=channel, direction="outbound", outcome="spoke")
+        assert not qualifies_as_first_response(
+            channel=channel, direction="outbound", outcome="spoke"
+        )
 
 
 class TestUnknownInput:

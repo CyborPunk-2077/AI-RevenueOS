@@ -329,9 +329,7 @@ class TestInboundIngestion:
         # And one thread, not two.
         assert first.conversation_id == second.conversation_id
 
-    async def test_the_same_event_delivered_twice_writes_nothing_new(
-        self, workspaces: Any
-    ) -> None:
+    async def test_the_same_event_delivered_twice_writes_nothing_new(self, workspaces: Any) -> None:
         """Meta retries when our acknowledgement was slow, not when anything changed."""
         event = adapter().parse_webhook(
             inbound_payload(phone_number_id=PHONE_ID_A, message_id="wamid.dup", text_body="hi")
@@ -358,18 +356,14 @@ class TestInboundIngestion:
 
     async def test_a_message_on_an_unclaimed_number_is_refused(self, workspaces: Any) -> None:
         event = adapter().parse_webhook(
-            inbound_payload(
-                phone_number_id="999999999999999", message_id="wamid.x", text_body="hi"
-            )
+            inbound_payload(phone_number_id="999999999999999", message_id="wamid.x", text_body="hi")
         )[0]
         result = await ingest_inbound_message(event)
 
         assert not result.accepted
         assert result.reason == "no_tenant_for_business_number"
 
-    async def test_each_business_number_routes_to_its_own_workspace(
-        self, workspaces: Any
-    ) -> None:
+    async def test_each_business_number_routes_to_its_own_workspace(self, workspaces: Any) -> None:
         """The isolation claim, exercised rather than asserted."""
         to_a = await ingest_inbound_message(
             adapter().parse_webhook(
@@ -541,9 +535,7 @@ class TestOutboundNeverFabricatesSuccess:
         assert not qualifies_as_first_response(
             channel="whatsapp", direction="outbound", outcome="failed"
         )
-        assert qualifies_as_first_response(
-            channel="whatsapp", direction="outbound", outcome="sent"
-        )
+        assert qualifies_as_first_response(channel="whatsapp", direction="outbound", outcome="sent")
 
     async def test_a_provider_error_is_reported_as_an_error(self) -> None:
         from application.ports import OutboundMessage

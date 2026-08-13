@@ -117,9 +117,7 @@ class TestTheWorkspaceItself:
 
         row = (
             await db.execute(
-                text(
-                    "SELECT timezone, currency, locale, status FROM app.tenants WHERE id = :t"
-                ),
+                text("SELECT timezone, currency, locale, status FROM app.tenants WHERE id = :t"),
                 {"t": PILOT_TENANT},
             )
         ).one()
