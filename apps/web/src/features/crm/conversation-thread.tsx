@@ -134,20 +134,34 @@ export function ConversationThread({
         </button>
       </form>
 
-      <form onSubmit={onSimulateInbound} className="space-y-2 rounded border border-dashed p-4" noValidate>
-        <label htmlFor="inbound" className="block text-sm font-medium">
-          Record an inbound message
-        </label>
-        <p className="text-xs text-muted-foreground">
-          Inbound needs no provider credential — the message already arrived. Real traffic lands on
-          this same path after webhook signature verification.
-        </p>
-        <textarea id="inbound" name="inbound" rows={2} required className="w-full rounded border px-3 py-2" />
-        <button type="submit" disabled={busy} data-testid="record-inbound"
-          className="rounded border px-4 py-2 disabled:opacity-50">
-          Record inbound
-        </button>
-      </form>
+      {/* Manufacturing a customer message by hand.
+
+          This existed so the thread could be exercised before any provider was
+          connected. Once one is, it becomes a way for an ordinary employee to
+          invent a message a customer never sent - on the same screen, in the
+          same list, indistinguishable afterwards from the real thing. Every
+          number this product reports is built from those records.
+
+          So it disappears the moment the channel can genuinely receive. The
+          endpoint stays: the browser suites still drive channels that have no
+          provider, and that is exactly the case this control still serves. */}
+      {!ready ? (
+        <form onSubmit={onSimulateInbound} className="space-y-2 rounded border border-dashed p-4" noValidate>
+          <label htmlFor="inbound" className="block text-sm font-medium">
+            Record an inbound message
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Development only, and shown because <strong>{channel}</strong> has no provider
+            connected. Real traffic lands on this same path after webhook signature verification,
+            and this control disappears once the channel is live.
+          </p>
+          <textarea id="inbound" name="inbound" rows={2} required className="w-full rounded border px-3 py-2" />
+          <button type="submit" disabled={busy} data-testid="record-inbound"
+            className="rounded border px-4 py-2 disabled:opacity-50">
+            Record inbound
+          </button>
+        </form>
+      ) : null}
 
       {error ? (<p role="alert" data-testid="thread-error" className="text-sm text-destructive">{error}</p>) : null}
       {notice ? (<p role="status" data-testid="delivery-note" className="text-sm text-muted-foreground">{notice}</p>) : null}

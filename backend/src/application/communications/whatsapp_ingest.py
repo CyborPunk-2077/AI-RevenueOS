@@ -189,27 +189,58 @@ async def _create_lead(
 async def conversation_for(
     session: Any, tenant_id: UUID, lead_id: UUID, occurred_at: datetime
 ) -> UUID:
-    """The open WhatsApp thread with this prospect, or a new one."""
+    """This prospect's WhatsApp thread, reopened if somebody had closed it.
+
+    Two things this deliberately does not do:
+
+    * it does not require the thread to be `active`. Matching only active threads
+      meant that archiving one and then receiving another message started a
+      *second* thread for the same person, quietly splitting their history in
+      two - and the older half stayed archived where nobody would look.
+    * it does not leave a reopened thread closed. A customer who messages again
+      is not resolved, whatever somebody clicked earlier, so the thread comes
+      back to `active` and the Inbox stops hiding it.
+
+    Ownership is inherited from the prospect rather than left null. A
+    conversation with no assignee and no team is invisible to every user who is
+    not global-scoped, which is exactly how a live thread can look like an empty
+    inbox to the salesperson who owns the customer.
+    """
     from sqlalchemy import select
 
     from infrastructure.database.models.communications import Conversation
+    from infrastructure.database.models.leads import Lead
 
     existing = (
         await session.execute(
-            select(Conversation.id)
+            select(Conversation)
             .where(
                 Conversation.tenant_id == tenant_id,
                 Conversation.lead_id == lead_id,
                 Conversation.primary_channel == CHANNEL,
-                Conversation.status == "active",
                 Conversation.deleted_at.is_(None),
             )
             .order_by(Conversation.created_at.desc())
             .limit(1)
         )
+    ).scalar_one_or_none()
+
+    lead = (
+        await session.execute(
+            select(Lead.assignee_id, Lead.team_id, Lead.branch_id).where(Lead.id == lead_id)
+        )
     ).first()
-    if existing:
-        return UUID(str(existing[0]))
+    assignee_id, team_id, branch_id = lead if lead is not None else (None, None, None)
+
+    if existing is not None:
+        if existing.status != "active":
+            existing.status = "active"
+        # Backfill ownership onto threads created before this was inherited, and
+        # follow the prospect if it has since been reassigned.
+        existing.assignee_id = existing.assignee_id or assignee_id
+        existing.team_id = existing.team_id or team_id
+        existing.branch_id = existing.branch_id or branch_id
+        return UUID(str(existing.id))
 
     conversation_id = uuid7()
     session.add(
@@ -220,6 +251,9 @@ async def conversation_for(
             primary_channel=CHANNEL,
             subject="WhatsApp",
             status="active",
+            assignee_id=assignee_id,
+            team_id=team_id,
+            branch_id=branch_id,
             last_message_at=occurred_at,
             metadata_json={"source": "whatsapp_cloud"},
             version=1,

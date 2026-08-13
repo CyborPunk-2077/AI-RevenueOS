@@ -82,7 +82,11 @@ def channel_ready(channel: str, cfg: Settings | None = None) -> bool:
 
 
 def serialize_conversation(
-    row: Any, *, contact_name: str | None = None, assignee_name: str | None = None
+    row: Any,
+    *,
+    contact_name: str | None = None,
+    assignee_name: str | None = None,
+    lead: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "id": str(row.id),
@@ -95,6 +99,11 @@ def serialize_conversation(
         # through the lead-scoped send path, and so the Inbox and the prospect
         # page cannot disagree about whose conversation this is.
         "lead_id": str(row.lead_id) if row.lead_id else None,
+        # Read from the prospect, never copied into the conversation. The Inbox
+        # showing "Contact: —" for a thread whose prospect Sangam had already
+        # matched was the complaint; the answer is to read the canonical record,
+        # not to grow a second copy of the customer inside the inbox.
+        "lead": lead,
         "assignee_id": str(row.assignee_id) if row.assignee_id else None,
         "assignee_name": assignee_name,
         "unread_count": row.unread_count,
@@ -192,6 +201,52 @@ class InboxService(_PrincipalScoped):
         )
         return {row[0]: f"{row[1]} {row[2] or ''}".strip() for row in rows}
 
+    async def _lead_context(self, session: Any, ids: set[UUID]) -> dict[UUID, dict[str, Any]]:
+        """Who the customer is, read from the prospect record itself.
+
+        One query for the page, joined to the owner's name. Nothing here is
+        stored on the conversation: the Inbox reads the canonical customer, so a
+        rename or a reassignment on the prospect is immediately true here too.
+        """
+        if not ids:
+            return {}
+        from sqlalchemy import select
+
+        from infrastructure.database.models.leads import Lead
+        from infrastructure.database.models.users import User
+
+        rows = await session.execute(
+            select(
+                Lead.id,
+                Lead.first_name,
+                Lead.last_name,
+                Lead.phone,
+                Lead.email,
+                Lead.capture,
+                Lead.status,
+                User.full_name,
+            )
+            .join(User, User.id == Lead.assignee_id, isouter=True)
+            .where(Lead.id.in_(ids), Lead.tenant_id == self.tenant_id)
+        )
+
+        context: dict[UUID, dict[str, Any]] = {}
+        for row in rows:
+            capture = row[5] or {}
+            context[row[0]] = {
+                "id": str(row[0]),
+                "name": f"{row[1]} {row[2] or ''}".strip(),
+                # The founders' capture form calls it "company"; the importer
+                # writes "company_name". Both are read rather than one being
+                # declared correct, because real records carry both.
+                "company": capture.get("company") or capture.get("company_name"),
+                "phone": row[3],
+                "email": row[4],
+                "status": row[6],
+                "owner_name": row[7],
+            }
+        return context
+
     # --- conversations ------------------------------------------------------
 
     async def list_conversations(
@@ -230,15 +285,47 @@ class InboxService(_PrincipalScoped):
             people = await self._names(
                 session, {c.assignee_id for c in page.items if c.assignee_id}
             )
+            leads = await self._lead_context(session, {c.lead_id for c in page.items if c.lead_id})
             page.items = [
                 serialize_conversation(
                     c,
                     contact_name=contacts.get(c.contact_id) if c.contact_id else None,
                     assignee_name=people.get(c.assignee_id) if c.assignee_id else None,
+                    lead=leads.get(c.lead_id) if c.lead_id else None,
                 )
                 for c in page.items
             ]
             return page
+
+    async def status_counts(self) -> dict[str, int]:
+        """How many threads sit under each filter, in the caller's own scope.
+
+        Added because "No conversations yet" under Active, while threads existed
+        under Archived, read as data loss to the founder. The filter still
+        filters - this just stops an empty view being indistinguishable from an
+        empty inbox.
+        """
+        from sqlalchemy import func, select
+
+        from infrastructure.database.models.communications import Conversation
+        from infrastructure.database.repositories.base import TenantRepository
+        from infrastructure.database.session import tenant_session
+
+        class ConversationRepository(TenantRepository[Conversation]):
+            model = Conversation
+
+        async with tenant_session(self.tenant_id) as session:
+            repo = ConversationRepository(session, self.tenant_id)
+            scoped = repo.scoped_query(self.permissions_scope()).subquery()
+            rows = await session.execute(
+                select(scoped.c.status, func.count()).group_by(scoped.c.status)
+            )
+            counts = {status: int(total) for status, total in rows}
+
+        counts["all"] = sum(counts.values())
+        for status in CONVERSATION_STATUSES:
+            counts.setdefault(status, 0)
+        return counts
 
     async def get(self, conversation_id: UUID) -> dict[str, Any]:
         from infrastructure.database.models.communications import Conversation
@@ -258,10 +345,12 @@ class InboxService(_PrincipalScoped):
                 session, {row.contact_id} if row.contact_id else set()
             )
             people = await self._names(session, {row.assignee_id} if row.assignee_id else set())
+            leads = await self._lead_context(session, {row.lead_id} if row.lead_id else set())
             return serialize_conversation(
                 row,
                 contact_name=contacts.get(row.contact_id) if row.contact_id else None,
                 assignee_name=people.get(row.assignee_id) if row.assignee_id else None,
+                lead=leads.get(row.lead_id) if row.lead_id else None,
             )
 
     async def thread(self, conversation_id: UUID) -> list[dict[str, Any]]:
@@ -479,6 +568,13 @@ class InboxService(_PrincipalScoped):
             ).scalar_one()
             row.last_message_at = moment
             row.unread_count = row.unread_count + 1
+            # A customer writing again reopens the thread. Leaving it resolved or
+            # archived hides a live conversation behind a filter nobody is
+            # looking at, which is how an Inbox comes to look empty while the
+            # customer is still waiting. `spam` is left alone deliberately -
+            # somebody made that judgement about the sender, not the thread.
+            if row.status in {"resolved", "archived"}:
+                row.status = "active"
 
             AuditRecorder(uow.session).record(
                 action="message.receive",

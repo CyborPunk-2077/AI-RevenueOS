@@ -304,6 +304,102 @@ class TestInboundIngestion:
             assert lead.first_name == "Ramesh"
             assert lead.capture.get("demo_data") is None
 
+    async def test_the_thread_inherits_the_prospects_owner_and_team(self, workspaces: Any) -> None:
+        """A thread with no owner is invisible to everyone who is not global.
+
+        The founder saw this as an Inbox that intermittently emptied: the
+        conversation existed, the direct URL worked, and the list showed nothing,
+        because scope filters on `team_id`/`assignee_id` and both were null.
+        """
+        from infrastructure.database.models.communications import Conversation
+
+        result = await ingest_inbound_message(
+            adapter().parse_webhook(
+                inbound_payload(
+                    phone_number_id=PHONE_ID_A, message_id=f"wamid.{uuid7().hex}", text_body="hi"
+                )
+            )[0]
+        )
+        assert result.accepted
+
+        owner = uuid7()
+        team = uuid7()
+        async with admin_session() as session:
+            await session.execute(
+                text("UPDATE app.leads SET assignee_id = :o, team_id = :m WHERE id = :lead"),
+                {"o": owner, "m": team, "lead": result.lead_id},
+            )
+
+        # The next message reconciles the thread with the prospect.
+        await ingest_inbound_message(
+            adapter().parse_webhook(
+                inbound_payload(
+                    phone_number_id=PHONE_ID_A, message_id=f"wamid.{uuid7().hex}", text_body="again"
+                )
+            )[0]
+        )
+
+        async with admin_session() as session:
+            conversation = (
+                await session.execute(
+                    select(Conversation).where(Conversation.id == result.conversation_id)
+                )
+            ).scalar_one()
+
+        assert conversation.assignee_id == owner
+        assert conversation.team_id == team
+
+    async def test_a_closed_thread_reopens_instead_of_forking(self, workspaces: Any) -> None:
+        """Archiving a thread must not split the customer's history in two.
+
+        Matching only `active` threads meant a message arriving after somebody
+        archived one started a second conversation for the same person, leaving
+        half the history somewhere nobody looks.
+        """
+        from infrastructure.database.models.communications import Conversation
+
+        first = await ingest_inbound_message(
+            adapter().parse_webhook(
+                inbound_payload(
+                    phone_number_id=PHONE_ID_A, message_id=f"wamid.{uuid7().hex}", text_body="one"
+                )
+            )[0]
+        )
+
+        async with admin_session() as session:
+            await session.execute(
+                text("UPDATE app.conversations SET status = 'archived' WHERE id = :c"),
+                {"c": first.conversation_id},
+            )
+
+        second = await ingest_inbound_message(
+            adapter().parse_webhook(
+                inbound_payload(
+                    phone_number_id=PHONE_ID_A, message_id=f"wamid.{uuid7().hex}", text_body="two"
+                )
+            )[0]
+        )
+
+        assert second.conversation_id == first.conversation_id, "the thread forked"
+
+        async with admin_session() as session:
+            conversation = (
+                await session.execute(
+                    select(Conversation).where(Conversation.id == first.conversation_id)
+                )
+            ).scalar_one()
+            threads = (
+                await session.execute(
+                    select(Conversation.id).where(
+                        Conversation.tenant_id == TENANT_A, Conversation.lead_id == first.lead_id
+                    )
+                )
+            ).all()
+
+        # A customer who messages again is not "archived", whatever was clicked.
+        assert conversation.status == "active"
+        assert len(threads) == 1
+
     async def test_inbound_alone_never_counts_as_a_reply(self) -> None:
         """Stated at the domain level too, so it cannot drift from the ingest path."""
         assert not qualifies_as_first_response(

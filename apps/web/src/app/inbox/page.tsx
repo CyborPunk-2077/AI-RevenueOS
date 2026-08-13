@@ -1,10 +1,19 @@
 import Link from 'next/link';
 import { apiFetch } from '@/lib/session';
+import { AutoRefresh } from '@/features/crm/auto-refresh';
 import { NewConversationForm } from '@/features/crm/new-conversation-form';
 import { PageHeader } from '@/features/ui/primitives';
 import { formatDateTime } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
+
+interface LeadContext {
+  readonly id: string;
+  readonly name: string;
+  readonly company: string | null;
+  readonly phone: string | null;
+  readonly owner_name: string | null;
+}
 
 interface Conversation {
   readonly id: string;
@@ -15,6 +24,7 @@ interface Conversation {
   readonly assignee_name: string | null;
   readonly unread_count: number;
   readonly last_message_at: string | null;
+  readonly lead: LeadContext | null;
 }
 
 interface NamedContact {
@@ -34,12 +44,16 @@ export default async function InboxPage({
   const query = status ? `&status=${encodeURIComponent(status)}` : '';
 
   const [inboxResult, contactResult, channelResult] = await Promise.all([
-    apiFetch<{ conversations: Conversation[] }>(`/conversations?page_size=50${query}`),
+    apiFetch<{ conversations: Conversation[]; status_counts: Record<string, number> }>(
+      `/conversations?page_size=50${query}`,
+    ),
     apiFetch<{ contacts: NamedContact[] }>('/contacts?page_size=200'),
     apiFetch<{ channels: Channel[] }>('/conversations/channels'),
   ]);
 
   const conversations = inboxResult.data?.conversations ?? [];
+  const counts = inboxResult.data?.status_counts ?? {};
+  const totalEverywhere = counts.all ?? 0;
   const contacts = (contactResult.data?.contacts ?? []).map((c) => ({
     id: c.id,
     name: `${c.first_name} ${c.last_name ?? ''}`.trim(),
@@ -58,15 +72,22 @@ export default async function InboxPage({
         </p>
       ) : null}
 
-      <nav aria-label="Filter" className="flex gap-2 text-sm">
+      {/* Counts on every filter. An empty Active while threads sat in Archived
+          read as data loss to the founder; the filter still filters, it just
+          says where everything else is. */}
+      <nav aria-label="Filter" className="flex gap-2 text-sm" data-testid="inbox-filters">
         {['', 'active', 'resolved', 'archived'].map((value) => (
           <Link key={value || 'all'} href={value ? `/inbox?status=${value}` : '/inbox'}
             aria-current={status === value ? 'page' : undefined}
+            data-testid={`filter-${value || 'all'}`}
             className={status === value ? 'rounded border px-3 py-1 font-medium' : 'rounded border px-3 py-1 text-muted-foreground'}>
-            {value || 'All'}
+            {value || 'All'} ({counts[value || 'all'] ?? 0})
           </Link>
         ))}
       </nav>
+
+      {/* New threads arrive from providers, so the list has to go and look. */}
+      <AutoRefresh intervalMs={10000} />
 
       <NewConversationForm contacts={contacts} channels={channels} />
 
@@ -74,7 +95,18 @@ export default async function InboxPage({
         <h2 id="inbox-list-heading" className="sr-only">Conversations</h2>
         {conversations.length === 0 ? (
           <p data-testid="inbox-empty" className="surface border-dashed p-6 text-center text-sm text-muted-foreground">
-            No conversations yet. Open one above.
+            {totalEverywhere > 0 ? (
+              <>
+                Nothing under <strong>{status || 'All'}</strong>. This workspace has{' '}
+                {totalEverywhere} conversation{totalEverywhere === 1 ? '' : 's'} under the other
+                filters &mdash; nothing has been lost.{' '}
+                <Link href="/inbox" className="underline">
+                  Show all
+                </Link>
+              </>
+            ) : (
+              'No conversations yet. Open one above.'
+            )}
           </p>
         ) : (
           <ul className="divide-y" data-testid="conversation-rows">
@@ -85,10 +117,19 @@ export default async function InboxPage({
                     className="font-medium underline">
                     {conversation.subject ?? '(no subject)'}
                   </Link>
-                  <p className="text-xs text-muted-foreground">
+                  {/* Who it is with, read from the matched prospect. */}
+                  <p className="text-xs text-muted-foreground" data-testid={`who-${conversation.id}`}>
                     {conversation.primary_channel}
-                    {conversation.contact_name ? ` · ${conversation.contact_name}` : ''}
-                    {conversation.assignee_name ? ` · ${conversation.assignee_name}` : ''}
+                    {conversation.lead
+                      ? ` · ${conversation.lead.name}${
+                          conversation.lead.company ? ` (${conversation.lead.company})` : ''
+                        }`
+                      : conversation.contact_name
+                        ? ` · ${conversation.contact_name}`
+                        : ''}
+                    {conversation.assignee_name ?? conversation.lead?.owner_name
+                      ? ` · ${conversation.assignee_name ?? conversation.lead?.owner_name}`
+                      : ''}
                   </p>
                 </div>
                 <div className="text-right text-xs text-muted-foreground">
