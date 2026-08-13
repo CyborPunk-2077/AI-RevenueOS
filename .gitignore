@@ -50,3 +50,6 @@ apps/web/package-lock.json
 # cannot carry the comments explaining why the file has to exist at all) and
 # takes precedence anyway. Left on disk only because it cannot be removed here.
 apps/web/.eslintrc.json
+
+# Local database safety snapshots. Real prospect data; never committed.
+backups/

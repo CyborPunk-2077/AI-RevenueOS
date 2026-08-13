@@ -550,9 +550,7 @@ async def refresh(refresh_token: str, tokens: TokenService) -> AuthResult:
 
     # Re-resolved on every rotation, so adding somebody to a team takes effect on
     # their next refresh rather than requiring a fresh sign-in.
-    roles, branch_ids, team_ids = await load_roles_and_scope(
-        tenant_id, user_id, is_owner=is_owner
-    )
+    roles, branch_ids, team_ids = await load_roles_and_scope(tenant_id, user_id, is_owner=is_owner)
 
     plaintext, token_hash, new_jti = generate_refresh_token()
     async with tenant_session(tenant_id) as session:

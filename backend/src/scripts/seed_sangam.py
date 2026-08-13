@@ -33,8 +33,9 @@ from uuid import UUID
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 
+from application.tenants.demo_data import empty_manifest, record_manifest
 from domain.auth.permissions import ROLE_PERMISSIONS, Role
 from infrastructure.auth.passwords import hash_password, validate_password
 from infrastructure.database.models.crm import (
@@ -989,37 +990,36 @@ async def ensure_workspace(password_hash: str) -> dict[str, UUID]:
 
 
 async def refresh() -> None:
-    """Delete this tenant's synthetic operational rows. Never touches another tenant.
+    """Delete only the rows a previous demo seed recorded creating.
 
-    `app.activities` and `app.lead_source_events` are deliberately absent from the
-    list. A database trigger makes both append-only, and the correct response to a
-    guarantee like that is to work with it, not to disable it for the convenience
-    of a seed script. The rows left behind reference leads that no longer exist, so
-    nothing renders them; they are dead weight in a local database and nothing
-    more. For a genuinely empty slate, `RESET_DEMO.cmd` drops the volume.
+    This used to be `DELETE FROM app.leads WHERE tenant_id = :t` and the rest of
+    the tables the same way - every row in the workspace, on the assumption that a
+    demo tenant holds only demo data. Once the founders started prospecting for
+    real out of this same workspace that assumption was false, and it destroyed a
+    prospect they had created and worked, together with its notes and tasks.
 
-    (The source-events line used to be in this list and appeared to work, because
-    until imports were used in this tenant there were never any rows to delete.)
+    It now deletes strictly what `application.tenants.demo_data` recorded the seed
+    creating. A founder-created or imported record was never in the manifest, so
+    it is not a candidate for deletion - preserved by construction rather than by
+    being correctly recognised as real.
+
+    `app.activities`, `app.lead_source_events` and the audit log are absent from
+    the manifest entirely: they are append-only, the database refuses to delete
+    from them, and that refusal is exactly why the evidence of the lost prospect
+    survived to be recovered.
     """
+    from application.tenants.demo_data import delete_recorded_rows
+    from scripts.backup_local import take_snapshot
+
+    # Before anything is deleted, and fatal if it fails. A refresh is now narrow
+    # enough that it should not be able to lose real data, but "should not" is
+    # what the previous version also believed.
+    snapshot = take_snapshot("demo-refresh")
+    logger.info("refresh_snapshot_taken", file=snapshot.name)
+
     async with admin_session() as session:
-        for table in (
-            "app.tasks",
-            "app.notes",
-            "app.deals",
-            "app.stages",
-            "app.pipelines",
-            "app.account_contacts",
-            "app.accounts",
-            "app.contacts",
-            "app.lead_duplicate_candidates",
-            "app.leads",
-        ):
-            # Fixed, in-repo allowlist; no user input reaches this string.
-            await session.execute(
-                text(f"DELETE FROM {table} WHERE tenant_id = :t"),  # noqa: S608
-                {"t": SANGAM_ID},
-            )
-    logger.info("sangam_refreshed")
+        removed = await delete_recorded_rows(session, SANGAM_ID)
+    logger.info("sangam_refreshed", **removed)
 
 
 async def _ensure_pipeline(session: Any) -> dict[str, UUID]:
@@ -1081,11 +1081,20 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
     """Prospects, history, follow-ups and pipeline, all under the tenant's own context."""
     now = utcnow()
     counts = {"leads": 0, "activities": 0, "notes": 0, "tasks": 0, "deals": 0, "contacts": 0}
+    # Everything this run creates, so a later refresh can delete exactly this and
+    # nothing else. See `application.tenants.demo_data` for why the alternative -
+    # deleting by tenant - destroyed a real founder record.
+    manifest = empty_manifest()
 
     async with tenant_session(SANGAM_ID) as session:
-        existing_leads = (await session.execute(select(Lead.id).limit(1))).scalar_one_or_none()
-        if existing_leads is not None:
-            logger.info("sangam_already_seeded")
+        # Whether the *samples* are already present, not whether the workspace has
+        # any leads at all. Checking for any lead meant that one recovered founder
+        # prospect was enough to stop the sample set ever being rebuilt.
+        from application.tenants.demo_data import load_manifest
+
+        already = await load_manifest(session, SANGAM_ID)
+        if already.get("leads"):
+            logger.info("sangam_already_seeded", samples=len(already["leads"]))
             return counts
 
         ids = await _ensure_pipeline(session)
@@ -1102,6 +1111,7 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
         for row in PROSPECTS:
             lead_id = uuid7()
             lead_ids[row["key"]] = lead_id
+            manifest["leads"].append(str(lead_id))
             created = now - _days(row["age_days"])
             responded = (
                 None
@@ -1177,9 +1187,11 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
         await session.flush()
 
         # The duplicate is recorded, not silently merged: a human decides.
+        candidate_id = uuid7()
+        manifest["lead_duplicate_candidates"].append(str(candidate_id))
         session.add(
             LeadDuplicateCandidate(
-                id=uuid7(),
+                id=candidate_id,
                 tenant_id=SANGAM_ID,
                 lead_id=lead_ids["farhan-dup"],
                 candidate_lead_id=lead_ids["farhan-interiors"],
@@ -1195,6 +1207,7 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
         for acc in ACCOUNTS:
             account_id = uuid7()
             account_ids[acc["key"]] = account_id
+            manifest["accounts"].append(str(account_id))
             session.add(
                 Account(
                     id=account_id,
@@ -1206,7 +1219,7 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
                     employee_count=acc["employees"],
                     owner_id=users[acc["owner"]],
                     address={"city": "Bengaluru", "state": "Karnataka", "country": "IN"},
-                    custom_fields={},
+                    custom_fields={"demo_data": True},
                     version=1,
                 )
             )
@@ -1214,6 +1227,7 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
             source = next(p for p in PROSPECTS if p["key"] == acc["contact_key"])
             contact_id = uuid7()
             contact_ids[acc["contact_key"]] = contact_id
+            manifest["contacts"].append(str(contact_id))
             session.add(
                 Contact(
                     id=contact_id,
@@ -1227,7 +1241,7 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
                     status="active",
                     source=source["source"],
                     address={"city": "Bengaluru", "state": "Karnataka", "country": "IN"},
-                    custom_fields={"requirement": source["requirement"]},
+                    custom_fields={"demo_data": True, "requirement": source["requirement"]},
                     tags=[],
                     assignee_id=users[acc["owner"]],
                     account_id=account_id,
@@ -1252,6 +1266,7 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
         for deal in DEALS:
             deal_id = uuid7()
             deal_ids[deal["key"]] = deal_id
+            manifest["deals"].append(str(deal_id))
             stage_id = ids[deal["stage"]]
             closed = deal["status"] in ("won", "lost")
             session.add(
@@ -1278,7 +1293,7 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
                     expected_close_date=now + _days(deal["close_in_days"]),
                     closed_at=now + _days(deal["close_in_days"]) if closed else None,
                     assignee_id=users[deal["owner"]],
-                    custom_fields={},
+                    custom_fields={"demo_data": True},
                     source_lead_id=lead_ids.get(deal["contact"]) if deal["contact"] else None,
                     version=1,
                 )
@@ -1311,9 +1326,11 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
 
         for entry in NOTES:
             when = now - _hours(entry["hours_ago"])
+            note_id = uuid7()
+            manifest["notes"].append(str(note_id))
             session.add(
                 Note(
-                    id=uuid7(),
+                    id=note_id,
                     tenant_id=SANGAM_ID,
                     entity_type="lead",
                     entity_id=lead_ids[entry["lead"]],
@@ -1334,9 +1351,11 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
                 entity_type, entity_id = "lead", lead_ids[item["lead"]]
             else:
                 entity_type, entity_id = "deal", deal_ids[item["deal"]]
+            task_id = uuid7()
+            manifest["tasks"].append(str(task_id))
             session.add(
                 Task(
-                    id=uuid7(),
+                    id=task_id,
                     tenant_id=SANGAM_ID,
                     title=item["title"],
                     description=item.get("description"),
@@ -1355,6 +1374,10 @@ async def seed_business(users: dict[str, UUID]) -> dict[str, int]:
             )
             counts["tasks"] += 1
 
+        # Written inside the same transaction as the rows it describes, so the
+        # manifest can never claim rows that were rolled back.
+        await record_manifest(session, SANGAM_ID, manifest)
+
     return counts
 
 
@@ -1363,7 +1386,15 @@ async def main() -> int:
     parser.add_argument(
         "--refresh",
         action="store_true",
-        help="rebuild the synthetic rows (deletes this tenant's leads, deals and history)",
+        help="rebuild the sample rows this seed previously recorded creating",
+    )
+    parser.add_argument(
+        "--adopt-existing-samples",
+        action="store_true",
+        help=(
+            "one-time migration: record the rows an older seed marked as samples so a "
+            "refresh can rebuild them. Never adopts unmarked or founder-created records."
+        ),
     )
     args = parser.parse_args()
 
@@ -1374,6 +1405,15 @@ async def main() -> int:
 
     password, generated = resolve_password()
     users = await ensure_workspace(hash_password(password))
+
+    if args.adopt_existing_samples:
+        from application.tenants.demo_data import adopt_existing_demo_rows
+
+        async with admin_session() as session:
+            adopted = await adopt_existing_demo_rows(session, SANGAM_ID)
+        counted = {table: len(ids) for table, ids in adopted.items() if ids}
+        print(f"\n  Adopted existing sample rows: {counted}\n")  # noqa: T201
+
     if args.refresh:
         await refresh()
     counts = await seed_business(users)

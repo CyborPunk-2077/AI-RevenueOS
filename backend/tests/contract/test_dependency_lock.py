@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from tests.repo_layout import repository_root
 
 REPOSITORY_ROOT = repository_root()

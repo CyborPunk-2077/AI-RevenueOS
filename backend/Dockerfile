@@ -18,6 +18,12 @@ COPY requirements-dev.lock ./
 RUN pip install --require-hashes --no-deps -r requirements-dev.lock
 
 FROM deps-development AS development
+# `pg_dump` for the local safety snapshot taken before any destructive demo
+# maintenance. Development only: the production image has no business carrying a
+# tool that can read the whole database to a file.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-client \
+ && rm -rf /var/lib/apt/lists/*
 COPY . .
 EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--app-dir", "src"]

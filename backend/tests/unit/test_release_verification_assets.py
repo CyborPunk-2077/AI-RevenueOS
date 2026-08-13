@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from scripts.generate_evidence import build_report
-
 from tests.repo_layout import repository_root
 
 ROOT = repository_root()

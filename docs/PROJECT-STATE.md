@@ -6,7 +6,7 @@ reality map). Older documents in `docs/` predate 2026-08-12 and describe the
 product under its previous name; where they disagree with this file or with the
 running system, they are wrong.
 
-Last updated: **2026-08-13** (session 4: dogfooding repairs).
+Last updated: **2026-08-13** (session 4B: data safety and Claida recovery).
 
 ## Accepted checkpoints
 
@@ -112,6 +112,13 @@ is — qualification is rule-based and no model provider is configured.
 - **A mutation returns the state from inside its transaction, never a fresh scoped
   read.** Re-reading after a change that moves a record out of the caller's scope
   reports "not found" for a write that succeeded.
+- **A demo refresh may only delete rows the seed recorded creating.** The manifest
+  lives in `tenants.settings` and `application/tenants/demo_data.py` owns it.
+  Never delete by `tenant_id` alone - that destroyed a real founder prospect once.
+  Unmarked means real; `capture.demo_data` is a display label and must never
+  authorise a delete.
+- **Anything destructive takes a local snapshot first and aborts if it fails.**
+  `scripts/backup_local.py`, output in git-ignored `backups/`.
 - **Browser tests run in the `sangam-e2e` tenant, never in `sangam`.** The
   founders' workspace is real working data now. Isolation is a tenant, not an
   `is_test` column and not a cleanup step - activities and source events are
@@ -202,6 +209,26 @@ that deletes; it touches no other tenant. It cannot delete activities — the
 append-only trigger forbids it — so refreshed runs leave orphaned activity rows
 behind. Use `RESET_DEMO.cmd` for a genuinely empty slate.
 
+## 8b. Data safety and backups
+
+Local snapshots are written to `backups/` (git-ignored: they hold real prospect
+data). They are taken automatically before a demo refresh and before a reset, and
+**a failed snapshot stops the destructive operation**. Ten are kept.
+
+To restore one:
+
+```
+docker compose exec -T postgres psql -U airevenueos -d airevenueos < backups/<file>.sql
+```
+
+`docker compose exec api python src/scripts/founder_data_report.py` counts genuine,
+non-sample records. `RESET_DEMO.cmd` consults it and refuses `-Force` when any
+exist. The non-destructive alternative is
+`docker compose exec api python src/scripts/seed_sangam.py --refresh`.
+
+`src/scripts/recover_lead.py` rebuilds a deleted lead from surviving append-only
+evidence. It is disaster recovery, not a product feature.
+
 ## 9. How it runs
 
 Double-click **`RUN_DEMO.cmd`**. Nothing else. If Docker Desktop is installed but
@@ -238,7 +265,7 @@ For a fixed password (needed by the browser tests):
 | Backend ruff + format | Clean, 223 files |
 | Backend mypy (strict) | Clean, 223 source files |
 | import-linter | 6 contracts kept, 0 broken |
-| Backend unit + contract **in the container** | **864 passed, 6 skipped, 0 failed** |
+| Backend unit + contract **in the container** | **872 passed, 6 skipped, 0 failed** |
 | Repo-layout suites, checkout mounted | **62 passed** (the 6 skips above, run where their files exist) |
 | Permission/RBAC subset | 41 passed |
 | Web typecheck | Clean |
@@ -246,7 +273,9 @@ For a fixed password (needed by the browser tests):
 | Browser e2e (`sangam-first-slice`) | 1 passed — full business journey, 11 screenshots |
 | Browser e2e (`sangam-first-response`) | 1 passed — 9 measurement assertions, 6 screenshots |
 | Browser e2e (`sangam-founder-prospecting`) | 1 passed — import + duplicates + outreach, 7 screenshots |
-| Browser e2e (`sangam-dogfood-repairs`) | **3 passed** — reassignment, team scope, field-level validation, 7 screenshots |
+| Browser e2e (`sangam-dogfood-repairs`) | 3 passed — reassignment, team scope, field-level validation, 7 screenshots |
+| Browser e2e (`sangam-data-safety`) | **2 passed** — recovered prospect visible with its history, samples beside it |
+| Demo-refresh safety (`test_demo_refresh_safety.py`) | **8 passed** — sample-only deletion proven against the real schema |
 | Founder workspace isolation | Verified: `sangam` held 15 prospects before and after two full browser runs |
 | Cold-start launcher | **Verified**: Docker closed → `RUN_DEMO.cmd` → app open in browser |
 

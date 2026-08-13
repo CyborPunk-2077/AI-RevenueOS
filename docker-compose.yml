@@ -69,6 +69,10 @@ services:
       # Read-only: prompts are versioned in Git and promoted deliberately. The
       # application must never be able to edit its own prompt definitions.
       - ./prompts:/prompts:ro
+      # Local safety snapshots taken before destructive demo maintenance. Bind
+      # mounted so a snapshot outlives the container, and git-ignored because it
+      # holds real prospect names and phone numbers.
+      - ./backups:/backups
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}

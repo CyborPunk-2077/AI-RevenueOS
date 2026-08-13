@@ -1,7 +1,7 @@
 # Sangam — feature reality map
 
-Last established: **2026-08-13** (session 4: dogfooding repairs), against the
-running local stack at commit `394f192` plus this session's work.
+Last established: **2026-08-13** (session 4B: data safety and recovery), against
+the running local stack at commit `7cc94d4` plus this session's work.
 
 This file records what is *actually true when the product is running*, not what
 the specification intends. Where something was checked in a browser this session
@@ -74,6 +74,46 @@ trust.
 | Deployment | SPEC-ONLY | Terraform for four environments, statically validated only. No AWS account. Nothing has ever been deployed. |
 
 ---
+
+## Session 4B — a demo refresh destroyed real founder data
+
+**What happened.** `seed_sangam.py --refresh` rebuilt the sample workspace with
+`DELETE FROM app.<table> WHERE tenant_id = :t` - every row in the tenant, on the
+assumption that a demo workspace holds only demo data. Once the founders began
+prospecting for real in that same workspace the assumption was false. During
+session 4 the refresh ran twice and destroyed **Claida (Oxon)**, a genuine
+prospect the founders had created and worked, along with its notes and tasks.
+
+**What was lost, and what survived.** The lead row, one note and three tasks were
+deleted. The append-only tables saved the rest: the `lead_source_event` written at
+capture (holding the full payload - name, business, email, phone, area, industry,
+requirement, value, owner), the `lead.create` audit entry, two outbound calls
+logged by Kiran, and audit rows naming each task.
+
+**What was recovered.** The prospect is back under its original id, so the two
+surviving activities reattached rather than being copied. Three tasks were rebuilt
+from titles the audit preserved. **One note was not**: the audit proves it existed
+but never stored its text, and inventing a plausible sentence would have been
+worse than the gap. Founder interactions on two *sample* prospects are also
+orphaned; those records are disposable and were not rebuilt.
+
+**How it cannot happen again.**
+- The seed now records every row it creates in a manifest held in
+  `tenants.settings`, and a refresh deletes **only** those ids. A record the seed
+  did not create is not a candidate for deletion - real data survives by
+  construction, not by being correctly recognised.
+- Unmarked or ambiguous rows are preserved by default, because absence from the
+  manifest is the default state.
+- `capture.demo_data` remains, but only as the display marker that draws the
+  "sample" pill. It no longer authorises any delete.
+- Every destructive path takes a local `pg_dump` snapshot first, and **refuses to
+  continue if the snapshot fails**. Snapshots live in git-ignored `backups/`.
+- `RESET_DEMO.cmd` now counts genuine records first. If any exist it refuses
+  `-Force` outright and demands a different typed phrase, having pointed at the
+  non-destructive refresh instead.
+- Eight regression tests in `tests/integration/test_demo_refresh_safety.py` pin
+  each of those guarantees, including that a manifest naming another tenant's row
+  still cannot reach it.
 
 ## Defects found and fixed in session 4 (found by the founder, by hand)
 

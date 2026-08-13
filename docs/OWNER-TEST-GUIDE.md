@@ -354,8 +354,18 @@ part-way through an update. Wait a minute and double-click `RUN_DEMO.cmd` again.
 computer. Wait a quarter of an hour. This is on purpose — it is what stops
 somebody guessing passwords.
 
-**You want a clean slate.** Double-click `RESET_DEMO.cmd`. It makes you type the
-word "reset" first, because it deletes everything.
+**You want a clean slate.** Double-click `RESET_DEMO.cmd`. It deletes *everything*,
+including any real businesses you have entered. It now checks first: if you have
+real prospects it tells you how many, points you at the safe alternative, and
+makes you type a different phrase to go ahead. It also takes a backup first.
+
+**You only want the sample businesses put back.** That is the safe refresh, and it
+cannot touch anything you entered yourself. Ask for it rather than using
+`RESET_DEMO.cmd`.
+
+**Where backups live.** Before anything destructive, Sangam writes a snapshot into
+the `backups` folder in the project. Ten are kept. If a snapshot cannot be written,
+the destructive action does not run at all.
 
 **You want the demo prospects back the way they started** (with the overdue items
 freshly overdue), without deleting your own records elsewhere — ask for the

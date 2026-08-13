@@ -10,7 +10,6 @@ They are static checks on the Terraform source. Nothing here proves a `plan` or 
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import hcl2
