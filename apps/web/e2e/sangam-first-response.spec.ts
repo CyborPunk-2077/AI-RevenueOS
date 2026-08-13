@@ -2,6 +2,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { signInAs } from './support/auth';
+
 /**
  * Acceptance evidence for the one number the leakage story rests on.
  *
@@ -20,11 +22,8 @@ import { resolve } from 'node:path';
  *   pnpm --filter @airevenueos/web exec playwright test sangam-first-response
  */
 
-const PASSWORD = process.env.DEMO_PASSWORD ?? 'sangam-demo-2026';
 // Runs in the browser-test workspace, not the founders' own. See
 // `sangam-founder-prospecting.spec.ts` for why that boundary is a tenant.
-const OWNER = 'owner@sangam-e2e.test';
-
 const EVIDENCE = resolve(__dirname, '../../../artifacts/visual-evidence/session-02-first-response');
 
 test.beforeAll(() => {
@@ -61,12 +60,10 @@ test('first response is recorded only by real outbound contact, and only once', 
   const stamp = Date.now();
   const surname = `Waiting${stamp}`;
 
-  // --- sign in --------------------------------------------------------------
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(OWNER);
-  await page.getByLabel('Password').fill(PASSWORD);
-  await page.getByTestId('sign-in').click();
-  await page.waitForURL('**/today');
+  // The session was established once per machine in `support/global-setup.ts`
+  // and is adopted here. Sign-in is rate limited, and that limiter is production
+  // behaviour rather than something a test may switch off.
+  await signInAs(page, 'e2e-owner');
 
   const baseline = await awaitingCount(page);
   expect(baseline).toBeGreaterThanOrEqual(0);

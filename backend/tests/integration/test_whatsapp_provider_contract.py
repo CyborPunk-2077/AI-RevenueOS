@@ -146,8 +146,16 @@ async def _register_channel(session: Any, tenant_id: UUID, identifier: str) -> N
 
 
 @pytest.fixture
-async def workspaces() -> Any:
+async def workspaces(migrated_database: str) -> Any:
     """Two tenants, each owning a different WhatsApp business number.
+
+    `migrated_database` is depended on for isolation, not for a value. It is what
+    starts the session's ephemeral PostgreSQL and repoints `ALEMBIC_DATABASE_URL`
+    at it. Without it, `admin_session()` fell back to whatever the environment
+    already had - which in the API container is the **real** local database - and
+    a standalone run of this file provisioned `wa-contract-a` and `wa-contract-b`
+    into the founders' own stack. It did exactly that on 2026-08-13. The whole
+    file passed either way, which is why nothing noticed.
 
     The engine is dropped either side of the test. These cases drive the real
     ingest path, which opens its own sessions from the application's cached

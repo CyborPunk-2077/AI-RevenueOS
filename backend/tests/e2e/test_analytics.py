@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -21,6 +22,17 @@ from tests.e2e.test_crm_contacts_accounts import (  # noqa: F401
 )
 
 pytestmark = pytest.mark.postgres
+
+#: The dashboard buckets by *tenant-local* calendar day, so "today" has to be
+#: asked for in the same timezone. `date.today()` is the server's, which is UTC in
+#: the container: between 18:30 UTC and midnight it names yesterday in Asia/Kolkata,
+#: and a lead captured just now falls outside the range the test asked for. That
+#: made these assertions pass or fail on the time of day the suite happened to run.
+TENANT_TZ = ZoneInfo("Asia/Kolkata")
+
+
+def tenant_today() -> date:
+    return datetime.now(TENANT_TZ).date()
 
 
 class TestAnalyticsHttp:
@@ -40,6 +52,9 @@ class TestAnalyticsHttp:
             "sla",
             "team_performance",
             "lead_sources",
+            # Added after this assertion was written, and legitimately part of the
+            # dashboard: value and count by pipeline stage.
+            "pipeline_by_stage",
             "daily",
             "scope",
         }
@@ -84,7 +99,7 @@ async def test_source_metrics_do_not_cross_tenants(
         {"first_name": "Globex", "email": f"analytics-b-{uuid4()}@example.in", "source": marker_b}
     )
 
-    today = date.today()
+    today = tenant_today()
     acme_data = await AnalyticsService.for_principal(acme).dashboard(today, today)
     globex_data = await AnalyticsService.for_principal(globex).dashboard(today, today)
     acme_sources = {item["source"] for item in acme_data["lead_sources"]}
@@ -118,7 +133,7 @@ async def test_self_scope_only_aggregates_assigned_rows(
             "assignee_id": admin.user_id,
         }
     )
-    today = date.today()
+    today = tenant_today()
     data = await AnalyticsService.for_principal(member).dashboard(today, today)
     sources = {item["source"] for item in data["lead_sources"]}
     assert "mine" in sources
@@ -136,7 +151,7 @@ async def test_rollup_is_idempotent_and_tenant_bound(
     await LeadService.for_principal(principal).capture(
         {"first_name": "Rollup", "email": f"rollup-{uuid4()}@example.in", "source": "rollup-test"}
     )
-    today = date.today()
+    today = tenant_today()
     service = RollupService(principal.tenant_id)
     await service.refresh_day(today)
     await service.refresh_day(today)
@@ -164,7 +179,7 @@ async def test_disabled_export_records_no_file_url_and_is_audited(
     from application.analytics.service import AnalyticsService
 
     principal = principal_factory()
-    today = date.today()
+    today = tenant_today()
     result = await AnalyticsService.for_principal(principal).request_export(
         today - timedelta(days=7), today, storage_ready=False
     )
@@ -207,7 +222,7 @@ async def test_export_metadata_is_not_visible_to_another_tenant(
 
     acme = principal_factory(tenant_id=principal_factory.tenant_a)
     globex = principal_factory(tenant_id=principal_factory.tenant_b)
-    today = date.today()
+    today = tenant_today()
     export = await AnalyticsService.for_principal(acme).request_export(
         today, today, storage_ready=False
     )

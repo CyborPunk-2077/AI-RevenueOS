@@ -103,8 +103,17 @@ async def _exists(session: Any, table: str, row_id: UUID) -> bool:
 
 
 @pytest.fixture
-async def db() -> Any:
-    """The real database, as the owner role, so both tenants are writable."""
+async def db(migrated_database: str) -> Any:
+    """The session's ephemeral database, as the owner role, so both tenants are writable.
+
+    `migrated_database` is depended on for isolation, not for a value: it is what
+    starts that ephemeral PostgreSQL and repoints `ALEMBIC_DATABASE_URL` at it.
+    Without it `admin_session()` took whatever the environment already had, which
+    inside the API container is the **real** local database - and this file exists
+    to exercise deletion. It invented its own tenants and removed only those, so
+    nothing was lost, but a suite about not destroying founder data must not be one
+    import away from running against it.
+    """
     async with admin_session() as session:
         yield session
         # Remove only the tenants this file invented, children first.

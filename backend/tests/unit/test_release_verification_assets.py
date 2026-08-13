@@ -9,7 +9,12 @@ ROOT = repository_root()
 
 
 def test_acceptance_evidence_generator_indexes_all_criteria_without_live_claims() -> None:
-    report = build_report()
+    # The matrix is named explicitly rather than left to the script's own default,
+    # which resolves it by counting directories up from `src/scripts/`. That is
+    # right in a checkout and lands on `/docs/...` inside a container that mounts
+    # only `backend/` - the same shape of bug as the prompt registry's, and it made
+    # this test fail for the location it ran in rather than for anything it checks.
+    report = build_report(ROOT / "docs" / "ACCEPTANCE-EVIDENCE.md")
     assert report["criteria_count"] == 30
     assert report["live_production_evidence_generated"] is False
     assert [item["criterion"] for item in report["criteria"]] == list(range(1, 31))

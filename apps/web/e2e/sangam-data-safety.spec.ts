@@ -2,6 +2,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { signInAs } from './support/auth';
+
 /**
  * The recovered prospect, seen in the founders' own workspace.
  *
@@ -15,8 +17,6 @@ import { resolve } from 'node:path';
  * afford to delete things because it invents its own tenants.
  */
 
-const PASSWORD = process.env.DEMO_PASSWORD ?? 'sangam-demo-2026';
-const FOUNDER = 'abhishek@sangam.co.in';
 const CLAIDA = '019ff7f2-41eb-76b3-b229-68280ce353e3';
 
 const EVIDENCE = resolve(__dirname, '../../../artifacts/visual-evidence/session-04b-data-safety');
@@ -32,11 +32,7 @@ async function shot(page: Page, name: string): Promise<void> {
 test('the recovered prospect is back, once, with its history', async ({ page }) => {
   test.setTimeout(180_000);
 
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(FOUNDER);
-  await page.getByLabel('Password').fill(PASSWORD);
-  await page.getByTestId('sign-in').click();
-  await page.waitForURL('**/today');
+  await signInAs(page, 'founder');
 
   // --- 1 & 5. visible again, and exactly one of it ---------------------------
   await page.getByTestId('nav-leads').click();
@@ -71,11 +67,7 @@ test('the recovered prospect is back, once, with its history', async ({ page }) 
 test('the sample businesses are still there beside it', async ({ page }) => {
   test.setTimeout(180_000);
 
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(FOUNDER);
-  await page.getByLabel('Password').fill(PASSWORD);
-  await page.getByTestId('sign-in').click();
-  await page.waitForURL('**/today');
+  await signInAs(page, 'founder');
 
   // --- 9. the 15 samples rebuilt by the refresh, labelled as samples ---------
   await page.getByTestId('nav-leads').click();

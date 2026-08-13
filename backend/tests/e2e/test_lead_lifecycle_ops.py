@@ -74,9 +74,17 @@ class TestMerge:
         assert kept.last_name == "Menon", "the survivor's own value must win"
         assert result["filled_fields"] == ["phone"]
 
-    async def test_source_events_follow_the_survivor(
+    async def test_source_events_stay_where_they_were_written(
         self, wired_engine: Any, seeded_tenants: Any
     ) -> None:
+        """A merge must not rewrite the evidence of how a lead arrived.
+
+        This used to assert the opposite - that the events were re-pointed at the
+        survivor. `app.lead_source_events` is append-only at the database level, so
+        that UPDATE could never commit and it took the entire merge down with it.
+        Nothing is lost by leaving them alone: the loser is kept and stamped with
+        `merged_into_id`, so the attribution is still reachable from the survivor.
+        """
         tenant_a, _ = seeded_tenants
         survivor = await _lead(tenant_a)
         loser = await _lead(tenant_a)
@@ -99,14 +107,25 @@ class TestMerge:
         )
 
         async with tenant_session(tenant_a) as session:
-            moved = (
+            on_survivor = (
                 await session.execute(
                     select(func.count())
                     .select_from(LeadSourceEvent)
                     .where(LeadSourceEvent.lead_id == survivor)
                 )
             ).scalar_one()
-        assert moved == 1
+            on_loser = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(LeadSourceEvent)
+                    .where(LeadSourceEvent.lead_id == loser)
+                )
+            ).scalar_one()
+
+        assert on_survivor == 0, "the survivor gains no history it did not have"
+        assert on_loser == 1, "and the loser's own history is intact"
+        # The route from the survivor back to it: the loser is kept, not deleted.
+        assert (await _get(tenant_a, loser)).merged_into_id == survivor
 
     async def test_a_converted_lead_cannot_be_merged_away(
         self, wired_engine: Any, seeded_tenants: Any
@@ -251,10 +270,23 @@ class TestDeduplicate:
     async def test_another_tenants_leads_are_never_candidates(
         self, wired_engine: Any, seeded_tenants: Any
     ) -> None:
+        """An identical email in another tenant is not a duplicate. It is invisible.
+
+        Asserted by naming the row that must not appear rather than by demanding an
+        empty list: every lead in this module shares a first name and a source, so
+        tenant A legitimately accumulates same-tenant candidates as the file runs,
+        and an empty list stopped being the true answer for reasons that have
+        nothing to do with tenancy.
+        """
         tenant_a, tenant_b = seeded_tenants
         shared = f"twin-{uuid4().hex[:8]}@example.in"
         mine = await _lead(tenant_a, email=shared)
-        await _lead(tenant_b, email=shared)
+        theirs = await _lead(tenant_b, email=shared)
 
         result = await lifecycle_ops.deduplicate(tenant_id=tenant_a, actor_id=uuid4(), lead_id=mine)
-        assert result["candidates"] == []
+
+        found = {candidate["lead_id"] for candidate in result["candidates"]}
+        assert str(theirs) not in found
+        # The exact-email match is what would have been found had tenancy leaked,
+        # so nothing in tenant A may claim that reason either.
+        assert not [c for c in result["candidates"] if c["match_reason"] == "email_exact"]

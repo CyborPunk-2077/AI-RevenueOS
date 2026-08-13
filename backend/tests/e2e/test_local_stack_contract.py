@@ -16,13 +16,17 @@ It asserts three things the launcher depends on and cannot check for itself:
 from __future__ import annotations
 
 import re
-from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from tests.repo_layout import repository_root
+
+# These files live above `backend/`, so the checkout has to be located rather than
+# inferred from this module's position - inside a container that mounts only
+# `backend/`, counting directories upwards lands on `/`.
+REPO_ROOT = repository_root()
 COMPOSE_FILE = REPO_ROOT / "docker-compose.yml"
 LAUNCHER = REPO_ROOT / "scripts" / "demo.ps1"
 RESET = REPO_ROOT / "scripts" / "reset-demo.ps1"

@@ -3,6 +3,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
+import { signInAs } from './support/auth';
+
 /**
  * The founders' actual working day, end to end.
  *
@@ -23,9 +25,6 @@ import { tmpdir } from 'node:os';
  *   $env:DEMO_PASSWORD='sangam-demo-2026'
  *   pnpm --filter @airevenueos/web exec playwright test sangam-founder-prospecting
  */
-
-const PASSWORD = process.env.DEMO_PASSWORD ?? 'sangam-demo-2026';
-const OWNER = 'owner@sangam-e2e.test';
 
 const EVIDENCE = resolve(
   __dirname,
@@ -60,11 +59,8 @@ test('a founder imports a prospect list, then works one business through the day
   const tiffinsPhone = `984${tail}01`;
   const tailorsPhone = `984${tail}02`;
 
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(OWNER);
-  await page.getByLabel('Password').fill(PASSWORD);
-  await page.getByTestId('sign-in').click();
-  await page.waitForURL('**/today');
+  // Signed in once per machine, in `support/global-setup.ts`, and adopted here.
+  await signInAs(page, 'e2e-owner');
 
   const baseline = await awaitingCount(page);
   await shot(page, '01-today-work-queue');

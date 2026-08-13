@@ -57,7 +57,9 @@ PEOPLE = (
 )
 
 
-def _spec(tenant_id: UUID = PILOT_TENANT, *, kind: str = PILOT, slug: str = "pilot-under-test"):
+def _spec(
+    tenant_id: UUID = PILOT_TENANT, *, kind: str = PILOT, slug: str = "pilot-under-test"
+) -> WorkspaceSpec:
     return WorkspaceSpec(
         tenant_id=tenant_id,
         name="Pilot Under Test",

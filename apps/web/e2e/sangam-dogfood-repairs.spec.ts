@@ -2,6 +2,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { signInAs } from './support/auth';
+
 /**
  * The two defects the founder hit while dogfooding, proven fixed.
  *
@@ -18,10 +20,6 @@ import { resolve } from 'node:path';
  * Runs in the browser-test workspace, never the founders' own.
  */
 
-const PASSWORD = process.env.DEMO_PASSWORD ?? 'sangam-demo-2026';
-const OWNER = 'owner@sangam-e2e.test';
-const REP = 'rep@sangam-e2e.test';
-
 const EVIDENCE = resolve(__dirname, '../../../artifacts/visual-evidence/session-04-dogfood-repairs');
 
 test.beforeAll(() => {
@@ -32,13 +30,11 @@ async function shot(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: `${EVIDENCE}/${name}.png`, fullPage: true });
 }
 
-async function signIn(page: Page, email: string): Promise<void> {
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(PASSWORD);
-  await page.getByTestId('sign-in').click();
-  await page.waitForURL('**/today');
-}
+// Two accounts, three tests, and no sign-in between them: the sessions are
+// established once per machine in `support/global-setup.ts`. Three sign-ins here
+// used to spend three of the five attempts the limiter allows per IP per fifteen
+// minutes, which is why a run of more than one suite failed on the limiter. The
+// limiter itself is untouched.
 
 test('a prospect can be reassigned, and the page shows what was actually saved', async ({
   page,
@@ -46,7 +42,7 @@ test('a prospect can be reassigned, and the page shows what was actually saved',
   test.setTimeout(180_000);
   const stamp = Date.now();
 
-  await signIn(page, OWNER);
+  await signInAs(page, 'e2e-owner');
 
   // A prospect owned by somebody else, which is the case the founder hit.
   await page.getByTestId('nav-leads').click();
@@ -106,7 +102,7 @@ test('a team-scoped colleague can see and reassign their own team’s prospects'
   // carried no team at all, so every prospect answered "not found". They should
   // now see the team's book - and still never see another tenant's.
   const stamp = Date.now();
-  await signIn(page, REP);
+  await signInAs(page, 'e2e-rep');
   await page.getByTestId('nav-leads').click();
 
   // A prospect the rep adds themselves. It inherits their team, which is what
@@ -138,7 +134,7 @@ test('bad input is explained field by field, and the entries are kept', async ({
   test.setTimeout(180_000);
   const stamp = Date.now();
 
-  await signIn(page, OWNER);
+  await signInAs(page, 'e2e-owner');
   await page.getByTestId('nav-leads').click();
   await page.getByTestId('new-lead').click();
 

@@ -53,3 +53,8 @@ apps/web/.eslintrc.json
 
 # Local database safety snapshots. Real prospect data; never committed.
 backups/
+
+# Browser-suite sessions, established once per machine so the six suites do not
+# spend six of the five login attempts the limiter allows per quarter hour. They
+# are live refresh tokens for real accounts: never committed.
+apps/web/e2e/.auth/

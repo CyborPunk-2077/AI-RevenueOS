@@ -2,6 +2,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { signInAs } from './support/auth';
+
 /**
  * The four live-Inbox defects the founder found once WhatsApp was really connected.
  *
@@ -19,9 +21,6 @@ import { resolve } from 'node:path';
  *   pnpm --filter @airevenueos/web exec playwright test sangam-inbox-live
  */
 
-const PASSWORD = process.env.DEMO_PASSWORD ?? 'sangam-demo-2026';
-const OWNER = 'owner@sangam-e2e.test';
-
 const EVIDENCE = resolve(__dirname, '../../../artifacts/visual-evidence/session-05-inbox-live');
 
 test.beforeAll(() => {
@@ -30,14 +29,6 @@ test.beforeAll(() => {
 
 async function shot(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: `${EVIDENCE}/${name}.png`, fullPage: true });
-}
-
-async function signIn(page: Page): Promise<void> {
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(OWNER);
-  await page.getByLabel('Password').fill(PASSWORD);
-  await page.getByTestId('sign-in').click();
-  await page.waitForURL('**/today');
 }
 
 /**
@@ -69,11 +60,12 @@ test('the live Inbox stays honest: refresh, filters, identity and no fake inboun
   test.setTimeout(600_000);
   const stamp = Date.now();
 
-  // Signed in once for the whole file. Sign-in is rate limited to five attempts
-  // per IP per fifteen minutes, and three separate tests spent three of them on
-  // the same account - so the suite failed on the limiter rather than on
-  // anything it was checking. The limiter is left exactly as it is.
-  await signIn(page);
+  // One test, three steps, and a session established once per machine rather
+  // than once per file. Three separate tests used to spend three of the five
+  // attempts the limiter allows in a window, so the suite failed on the limiter
+  // rather than on anything it was checking. The limiter is left exactly as it
+  // is; what changed is that the suite no longer signs in to run.
+  await signInAs(page, 'e2e-owner');
 
   await test.step('a message arriving while the conversation is open shows up on its own', async () => {
 

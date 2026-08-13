@@ -47,7 +47,7 @@ from infrastructure.database.models.communications import (
     WebchatSession,
     WebchatWidget,
 )
-from infrastructure.database.session import tenant_session, unscoped_session
+from infrastructure.database.session import platform_session, tenant_session
 from infrastructure.logging.setup import get_logger
 from infrastructure.observability.tracing import start_span
 from shared.exceptions import Forbidden, NotFound, ValidationError
@@ -61,7 +61,14 @@ MAX_MESSAGE_CHARS: Final = 2_000
 MAX_MESSAGES_PER_SESSION: Final = 200
 CHANNEL: Final = "web_chat"
 
-_PUBLIC_KEY = re.compile(r"^wck_[A-Za-z0-9]{32}$")
+#: The shape `new_public_key` actually produces. `token_urlsafe` draws from the
+#: URL-safe base64 alphabet, so a key may contain `-` and `_` - and this pattern
+#: used to allow neither, which made the cheap "is this even a key" guard reject
+#: about two thirds of the keys the product had just minted. The widget then
+#: reported itself unavailable to its own site, and the tests that caught it
+#: passed or failed on the luck of the draw. Whatever the generator emits, this
+#: must accept.
+_PUBLIC_KEY = re.compile(r"^wck_[A-Za-z0-9_-]{32}$")
 
 
 def _hash(value: str) -> str:
@@ -235,10 +242,16 @@ async def _widget_by_key(public_key: str) -> WebchatWidget | None:
     This is the one query that cannot be tenant-scoped - the caller is anonymous
     and the key is what names the tenant - so it reads exactly one row by a unique
     indexed column and everything after it runs inside `tenant_session`.
+
+    It cannot be *unscoped* either: under the tenant policy a session with nothing
+    bound sees no rows, so this returned None for every widget, and the whole
+    visitor path answered "this chat widget is not available". The
+    `public_surface_lookup` policy added in migration 0012 exposes active widgets
+    only, and only under a deliberately bound platform context, which is logged.
     """
     if not _PUBLIC_KEY.match(public_key or ""):
         return None
-    async with unscoped_session() as session:
+    async with platform_session("webchat widget lookup") as session:
         widget: WebchatWidget | None = (
             await session.execute(
                 select(WebchatWidget).where(

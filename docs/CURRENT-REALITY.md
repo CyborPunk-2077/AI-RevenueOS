@@ -1,7 +1,7 @@
 # Sangam — feature reality map
 
-Last established: **2026-08-13** (session 5: pilot readiness and real WhatsApp),
-against the running local stack.
+Last established: **2026-08-14** (session 5 final verification), against the
+running local stack.
 
 This file records what is *actually true when the product is running*, not what
 the specification intends. Where something was checked in a browser this session
@@ -41,7 +41,7 @@ trust.
 | Notes | VERIFIED-USABLE | Editable by their author only, enforced server-side. |
 | Contacts and accounts | VERIFIED-USABLE | Pre-existing; list, search, create, edit, timeline. |
 | Deals and pipeline | VERIFIED-USABLE | Board by stage, stage moves, won/lost with loss reason. Seeded and viewed this session; stage-move interaction not re-exercised. |
-| Duplicate detection | VERIFIED-USABLE (detection) / PARTIAL (merge) | Candidates are detected on import and on demand, surfaced with the evidence, and left for a human. The panel now identifies the counterpart by business name, person, phone or email. The merge path exists in the API but has still not been exercised. |
+| Duplicate detection | VERIFIED-USABLE (detection) / BACKEND-ONLY (merge) | Candidates are detected on import and on demand, surfaced with the evidence, and left for a human. The panel identifies the counterpart by business name, person, phone or email. **Three defects fixed in the final verification**, all found by tests that had been red long enough to be assumed stale: re-running a deduplication inserted the same candidate twice (the guard compared a string against a set of UUIDs, so it matched nothing); merging tried to re-point append-only source events and could therefore never commit; and disqualifying a lead was refused as though no reason had been given, because the reason never reached the state machine. All three now work and are covered. There is still no merge screen. |
 
 ## Everything else
 
@@ -59,12 +59,12 @@ trust.
 | Email | PROVIDER-GATED | Needs a provider with a verified sending domain. |
 | SMS | PROVIDER-GATED | Needs Indian DLT registration. |
 | Voice | PROVIDER-GATED | Also needs legal sign-off on call-recording consent. |
-| Web chat | PARTIAL | Full stack implemented (commit 5ebd36f) with a visitor e2e spec. Not exercised this session. |
+| Web chat | PARTIAL | Full stack implemented (commit 5ebd36f) with a visitor e2e spec. **The public path could not work at all until the final verification, for two independent reasons.** Resolving a widget by its public key is necessarily a pre-tenant read; it used an unscoped session, and under forced row-level security an unscoped session matches nothing - so every visitor was told the widget was unavailable, including from its own site. Underneath that, the key pattern guarding the lookup allowed only letters and digits while keys are minted from the URL-safe base64 alphabet, so about two in three were rejected as malformed regardless. That second one is why these tests looked flaky rather than broken: whether they passed was the luck of the draw. Migration `0012` adds a SELECT-only policy for **active widgets under a deliberately bound, logged platform context**, the same shape as the sign-in lookup in `0004`; the pattern now accepts what the generator produces, with a unit test pinning that the two halves agree. Still not exercised in a browser. |
 | Appointments | PARTIAL | Bookings can be recorded and rescheduled. Calendar sync is PROVIDER-GATED on Google OAuth verification and reports itself as inactive. |
 | Documents and files | PROVIDER-GATED | Metadata is recorded; no upload URL is issued because there is no object storage. The API reports this honestly and the UI disables the control with the real reason. |
 | Payments | PROVIDER-GATED | Razorpay adapter exists. Needs a commercial agreement and KYC. |
 | Workflows / automations | BACKEND-ONLY | Engine, schedules and outbox all run. No builder screen, no logs screen. |
-| Forms and capture | PARTIAL | Builder and publish-snapshot exist with a publish permission. Publishing puts an unauthenticated write surface on the internet, so it is treated as a sensitive permission. Not exercised this session. |
+| Forms and capture | PARTIAL | Builder and publish-snapshot exist with a publish permission. Publishing puts an unauthenticated write surface on the internet, so it is treated as a sensitive permission. **Same defect as web chat, same fix**: fetching a published form is a pre-tenant read and returned "form not found" for every form ever published. `0012` exposes **published forms only**, under a logged platform context. Not exercised in a browser. |
 | CSV prospect import | VERIFIED-USABLE | **Proven in a browser this session.** Upload, column mapping, cleaned-up preview values, duplicate matching against existing records, per-row rejection reasons, and a created/already-had/unusable summary. CSV only; nothing claims XLSX. The template download uses the founders' own column names. |
 | Quick prospect capture | VERIFIED-USABLE | Business name plus one contact route is the whole required form; contact person, area, industry, website, source, pain and owner sit behind "More details". A business with no named contact is a first-class record. **Repaired in session 4:** invalid phone, email or amount now produce a specific message on the offending field, keyed off the API's structured faults, with the typed values kept. |
 | Import duplicate matching | VERIFIED-USABLE | Matches on email *and* phone (last ten digits, so `+91 98450 12201` and `09845012201` are the same number). The existing record is never touched; the incoming row is kept as a source event pointing at what it matched. Nothing is merged automatically. |
@@ -267,17 +267,41 @@ real and hit them within minutes, which is the whole argument for dogfooding.
 
 ## Known defects not fixed
 
-- ~~The whole backend suite cannot be run in one command.~~ **Fixed.** Migration
-  `0010` now checks whether the constraint exists before adding it, because
-  `0001` builds the baseline from live model metadata and therefore already
-  creates anything the models declare. A brand-new database migrates the whole
-  chain cleanly and the real database is unaffected. What remains in a full run
-  is pre-existing and unrelated: 20 errors in modules that read
-  `/docker-compose.yml` (they need the checkout mounted) and 23 assertion
-  failures in older e2e modules whose expected shapes have drifted — the
-  analytics dashboard, for instance, returns a `pipeline_by_stage` section the
-  test does not list.
-  This should be fixed before it hides something real.
+- ~~The whole backend suite cannot be run in one command.~~ **Fixed, and then
+  finished.** Migration `0010` now checks whether the constraint exists before
+  adding it, because `0001` builds the baseline from live model metadata and
+  therefore already creates anything the models declare. The two families that
+  remained after that are gone as well:
+
+  - The **20 errors** in modules that read `/docker-compose.yml` were a harness
+    problem, not a test problem. `docker compose run --rm tests` mounts the
+    checkout read-only at `/repo` and names it in `REPO_ROOT`, so those tests run
+    where they always should have. Nothing is skipped to get there.
+  - The **23 assertion failures** were seven distinct causes, and most of them
+    were the product, not the tests. Taken one at a time:
+
+    | Tests | What it really was | Which way it was fixed |
+    | --- | --- | --- |
+    | 12 | Web chat and public forms cannot read their own row before a tenant is bound | Product: migration `0012` |
+    | (same 10) | **And a second defect underneath it**: a widget's public key is generated from the URL-safe base64 alphabet and validated against a pattern that allowed only letters and digits, so roughly two keys in three were rejected as malformed before the lookup even ran | Product: `webchat.py`, plus the unit assertion that would have caught it |
+    | 4 | Merge, deduplication and disqualification each genuinely broken | Product: `lifecycle_ops.py` |
+    | 3 | The test asked for "today" in UTC; the product buckets by Asia/Kolkata, so these passed or failed on the time of day the suite ran | Test |
+    | 1 | Analytics really had grown a `pipeline_by_stage` section | Test |
+    | 1 | "No candidate from another tenant" asserted as "no candidates at all", which stopped being true as the file accumulated same-named fixtures | Test, narrowed to what it claims |
+    | 2 | `TRUSTED_HOSTS` is now `${TRUSTED_HOSTS:-...}` so a tunnel host can be added without editing a tracked file; split on commas that reads as a hostname called `${TRUSTED_HOSTS:-localhost` | Test, resolves the Compose default |
+
+    Blanket-updating the expected values would have hidden **five real defects**:
+    the pre-tenant read, the key pattern, and one each in merge, deduplication and
+    disqualification.
+
+- **The whole browser suite can now be run in one command.** ~~Sign-in is rate
+  limited to 5 attempts per IP per 15 minutes and the specs collectively need more
+  than that.~~ They no longer sign in at all: `e2e/support/global-setup.ts`
+  establishes one session per account, stores it in the git-ignored
+  `apps/web/e2e/.auth/`, and every spec adopts it. A second limiter matters just as
+  much and is easier to miss - `/auth/refresh` allows **10 per 60 seconds per IP** -
+  so a stored session is used as it is while its access token is fresh and renewed
+  only when it is not. Neither limiter was changed.
 
 - ~~The duplicate panel shows "Unknown record".~~ **Fixed this session.** The
   candidate payload now carries the business name and the panel falls back
@@ -296,11 +320,25 @@ real and hit them within minutes, which is the whole argument for dogfooding.
   the image rebuilt from the previous commit, so it is a regression from the UI
   primitive migration in `dd7c8e8`, not from this work. The other two tests in
   that file pass.
-- **The browser suite cannot be run in one command.** Sign-in is rate limited to
-  5 attempts per IP per 15 minutes and the specs collectively need more than
-  that, so a full run produces spurious `waitForURL` timeouts. Run one spec file
-  at a time. The clean fix is a per-worker storage-state fixture that signs in
-  once and reuses the cookie.
+- **Two test files wrote into the founders' own database, and passed while doing
+  it.** `admin_session()` reads `ALEMBIC_DATABASE_URL` from the environment.
+  Neither `test_whatsapp_provider_contract.py` nor `test_demo_refresh_safety.py`
+  depended on the fixture that starts the session's ephemeral PostgreSQL and
+  repoints that variable, so running either **on its own** in the API container
+  found the compose value instead - the real local database. The WhatsApp file
+  provisioned `wa-contract-a` and `wa-contract-b` into it on 2026-08-13, and the
+  demo-refresh file, whose whole subject is deletion, was one import away from
+  exercising it there. Both now depend on `migrated_database`. Nothing was lost -
+  both invent their own tenants and touch only those - and the whole point is that
+  they passed either way, which is why nothing noticed. The two stray tenants are
+  still in the local database, empty and isolated; they are left alone rather than
+  deleted, because nothing in this session may run a destructive operation against
+  real data.
+
+- **`sangam-first-slice.spec.ts` still writes to the founders' workspace.** Every
+  other browser suite moved to the `sangam-e2e` tenant in session 3; this one
+  predates that and was missed. It is excluded from the documented six-suite run
+  rather than quietly included, and moving it is a small job nobody has done.
 - ~~19 backend tests fail inside the API container only.~~ **Resolved.** Two
   different causes were hiding behind one symptom. The prompt tests were a real
   path bug in production code, now fixed and mounted. The rest assert on files

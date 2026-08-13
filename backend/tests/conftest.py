@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 from uuid import UUID
 
@@ -55,7 +55,7 @@ _PROVIDER_ENV = (
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _no_real_provider_credentials() -> AsyncIterator[None]:
+def _no_real_provider_credentials() -> Iterator[None]:
     """Run every suite as though no provider had ever been configured."""
     removed = {name: os.environ.pop(name, None) for name in _PROVIDER_ENV}
 
@@ -67,6 +67,7 @@ def _no_real_provider_credentials() -> AsyncIterator[None]:
         if value is not None:
             os.environ[name] = value
     get_settings.cache_clear()
+
 
 TENANT_A = UUID("01890000-0000-7000-8000-00000000000a")
 TENANT_B = UUID("01890000-0000-7000-8000-00000000000b")

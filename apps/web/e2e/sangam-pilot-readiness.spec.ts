@@ -3,6 +3,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
+import { signInAs } from './support/auth';
+
 /**
  * Is Sangam ready to carry one real SME's enquiries?
  *
@@ -20,20 +22,16 @@ import { tmpdir } from 'node:os';
  * alarm. Provisioning a genuinely pilot-kind workspace is proven against a
  * throwaway tenant in `tests/integration/test_pilot_provisioning.py`.
  *
- * Sign-ins are rationed. Sign-in is rate limited to five attempts per IP per
- * fifteen minutes, and this file uses four.
+ * Sign-ins are rationed, and this file needs four accounts on its own. Sign-in is
+ * rate limited to five attempts per IP per fifteen minutes, so the sessions are
+ * established once per machine in `support/global-setup.ts` and adopted here; this
+ * file spends no attempts of its own. The limiter is production behaviour and is
+ * left exactly as it is.
  *
  *   .\RUN_DEMO.cmd
  *   $env:DEMO_PASSWORD='sangam-demo-2026'
  *   pnpm --filter @airevenueos/web exec playwright test sangam-pilot-readiness
  */
-
-const PASSWORD = process.env.DEMO_PASSWORD ?? 'sangam-demo-2026';
-
-const PILOT_OWNER = 'owner@pilot-e2e.test';
-const PILOT_MANAGER = 'manager@pilot-e2e.test';
-const PILOT_SALES = 'sales@pilot-e2e.test';
-const FOUNDER = 'abhishek@sangam.co.in';
 
 /** A genuine founder record. Nothing in this file may see it or change it. */
 const CLAIDA = '019ff7f2-41eb-76b3-b229-68280ce353e3';
@@ -51,14 +49,6 @@ test.beforeAll(() => {
 
 async function shot(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: `${EVIDENCE}/${name}.png`, fullPage: true });
-}
-
-async function signIn(page: Page, email: string): Promise<void> {
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(PASSWORD);
-  await page.getByTestId('sign-in').click();
-  await page.waitForURL('**/today');
 }
 
 /** The number on a Today tile, so an assertion can reconcile against it. */
@@ -108,7 +98,7 @@ test('a pilot workspace carries a real day of work, and measures it honestly', a
   const stamp = Date.now();
   const tail = String(stamp).slice(-5);
 
-  await signIn(page, PILOT_OWNER);
+  await signInAs(page, 'pilot-owner');
 
   // --- 1 & 2. the workspace says whose it is, and the owner is in it ---------
   await expect(page.getByTestId('workspace-name')).toContainText('Pilot Test Workspace');
@@ -327,11 +317,21 @@ test('a pilot workspace carries a real day of work, and measures it honestly', a
   await shot(page, '15-test-centre-pilot-readiness');
 
   // --- WhatsApp says exactly how far a real test has got --------------------
-  // No Meta credentials are configured here, so the honest answer is
-  // NOT_CONFIGURED and every observed step is "Not yet". That is the assertion:
-  // the page must not go green because the code to make it green exists.
+  // The state is whatever was actually probed. It used to be asserted as
+  // NOT_CONFIGURED, which was true only while nobody had connected Meta; the
+  // founders since did, so the honest answer on this machine is CONNECTED when
+  // the live Graph call succeeds and ERROR when it does not - an expired
+  // temporary token reads as ERROR, which is the page doing its job. What must
+  // never happen is a fourth answer, invented from the fact that the code to
+  // send exists. That `CONNECTED` requires a live call that really succeeded is
+  // pinned in `tests/integration/test_whatsapp_provider_contract.py`.
   await expect(page.getByTestId('whatsapp-readiness')).toBeVisible();
-  await expect(page.getByTestId('whatsapp-state')).toContainText('NOT_CONFIGURED');
+  await expect(page.getByTestId('whatsapp-state')).toHaveText(
+    /^(NOT_CONFIGURED|CONNECTED|ERROR)$/,
+  );
+  // These two carry the claim, and they are about *this* workspace: whatever the
+  // provider says globally, the pilot has observed nothing, and the page says so
+  // rather than borrowing somebody else's inbound message.
   await expect(page.getByTestId('whatsapp-inbound_observed')).toHaveAttribute(
     'data-observed',
     'no',
@@ -341,7 +341,7 @@ test('a pilot workspace carries a real day of work, and measures it honestly', a
     'no',
   );
   await page.screenshot({
-    path: `${WHATSAPP_EVIDENCE}/01-whatsapp-not-configured.png`,
+    path: `${WHATSAPP_EVIDENCE}/01-whatsapp-provider-state.png`,
     fullPage: true,
   });
 });
@@ -352,7 +352,7 @@ test('a manager sees their team, and a salesperson sees their own work', async (
   // --- 3. the manager's team scope resolves to something --------------------
   // This is the session-4 defect: a team-scoped manager with no team filters on
   // an empty set and is told "not found" for every record in the workspace.
-  await signIn(page, PILOT_MANAGER);
+  await signInAs(page, 'pilot-manager');
   await expect(page.getByTestId('workspace-name')).toContainText('Pilot Test Workspace');
   await page.goto('/leads');
   await expect(page.getByTestId('lead-rows')).toContainText('Pilot Motors');
@@ -372,7 +372,7 @@ test('a salesperson sees the work that is theirs', async ({ page }) => {
   test.setTimeout(300_000);
 
   // --- 4. self scope: narrower on purpose, and it must not be empty ---------
-  await signIn(page, PILOT_SALES);
+  await signInAs(page, 'pilot-sales');
   await page.goto('/leads');
   // The first test assigned "Pilot Motors" to this person, so self scope has to
   // include it - and the Today figures are computed over the same scope.
@@ -388,7 +388,7 @@ test('the founders’ own workspace is untouched by any of it', async ({ page })
   test.setTimeout(300_000);
 
   // --- 23. read-only. The pilot work above must not have reached this ------
-  await signIn(page, FOUNDER);
+  await signInAs(page, 'founder');
   await expect(page.getByTestId('workspace-name')).toContainText('Sangam');
 
   await page.goto('/leads');

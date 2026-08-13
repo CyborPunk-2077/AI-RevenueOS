@@ -6,7 +6,7 @@ reality map). Older documents in `docs/` predate 2026-08-12 and describe the
 product under its previous name; where they disagree with this file or with the
 running system, they are wrong.
 
-Last updated: **2026-08-13** (session 5: pilot readiness and real WhatsApp).
+Last updated: **2026-08-14** (session 5 final verification: one green baseline).
 
 ## Accepted checkpoints
 
@@ -23,6 +23,10 @@ from `sangam-dogfood-repairs`, so no history was rewritten and the two earlier
 tags still point where they always did. Session branches are kept rather than
 deleted, so `sangam-first-slice`, `sangam-founder-dogfood` and
 `sangam-dogfood-repairs` still point at their work.
+
+**Session 5 is on `sangam-pilot-whatsapp` and is not merged or tagged.** It is
+verified and green (section 10) and waiting on project-head review. No existing
+tag was touched.
 
 ---
 
@@ -94,6 +98,15 @@ is — qualification is rule-based and no model provider is configured.
   in `application/`, not in a route.
 - Every tenant-owned table has row-level security **enabled and forced**. The app
   connects as a role that is neither superuser nor table owner, on purpose.
+- **A read that happens before a tenant is known needs its own policy, and
+  `platform_session`.** An unscoped session is not "no filter", it is "match
+  nothing": with `app.tenant_id` unbound the tenant policy is false for every row.
+  Sign-in (`0004`), the Razorpay ingress (`0007`) and the two anonymous surfaces -
+  a published form and an active chat widget (`0012`) - each get a **SELECT-only**
+  policy gated on a deliberately bound, logged platform context, scoped as
+  narrowly as the case allows. Reaching for `unscoped_session` instead does not
+  fail loudly; it returns nothing, and the feature quietly reports that it does
+  not exist. That is exactly how web chat and public forms sat broken.
 - `app.activities` and the audit log are **append-only**, enforced by a database
   trigger. Do not disable the trigger — including for seed or test convenience.
 - **What counts as answering a customer is defined once**, in
@@ -301,11 +314,13 @@ Two traps worth remembering before touching that script:
 - App: http://localhost:3000 — API docs: http://localhost:8000/v1/docs
 - Data lives in the `airevenueos_pgdata` volume and survives restarts.
 - `RESET_DEMO.cmd` wipes it and makes you type "reset" first.
-- Sign-in is rate limited to **5 attempts per IP per 15 minutes**. Keep this in
-  mind before adding automated logins anywhere: a browser file signs in **once**
-  and uses `test.step` for the rest, because three tests in one file spend three
-  of the five attempts and the suite then fails on the limiter rather than on
-  anything it was checking.
+- Sign-in is rate limited to **5 attempts per IP per 15 minutes**, and rotating a
+  session (`/auth/refresh`) to **10 per 60 seconds per IP**. Both are keyed on the
+  caller's address, and every browser request reaches the API from the same
+  place - the BFF container - so the whole suite shares one budget with whoever is
+  using the app. The browser suites therefore **do not sign in at all**: see
+  section 10. Keep both numbers in mind before adding an automated login or an
+  automated refresh anywhere.
 - **A normal start never rotates anybody's password.** `seed_sangam.py` creates
   credentials for accounts that do not exist and leaves existing ones alone.
   Rotation is `--reset-passwords`, asked for by name. This used to rewrite every
@@ -315,53 +330,96 @@ Two traps worth remembering before touching that script:
 For a fixed password (needed by the browser tests):
 `powershell -ExecutionPolicy Bypass -File scripts\demo.ps1 -Password "..."`
 
-## 10. Latest test evidence (2026-08-13)
+## 10. Latest test evidence (2026-08-14)
+
+**One green baseline, from a clean environment.** Nothing in the table below is
+qualified, expected-to-fail or run one file at a time.
 
 | Gate | Result |
 | --- | --- |
-| Backend ruff + format | Clean, 236 files |
-| Backend mypy (strict) | Clean, 236 source files |
+| **Backend, complete suite** | **1408 passed, 18 skipped, 0 failed, 0 errors** (exit 0, 2m29s), from `docker compose run --rm tests` |
+| The 18 skips | All of `test_worker_runtime.py`, which needs `redislite` as a real Celery broker and says so. The only expected skip family; nothing else in the suite skips |
+| Backend ruff + format | Clean, 331 files |
+| Backend mypy (strict) | Clean, 313 source files |
 | import-linter | 6 contracts kept, 0 broken |
-| Backend unit + contract + session-5 integration | **954 passed, 0 failed** (exit 0) |
-| Fresh-database migration chain | **Clean** — a brand-new database migrates `0001`→`0011` with no error |
-| Test isolation from real credentials | **Enforced globally** — provider credentials and feature flags are stripped from the test process in `tests/conftest.py` |
-| First-response rule (`test_first_response_rule.py`) | **44 passed** — every case the founders named |
-| Pilot provisioning (`test_pilot_provisioning.py`) | **14 passed** — roles, scopes, team membership, isolation |
-| WhatsApp provider contract (`test_whatsapp_provider_contract.py`) | **23 passed** — signatures, replay, routing, isolation, no fabricated success |
-| Demo-refresh safety (`test_demo_refresh_safety.py`) | **8 passed** |
+| Fresh-database migration chain | **Clean** — a brand-new database migrates `0001`→`0012` with no error, once per suite run |
+| Test isolation from real credentials | **Enforced twice** — the `tests` service carries no `env_file`, and `tests/conftest.py` strips provider credentials and feature flags from the process |
+| Test isolation from the real database | **Repaired.** Two files reached `admin_session()` without first starting the ephemeral server; run alone they used the real local database. Both now depend on `migrated_database` |
+| WhatsApp provider contract | **29 passed** — signatures, replay, routing, isolation, no fabricated success |
 | Web typecheck | Clean |
 | Web lint | Clean, 0 warnings |
-| Browser e2e (`sangam-first-response`) | **1 passed** — session-2 measurement, unchanged by the new rule |
-| Browser e2e (`sangam-founder-prospecting`) | **1 passed** — import + duplicates + outreach |
-| Browser e2e (`sangam-dogfood-repairs`) | 3 passed — reassignment, team scope, field-level validation |
-| Browser e2e (`sangam-data-safety`) | **2 passed** — Claida present once with its history, samples beside it |
-| Browser e2e (`sangam-pilot-readiness`) | **4 passed** — the full session-5 acceptance, 19 screenshots |
-| Browser e2e (`sangam-inbox-live`) | **1 passed** — live refresh, filter reconciliation, reopening, no fake inbound. One sign-in for the whole file |
-| Founder workspace isolation | Verified: nothing this session wrote to `sangam`; the audit log shows only read-only sign-ins |
+| Browser, all six suites in one command | **12 passed, 0 failed** — sessions 02, 03, 04, 04B, 05 and Inbox hardening |
+| Browser sign-in attempts spent | **Zero.** Sessions are established once per machine and reused; the limiters are untouched |
+| Founder workspace isolation | Verified: the audit log for `sangam` shows only `auth.login`, `auth.refresh` and `auth.session_revoked` — no writes |
+| Founder data | 19 prospects intact, Claida's original `first_response_at` unchanged |
+| Live WhatsApp history | 13 messages intact, including the truthful `queued` that never sent, the `sent`, three `read` and one genuine `failed`. No status rewritten |
 
-**The whole-suite run works again.** Migration `0001` builds the baseline with
-`Base.metadata.create_all()`, so on a database created today it already makes the
-`execution_node_approval` constraint that migration `0010` then tried to add —
-`DuplicateTable`, and every test needing the ephemeral database died in its
-fixture (~375 errors). `0010` now asks the database what it already has. Both
-histories work: a database migrated before the model gained the constraint still
-gets it from `0010`, and a fresh one skips it. Verified by migrating a brand-new
-database through the whole chain, and the real database is untouched at `0011`.
+**Any migration after `0001` must tolerate what the baseline already built.** The
+baseline is built from live model metadata, so anything a later migration adds
+that the models already declare will exist before that migration runs. `0010`
+learned this the hard way; `0012` adds only policies, which metadata never
+creates.
 
-**Any migration after `0001` must be written this way.** The baseline is built
-from live model metadata, so anything a later migration adds that the models
-already declare will exist before that migration runs.
+**What the previously-red tests actually were.** The last session left two
+families red and called them pre-existing. Neither was what it looked like:
 
-Two families of failure remain in a full run, both pre-existing and neither a
-product fault:
+- The **20 errors** were the harness, not the tests: they read files above
+  `backend/`, and nothing had ever mounted the checkout where a container could
+  see it. It does now.
+- The **23 failures** were seven distinct causes, and five of them were real
+  product defects — a pre-tenant read that could never see its own row, a widget
+  key pattern that rejected two thirds of the keys the product mints, and one
+  each in merge, deduplication and disqualification. `docs/CURRENT-REALITY.md`
+  has the full breakdown. Updating the expected values in bulk would have buried
+  all five.
 
-- 20 errors in `test_local_stack_contract.py` and `test_launcher_demo_login.py`,
-  which read `/docker-compose.yml`. They need the checkout mounted; the container
-  does not have it.
-- 23 assertion failures in older e2e modules (analytics, webchat, lead lifecycle,
-  form builder) that have drifted from the responses they assert on — for
-  example the analytics dashboard now returns a `pipeline_by_stage` section the
-  test does not expect.
+## 10b. How to run the checks
+
+**Backend, everything, from a clean ephemeral environment:**
+
+```
+docker compose run --rm tests
+```
+
+A `test`-profile service. It differs from `api` in three ways that all exist to
+stop a test run depending on, or disturbing, the machine it runs on:
+
+- The **checkout is mounted read-only at `/repo`** and named in `REPO_ROOT`. The
+  tests that assert on `docker-compose.yml`, the launcher, the reset script,
+  Terraform and the workflows read files that live above `backend/`; inside a
+  container that mounts only `backend/` they used to error on a path that could
+  never exist. Read-only, because a test run must not edit what it is verifying.
+- It has **its own Redis** (`redis-test`, no host port). The auth tests call
+  `FLUSHALL` between cases - they have to, the limiter's state is what they are
+  testing - and pointing them at the running stack's Redis would wipe its
+  sessions and counters underneath whoever was using the app. `fakeredis` is not
+  an option either: it cannot run the limiter's Lua script, so every limit
+  assertion would pass for the wrong reason.
+- It carries **no `env_file` and no `DATABASE_URL`**. The suite starts its own
+  PostgreSQL per session, and the real Meta credentials in `.env.local` never
+  enter the process. `tests/conftest.py` strips them as well; this is the outer
+  half of the same guarantee.
+
+**Browser suites**, all six in one command, which is new:
+
+```
+$env:DEMO_PASSWORD='sangam-demo-2026'
+pnpm --filter @airevenueos/web exec playwright test sangam-first-response sangam-founder-prospecting sangam-dogfood-repairs sangam-data-safety sangam-pilot-readiness sangam-inbox-live
+```
+
+Named one by one rather than matched with `sangam-`, deliberately.
+`sangam-first-slice.spec.ts` shares the prefix and is **not** one of the six: it
+predates the tenant boundary and still creates its prospect in the founders' own
+`sangam` workspace. Leave it out of routine runs. Moving it to `sangam-e2e` like
+the others is a small job nobody has done yet.
+
+**Static, type and architecture gates:**
+
+```
+docker compose run --rm tests sh -c "ruff check src tests && ruff format --check src tests && mypy && lint-imports"
+pnpm --filter @airevenueos/web typecheck
+pnpm --filter @airevenueos/web lint
+```
 
 ## 11. Visual evidence
 
@@ -411,23 +469,31 @@ verified inbound event was deduplicated, logged and dropped.
   does not, unconfigured queues honestly. Status callbacks only move a message
   forward through sent → delivered → read.
 - The Test Centre shows `NOT_CONFIGURED` / `CONNECTED` / `ERROR`, and `CONNECTED`
-  requires a live Graph API call that succeeded.
+  requires a live Graph API call that succeeded. **As of 2026-08-14 it reports
+  `ERROR`**: credentials are present and Meta refused them, which is what an
+  expired temporary access token looks like. That is the page doing its job, not
+  a fault in Sangam - and it is why the pilot browser spec no longer asserts one
+  particular state. It asserts that the state is one the system actually
+  observed, and that this workspace has observed nothing of its own.
 
-**Still needs a human at Meta** - login, 2FA, terms, number ownership - and a
-temporary HTTPS tunnel to this machine. `docs/WHATSAPP-LIVE-TEST.md` has the
-exact steps and the number policy (never convert a personal WhatsApp number).
+**The two-way path is proven.** A message from a real phone reached Sangam
+through Meta, and a reply sent from the Sangam Inbox reached that phone, with
+real provider ids and delivery/read reconciliation. The stored history - the
+truthful `queued` record that never sent, the `sent`, the `read`, and one genuine
+`failed` - is preserved and was not rewritten by any of this verification.
+
+Getting back to `CONNECTED` **needs a human at Meta** - a fresh access token, and
+the tunnel hostname still trusted. `docs/WHATSAPP-LIVE-TEST.md` has the exact
+steps and the number policy (never convert a personal WhatsApp number).
 
 ## 13. Next task
 
-**Pending project-head review and owner manual session-5 testing.**
+**Pending project-head review before Session 05 merge/checkpoint.**
 
-Session 5 made the product ready for one real SME shadow pilot and built the real
-WhatsApp Cloud API path up to the point where a person has to log in to Meta. No
-roadmap item is chosen here.
-
-Session 3 delivered what the founders need to start entering real prospects. The
-next task is deliberately not chosen here; the project head decides it after
-reviewing this state.
+Session 5 made the product ready for one real SME shadow pilot, built the real
+WhatsApp Cloud API path and proved it two-way against a real phone, and has now
+been verified end to end from a clean environment with nothing red. No roadmap
+item is chosen here; the project head decides it after reviewing this state.
 
 The earlier recommendation in this slot (weekly metric snapshots) was explicitly
 overridden and should not be picked up without a fresh instruction.
