@@ -91,6 +91,10 @@ def serialize_conversation(
         "status": row.status,
         "contact_id": str(row.contact_id) if row.contact_id else None,
         "contact_name": contact_name,
+        # Which prospect this thread belongs to. Needed so a reply can be sent
+        # through the lead-scoped send path, and so the Inbox and the prospect
+        # page cannot disagree about whose conversation this is.
+        "lead_id": str(row.lead_id) if row.lead_id else None,
         "assignee_id": str(row.assignee_id) if row.assignee_id else None,
         "assignee_name": assignee_name,
         "unread_count": row.unread_count,
@@ -499,6 +503,47 @@ class InboxService(_PrincipalScoped):
         logger.info("message_received", conversation_id=str(conversation_id), channel=channel)
         return await self._read_message(message_id, moment)
 
+    async def _send_whatsapp_now(
+        self, lead_id: UUID, conversation_id: UUID, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Hand a WhatsApp reply to the one service that talks to the provider.
+
+        Delegating rather than reimplementing is the whole point: the truthful
+        status handling - accepted means `sent`, rejected means `failed`, and
+        neither is ever assumed - lives in one place, and so does the call into
+        the canonical first-response rule.
+        """
+        from application.communications.whatsapp_reply import WhatsAppReplyService
+
+        content = str(payload.get("content", "")).strip()
+        result = await WhatsAppReplyService(
+            tenant_id=self.tenant_id,
+            user_id=self.user_id,
+            permissions=self.permissions,
+            scope=self.scope,
+            branch_ids=self.branch_ids,
+            team_ids=self.team_ids,
+        ).reply(lead_id, content)
+
+        logger.info(
+            "inbox_whatsapp_sent",
+            conversation_id=str(conversation_id),
+            sent=result["sent"],
+            status=result["status"],
+        )
+        return {
+            **result,
+            "conversation_id": str(conversation_id),
+            "channel": "whatsapp",
+            "provider_ready": True,
+            # No cheerful default. This is the provider's own verdict.
+            "delivery_note": (
+                "WhatsApp accepted it. Delivered and read only appear when WhatsApp reports them."
+                if result["sent"]
+                else f"Not sent: {result.get('error_message') or 'the provider refused it'}."
+            ),
+        }
+
     async def send(self, conversation_id: UUID, payload: dict[str, Any]) -> dict[str, Any]:
         """Queue an outbound reply.
 
@@ -520,6 +565,19 @@ class InboxService(_PrincipalScoped):
         channel = str(payload.get("channel") or conversation["primary_channel"])
         if channel not in CHANNELS:
             raise ValidationError(f"Unknown channel: {channel!r}.")
+
+        # WhatsApp is no longer hypothetical. Once a real provider is configured
+        # this must actually send, and it must go through the *same* code the
+        # prospect page uses rather than a second copy that queues forever.
+        #
+        # This was a genuine trap: a live provider, two reply surfaces, and only
+        # one of them wired up. Somebody replying from the Inbox got a message
+        # that never left the building, told only that it was "queued for
+        # delivery" - which reads exactly like success.
+        if channel == "whatsapp" and channel_ready(channel):
+            lead_id = conversation.get("lead_id")
+            if lead_id:
+                return await self._send_whatsapp_now(UUID(str(lead_id)), conversation_id, payload)
 
         ready = channel_ready(channel)
         moment = utcnow()
