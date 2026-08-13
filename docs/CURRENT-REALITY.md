@@ -267,6 +267,16 @@ real and hit them within minutes, which is the whole argument for dogfooding.
 
 ## Known defects not fixed
 
+- **The whole backend suite cannot be run in one command.** `pytest` with no
+  arguments produces ~375 fixture errors, all the same cause: migration `0001`
+  creates the schema from model metadata, so it already makes the constraint that
+  migration `0010` then adds, and the ephemeral test database never gets built.
+  **Confirmed pre-existing** — it reproduces on the accepted `master` commit. The
+  954 tests that do not need that fixture (unit, contract, and the integration
+  files that create their own tenants) run and pass; everything that does depend
+  on it cannot run at all.
+  This should be fixed before it hides something real.
+
 - ~~The duplicate panel shows "Unknown record".~~ **Fixed this session.** The
   candidate payload now carries the business name and the panel falls back
   business → person → phone → email. A genuinely missing counterpart now says so

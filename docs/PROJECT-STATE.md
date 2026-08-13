@@ -311,27 +311,35 @@ For a fixed password (needed by the browser tests):
 
 | Gate | Result |
 | --- | --- |
-| Backend ruff + format | Clean, 223 files |
-| Backend mypy (strict) | Clean, 223 source files |
+| Backend ruff + format | Clean, 236 files |
+| Backend mypy (strict) | Clean, 236 source files |
 | import-linter | 6 contracts kept, 0 broken |
-| Backend unit + contract **in the container** | **872 passed, 6 skipped, 0 failed** |
-| Repo-layout suites, checkout mounted | **62 passed** (the 6 skips above, run where their files exist) |
-| Permission/RBAC subset | 41 passed |
+| Backend unit + contract + session-5 integration | **954 passed, 0 failed** (exit 0) |
+| First-response rule (`test_first_response_rule.py`) | **44 passed** — every case the founders named |
+| Pilot provisioning (`test_pilot_provisioning.py`) | **14 passed** — roles, scopes, team membership, isolation |
+| WhatsApp provider contract (`test_whatsapp_provider_contract.py`) | **23 passed** — signatures, replay, routing, isolation, no fabricated success |
+| Demo-refresh safety (`test_demo_refresh_safety.py`) | **8 passed** |
 | Web typecheck | Clean |
 | Web lint | Clean, 0 warnings |
-| Browser e2e (`sangam-first-slice`) | 1 passed — full business journey, 11 screenshots |
-| Browser e2e (`sangam-first-response`) | 1 passed — 9 measurement assertions, 6 screenshots |
-| Browser e2e (`sangam-founder-prospecting`) | 1 passed — import + duplicates + outreach, 7 screenshots |
-| Browser e2e (`sangam-dogfood-repairs`) | 3 passed — reassignment, team scope, field-level validation, 7 screenshots |
-| Browser e2e (`sangam-data-safety`) | **2 passed** — recovered prospect visible with its history, samples beside it |
-| Demo-refresh safety (`test_demo_refresh_safety.py`) | **8 passed** — sample-only deletion proven against the real schema |
-| Founder workspace isolation | Verified: `sangam` held 15 prospects before and after two full browser runs |
-| Cold-start launcher | **Verified**: Docker closed → `RUN_DEMO.cmd` → app open in browser |
+| Browser e2e (`sangam-first-response`) | **1 passed** — session-2 measurement, unchanged by the new rule |
+| Browser e2e (`sangam-founder-prospecting`) | **1 passed** — import + duplicates + outreach |
+| Browser e2e (`sangam-dogfood-repairs`) | 3 passed — reassignment, team scope, field-level validation |
+| Browser e2e (`sangam-data-safety`) | **2 passed** — Claida present once with its history, samples beside it |
+| Browser e2e (`sangam-pilot-readiness`) | **4 passed** — the full session-5 acceptance, 19 screenshots |
+| Founder workspace isolation | Verified: nothing this session wrote to `sangam`; the audit log shows only read-only sign-ins |
 
-The container run is now clean. The 6 skips are whole modules that assert on files
-outside `backend/` (terraform, workflows, alert rules, lock files); they name the
-reason and they pass when run with the checkout mounted, which is how the 62 above
-were confirmed. Nothing is hidden.
+⚠️ **The whole-suite container run cannot currently be used as a gate.** Running
+`pytest` with no arguments produces ~375 errors, all of them the same thing:
+migration `0001` builds the schema with `Base.metadata.create_all()`, so it
+already creates the `execution_node_approval` constraint that migration `0010`
+then tries to add. Every test needing the ephemeral database fails in its
+fixture.
+
+**This is pre-existing and not a session-5 regression** — it reproduces
+identically on the accepted `master` commit, checked by switching branches and
+re-running one of the failing tests. It is recorded here rather than worked
+around, and it means the honest figure above is the 954 tests that do not depend
+on that fixture. Worth fixing before it hides a real failure.
 
 ## 11. Visual evidence
 
