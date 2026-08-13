@@ -46,7 +46,17 @@ async def enqueue_whatsapp_events(
         if not external_id:
             continue
 
-        key = global_key("inbound", "whatsapp", str(external_id), kind)
+        # The key has to separate the *states* of one message, not just its id.
+        #
+        # A single outbound message produces `sent`, then `delivered`, then
+        # `read`, all carrying the same provider message id and all of kind
+        # `status_update`. Keying on (id, kind) alone made them one event: the
+        # first was recorded and the rest were silently dropped as duplicates, so
+        # a message that genuinely reached somebody's phone sat in Sangam forever
+        # saying only "sent". Observed in the live test - three callbacks arrived,
+        # one was kept.
+        state = str(event.get("status") or "") if kind == "status_update" else ""
+        key = global_key("inbound", "whatsapp", str(external_id), kind, state)
         if await cache.get_json(key) is not None:
             continue
 

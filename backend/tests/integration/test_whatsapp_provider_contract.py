@@ -429,6 +429,67 @@ class TestStatusReconciliation:
         # A reordered "sent" arriving after "read" must not walk it back.
         assert message.status == "read"
 
+    async def test_every_state_of_one_message_is_recorded_not_just_the_first(
+        self, workspaces: Any
+    ) -> None:
+        """The live-test defect, pinned.
+
+        One outbound message emits `sent`, then `delivered`, then `read` - same
+        provider id, same event kind. The webhook de-duplicator keyed on
+        (id, kind) alone, so the first was kept and the other two were dropped as
+        duplicates. A message that genuinely reached somebody's phone sat in
+        Sangam forever saying only "sent".
+        """
+        from application.communications.inbound import enqueue_whatsapp_events
+
+        # Run-unique: this path de-duplicates through Redis, whose keys outlive
+        # the database cleanup between runs. A fixed id would make the second run
+        # of this file fail for a reason that has nothing to do with the claim.
+        wamid = f"wamid.walk.{uuid7().hex}"
+
+        await ingest_inbound_message(
+            adapter().parse_webhook(
+                inbound_payload(phone_number_id=PHONE_ID_A, message_id=wamid, text_body="hi")
+            )[0]
+        )
+
+        for state in ("sent", "delivered", "read"):
+            events = adapter().parse_webhook(
+                status_payload(phone_number_id=PHONE_ID_A, message_id=wamid, status=state)
+            )
+            accepted = await enqueue_whatsapp_events(events)
+            assert accepted == 1, f"{state} was swallowed as a duplicate"
+
+        async with admin_session() as session:
+            message = (
+                await session.execute(
+                    select(Message).where(
+                        Message.tenant_id == TENANT_A, Message.external_id == wamid
+                    )
+                )
+            ).scalar_one()
+
+        assert message.status == "read"
+        assert message.delivered_at is not None
+        assert message.read_at is not None
+
+    async def test_the_same_state_twice_is_still_a_duplicate(self, workspaces: Any) -> None:
+        """Separating the states must not switch de-duplication off."""
+        from application.communications.inbound import enqueue_whatsapp_events
+
+        wamid = f"wamid.dd.{uuid7().hex}"
+        await ingest_inbound_message(
+            adapter().parse_webhook(
+                inbound_payload(phone_number_id=PHONE_ID_A, message_id=wamid, text_body="hi")
+            )[0]
+        )
+        events = adapter().parse_webhook(
+            status_payload(phone_number_id=PHONE_ID_A, message_id=wamid, status="delivered")
+        )
+
+        assert await enqueue_whatsapp_events(events) == 1
+        assert await enqueue_whatsapp_events(events) == 0
+
     async def test_a_status_for_an_unknown_message_is_refused(self, workspaces: Any) -> None:
         events = adapter().parse_webhook(
             status_payload(phone_number_id=PHONE_ID_A, message_id="wamid.nope", status="delivered")
