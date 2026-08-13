@@ -39,9 +39,14 @@ const FOUNDER = 'abhishek@sangam.co.in';
 const CLAIDA = '019ff7f2-41eb-76b3-b229-68280ce353e3';
 
 const EVIDENCE = resolve(__dirname, '../../../artifacts/visual-evidence/session-05-pilot-readiness');
+const WHATSAPP_EVIDENCE = resolve(
+  __dirname,
+  '../../../artifacts/visual-evidence/session-05-whatsapp',
+);
 
 test.beforeAll(() => {
   mkdirSync(EVIDENCE, { recursive: true });
+  mkdirSync(WHATSAPP_EVIDENCE, { recursive: true });
 });
 
 async function shot(page: Page, name: string): Promise<void> {
@@ -320,6 +325,25 @@ test('a pilot workspace carries a real day of work, and measures it honestly', a
   // so rather than implying Sangam sends them.
   await expect(page.getByTestId('readiness-manual_calls')).toHaveAttribute('data-state', 'manual');
   await shot(page, '15-test-centre-pilot-readiness');
+
+  // --- WhatsApp says exactly how far a real test has got --------------------
+  // No Meta credentials are configured here, so the honest answer is
+  // NOT_CONFIGURED and every observed step is "Not yet". That is the assertion:
+  // the page must not go green because the code to make it green exists.
+  await expect(page.getByTestId('whatsapp-readiness')).toBeVisible();
+  await expect(page.getByTestId('whatsapp-state')).toContainText('NOT_CONFIGURED');
+  await expect(page.getByTestId('whatsapp-inbound_observed')).toHaveAttribute(
+    'data-observed',
+    'no',
+  );
+  await expect(page.getByTestId('whatsapp-provider_identity')).toHaveAttribute(
+    'data-observed',
+    'no',
+  );
+  await page.screenshot({
+    path: `${WHATSAPP_EVIDENCE}/01-whatsapp-not-configured.png`,
+    fullPage: true,
+  });
 });
 
 test('a manager sees their team, and a salesperson sees their own work', async ({ page }) => {
