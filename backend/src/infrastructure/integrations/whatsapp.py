@@ -261,12 +261,22 @@ class WhatsAppAdapter(MessagingPort):
         for entry in payload.get("entry", []):
             for change in entry.get("changes", []):
                 value = change.get("value", {})
+                # Which of *our* numbers this arrived on. Meta sends one webhook
+                # per app, so without this a second business on the same app would
+                # have its customers filed under the first one's workspace. It is
+                # the only thing in the payload that can route a tenant.
+                metadata = value.get("metadata") or {}
+                business_number_id = metadata.get("phone_number_id")
+                business_number = metadata.get("display_phone_number")
                 for message in value.get("messages", []):
                     events.append(
                         {
                             "kind": "inbound_message",
+                            "business_phone_number_id": business_number_id,
+                            "business_phone_number": business_number,
                             "external_id": message.get("id"),
                             "from": "+" + str(message.get("from", "")).lstrip("+"),
+                            "profile_name": _profile_name(value, message.get("from")),
                             "timestamp": message.get("timestamp"),
                             "content_type": _content_type(message),
                             "content": _content_text(message),
@@ -278,6 +288,7 @@ class WhatsAppAdapter(MessagingPort):
                     events.append(
                         {
                             "kind": "status_update",
+                            "business_phone_number_id": business_number_id,
                             "external_id": status.get("id"),
                             "status": STATUS_MAP.get(status.get("status", ""), "pending"),
                             "timestamp": status.get("timestamp"),
@@ -311,6 +322,22 @@ def _safe_json(response: httpx.Response) -> dict[str, Any]:
         return data if isinstance(data, dict) else {"data": data}
     except ValueError:
         return {"raw": response.text[:1000]}
+
+
+def _profile_name(value: dict[str, Any], wa_id: str | None) -> str | None:
+    """The name WhatsApp shows for the sender, when they have one set.
+
+    Used only as a starting label for a brand-new prospect. It is whatever the
+    customer typed into their own phone, so it is never treated as identifying and
+    never overwrites a name somebody in the business has entered.
+    """
+    if not wa_id:
+        return None
+    for contact in value.get("contacts", []) or []:
+        if str(contact.get("wa_id", "")).lstrip("+") == str(wa_id).lstrip("+"):
+            name: str | None = (contact.get("profile") or {}).get("name")
+            return name
+    return None
 
 
 def _content_type(message: dict[str, Any]) -> str:

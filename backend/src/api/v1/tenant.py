@@ -68,6 +68,37 @@ async def pilot_readiness(request: Request, principal: CurrentPrincipal) -> dict
     return success(report, request_id=getattr(request.state, "correlation_id", None))
 
 
+@router.get("/tenant/whatsapp-status", summary="Live WhatsApp connection state")
+async def whatsapp_status(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    """NOT_CONFIGURED / CONNECTED / ERROR, decided by asking Meta.
+
+    Never returns a credential. `CONNECTED` requires a live call to the Graph API
+    that succeeded, not the presence of a token somebody pasted.
+    """
+    principal.require("tenant", "read")
+    from application.communications.whatsapp_status import connection_status
+
+    report = await connection_status(principal.tenant_id)
+    return success(report, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.get("/tenant/whatsapp-test-checklist", summary="How far a real WhatsApp test has got")
+async def whatsapp_test_checklist(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    """Observed, never asserted. Nothing is ticked because the code exists."""
+    principal.require("tenant", "read")
+    from application.communications.whatsapp_status import real_test_checklist
+
+    checks = await real_test_checklist(principal.tenant_id)
+    return success(
+        {
+            "checks": checks,
+            "observed": sum(1 for c in checks if c["observed"]),
+            "total": len(checks),
+        },
+        request_id=getattr(request.state, "correlation_id", None),
+    )
+
+
 @router.get("/tenant/feature-flags", summary="Effective feature entitlement")
 async def feature_flags(
     request: Request,

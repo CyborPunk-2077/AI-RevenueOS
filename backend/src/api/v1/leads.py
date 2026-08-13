@@ -21,6 +21,7 @@ from api.v1.schemas import (
     LeadUpdate,
     NoteCreateRequest,
     StartingBaselineRequest,
+    WhatsAppReplyRequest,
 )
 from domain.leads.lifecycle import (
     duplicate_resolution,
@@ -152,6 +153,31 @@ async def capture_starting_baseline(
         replace=payload.replace, note=payload.note
     )
     return success(captured, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.post(
+    "/{lead_id}/whatsapp-reply",
+    status_code=status.HTTP_201_CREATED,
+    summary="Reply to a prospect on WhatsApp",
+)
+async def whatsapp_reply(
+    lead_id: UUID,
+    payload: WhatsAppReplyRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+) -> dict[str, Any]:
+    """Send through the real Cloud API and record what the provider decided.
+
+    A 201 here does not mean the message was delivered; it means the attempt was
+    recorded. `sent` in the body is the provider's answer, and it is the same
+    answer that decides whether this counted as replying to the prospect.
+    """
+    principal.require("message", "send")
+    principal.require("activity", "create")
+    from application.communications.whatsapp_reply import WhatsAppReplyService
+
+    result = await WhatsAppReplyService.for_principal(principal).reply(lead_id, payload.text)
+    return success(result, request_id=getattr(request.state, "correlation_id", None))
 
 
 @router.get("/{lead_id}", summary="Read a lead")

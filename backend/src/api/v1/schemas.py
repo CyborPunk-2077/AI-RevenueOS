@@ -396,6 +396,12 @@ class ActivityLogRequest(StrictModel):
     ) = None
 
 
+class WhatsAppReplyRequest(StrictModel):
+    """One free-text WhatsApp reply. 4096 is the Cloud API's own body limit."""
+
+    text: Annotated[str, Field(min_length=1, max_length=4096)]
+
+
 class StartingBaselineRequest(StrictModel):
     """Capturing a pilot's 'before' picture.
 

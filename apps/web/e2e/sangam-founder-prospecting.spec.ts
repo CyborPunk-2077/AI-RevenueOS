@@ -145,7 +145,9 @@ test('a founder imports a prospect list, then works one business through the day
   // --- 6 & 8. record the call actually made, and the promise made on it ------
   await page.getByLabel('Type').selectOption('call');
   await page.getByTestId('activity-direction').selectOption('outbound');
-  await page.getByTestId('activity-outcome').selectOption('Spoke to them');
+  // A structured outcome now, not decorative text on the subject line. "spoke" is
+  // what makes this count as answering the enquiry; "no_answer" would not.
+  await page.getByTestId('activity-outcome').selectOption('spoke');
   await page.getByLabel('Subject').fill('Called Suresh about the counter orders');
   await page.getByLabel('Details').fill('Writes every order in a notebook. Interested, wants to see it working.');
   await page.getByTestId('next-action-input').fill('Send Suresh the one-page summary');
