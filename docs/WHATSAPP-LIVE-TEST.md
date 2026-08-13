@@ -115,13 +115,22 @@ the token matches, so a wrong token fails at this step rather than silently late
 Set these where the API can read them, then restart it. They are secrets: they do
 not belong in Git, in a screenshot, or in a chat message.
 
+Put them in `.env.local` at the repository root, which is git-ignored and wired
+into the `api` service as an optional `env_file`. The names have **no prefix** —
+`shared/settings.py` reads them as-is, and a misspelled name is ignored rather
+than rejected, which produces a 403 that looks like a wrong token.
+
 | Setting | Where it comes from |
 | --- | --- |
-| `AIREVENUEOS_WHATSAPP_PHONE_NUMBER_ID` | Meta → WhatsApp → API Setup |
-| `AIREVENUEOS_WHATSAPP_ACCESS_TOKEN` | Meta → WhatsApp → API Setup |
-| `AIREVENUEOS_WHATSAPP_APP_SECRET` | Meta → App settings → Basic |
-| `AIREVENUEOS_WHATSAPP_VERIFY_TOKEN` | You choose it; give Meta the same string |
-| `AIREVENUEOS_FEATURE_WHATSAPP_ENABLED` | `true` |
+| `WHATSAPP_PHONE_NUMBER_ID` | Meta → WhatsApp → API Setup |
+| `WHATSAPP_ACCESS_TOKEN` | Meta → WhatsApp → API Setup |
+| `WHATSAPP_APP_SECRET` | Meta → App settings → Basic |
+| `WHATSAPP_VERIFY_TOKEN` | You choose it; give Meta the same string |
+| `FEATURE_WHATSAPP_ENABLED` | `true` |
+
+The tunnel hostname goes in the root `.env` as `TRUSTED_HOSTS`, not in
+`.env.local`: Compose's own `environment:` block wins over an `env_file`, so it
+would be silently ignored there.
 
 Then **claim the number for the workspace**. This is the step that is easy to
 miss and produces the most confusing failure — an inbound message with no
@@ -171,6 +180,6 @@ workspace. The API log names the reason for every refused event.
 ## After the test
 
 Stop the tunnel. Rotate the temporary access token or let it expire. If the pilot
-does not proceed to real WhatsApp use, set
-`AIREVENUEOS_FEATURE_WHATSAPP_ENABLED=false` — every path then reports "not
-configured" and nothing anywhere pretends a message was sent.
+does not proceed to real WhatsApp use, set `FEATURE_WHATSAPP_ENABLED=false` —
+every path then reports "not configured" and nothing anywhere pretends a message
+was sent.
