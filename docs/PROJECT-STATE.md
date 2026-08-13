@@ -15,10 +15,14 @@ Both are annotated tags on `master`; neither has been rewritten.
 | Tag | Commit | What it is |
 | --- | --- | --- |
 | `sangam-baseline-session02` | `405e227` | First commercial slice with truthful first-response measurement |
-| `sangam-founder-dogfood-session03` | `d293425` | **Current.** The founders can enter real prospects: quick add, CSV import, duplicate matching, honest outreach recording, daily work queue |
+| `sangam-founder-dogfood-session03` | `d293425` | The founders can enter real prospects: quick add, CSV import, duplicate matching, honest outreach recording, daily work queue |
+| `sangam-safe-dogfood-session04` | `0974320` | **Current.** Session 4 + 4B: reassignment/auth scope and validation repairs, plus manifest-scoped demo refresh, mandatory local backup before anything destructive, and Claida recovered |
 
-`master` is at the session-3 tag. Session branches are kept rather than deleted,
-so `sangam-first-slice` and `sangam-founder-dogfood` still point at their work.
+`master` is at the session-4 tag. Session 4 + 4B were integrated by fast-forward
+from `sangam-dogfood-repairs`, so no history was rewritten and the two earlier
+tags still point where they always did. Session branches are kept rather than
+deleted, so `sangam-first-slice`, `sangam-founder-dogfood` and
+`sangam-dogfood-repairs` still point at their work.
 
 ---
 
