@@ -273,8 +273,24 @@ Open the business, go to **Record an outreach you made**, and fill in:
 One save does all of it. The next action becomes a follow-up automatically — no
 second form.
 
-The moment you record an outbound contact, that business stops being counted as
-waiting, and Sangam works out how long it took you to get back to them.
+**What actually happened** is now a proper answer, not a note to yourself. Pick
+*Spoke with them*, *No answer / missed*, *Meeting happened*, *Scheduled for
+later*, *Sent it*, and so on.
+
+This is the part that decides whether the business counts as answered:
+
+- **Spoke with them**, a message you actually sent, or a meeting that took
+  place — that business has been answered, and Sangam records how long it took.
+- **No answer**, a meeting only booked for later, or a message that failed to
+  send — the business is still waiting, and Today keeps saying so.
+
+That is deliberate. A number nobody picked up is a real attempt and it is worth
+recording, but it is not a reply, and a dashboard that treats it as one would be
+telling you a comfortable lie.
+
+One thing that surprises people: if a customer rings **you** and somebody
+answers, that *does* count. Choose *They contacted us* and *Spoke with them*. A
+missed call from them does not.
 
 ### 7. Come back tomorrow
 
@@ -293,6 +309,82 @@ keeping.
 
 If a business is simply not for us, open it, change the status to **disqualified**
 and give a reason. It leaves your daily lists but stays on record.
+
+---
+
+## 4b. Run a shadow pilot
+
+A shadow pilot is one real business using Sangam alongside how they already work.
+They keep making their own calls and sending their own messages. Sangam
+coordinates the work and measures it. Nothing is taken away from them, so there
+is nothing for them to lose by trying it.
+
+**1. Give the business its own workspace.**
+Ask for one to be set up for them by name. It is completely separate from ours:
+their staff cannot see our prospects and we cannot see theirs. Nothing in their
+workspace is sample data — it starts empty on purpose, because the whole value of
+a pilot is that the numbers mean something.
+
+**2. Add their people.**
+The owner sees everything in their business. A manager sees their team's work. A
+salesperson sees their own. Set these up before anybody starts, because "who owns
+this enquiry" is most of what the product is for.
+
+Sangam cannot email an invitation — no email account is connected — so you will
+be given their sign-in details to hand over yourself. Tell them to change the
+password once they are in.
+
+**3. Put their enquiries in.**
+Either add businesses one at a time, or import a spreadsheet saved as CSV. The
+import shows you what it will do before it saves anything: which rows are new,
+which ones they already have, and which cannot be used and why. Anything they
+already have is left completely alone.
+
+**4. Capture the Starting Baseline — before anybody starts working the list.**
+On **Today**, press **Capture the starting baseline**. This records where they
+are on day one: how many enquiries are waiting for a reply, how many have nobody's
+name against them, how many follow-ups are already late.
+
+Do this *first*. Once people start working, the "before" picture is gone, and
+without it every later conversation is an argument about what things used to be
+like.
+
+If there is not enough history to say something honestly — nobody has been replied
+to yet, so there is no typical response time — Sangam says exactly that instead of
+printing a zero.
+
+**5. Let them work the way they already do.**
+Phone calls on their own phones. WhatsApp from their own handsets. Nothing about
+this changes on day one.
+
+**6. Ask them to record what happened.**
+After each call or message: what it was, who got in touch, and what actually
+happened. It takes seconds. This is the only habit the pilot depends on, and it
+is worth saying out loud: Sangam measures what gets recorded, not what happened.
+A call nobody logs leaves that customer showing as waiting.
+
+**7. Ask them to write down what happens next.**
+The same form takes the next action and a date. Most calls end with a promise, and
+a promise written down ten minutes later is usually a promise not written down.
+
+**8. Have them start each day on Today.**
+What is overdue, who has never been replied to, who has no owner, who has nothing
+scheduled. That screen is the product.
+
+**9. Watch for the work that is slipping.**
+The useful conversation in week one is not about the numbers going up. It is
+"these four people enquired and nobody has got back to them" — which is usually
+news, and usually fixable the same afternoon.
+
+**10. Only compare later, after real use.**
+Come back to the Starting Baseline after several weeks of genuine use. Both
+columns are counts of records you can open and read.
+
+**11. Do not turn any of this into a revenue claim.**
+Not to them, not to anybody else. We can say fewer enquiries went unanswered, and
+we can show which ones. We cannot say we increased their sales — nobody has
+measured that, and the first person to ask a hard question about it will find out
+in about a minute.
 
 ---
 

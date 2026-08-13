@@ -6,7 +6,7 @@ reality map). Older documents in `docs/` predate 2026-08-12 and describe the
 product under its previous name; where they disagree with this file or with the
 running system, they are wrong.
 
-Last updated: **2026-08-13** (session 4B: data safety and Claida recovery).
+Last updated: **2026-08-13** (session 5: pilot readiness and real WhatsApp).
 
 ## Accepted checkpoints
 
@@ -97,11 +97,14 @@ is — qualification is rule-based and no model provider is configured.
 - `app.activities` and the audit log are **append-only**, enforced by a database
   trigger. Do not disable the trigger — including for seed or test convenience.
 - **What counts as answering a customer is defined once**, in
-  `domain/leads/first_response.py`: outbound direction, on a channel that reaches
-  the customer. Do not re-implement that test anywhere else. When a real provider
-  is switched on, feed its events through
+  `domain/leads/first_response.py`: a customer-reaching channel, plus a direction,
+  plus an **outcome**. A missed call, a meeting still in the diary, an inbound
+  message nobody answered and a send the provider rejected all leave the prospect
+  waiting; an inbound call somebody picked up counts. Do not re-implement that
+  test anywhere else. Every provider feeds
   `application/leads/first_response.record_first_response` rather than writing
-  `first_response_at` directly.
+  `first_response_at` directly - including WhatsApp, which asks the same function
+  the timeline form does.
 - **`first_response_at` is never backfilled and never overwritten.** It is set by
   a conditional `UPDATE ... WHERE first_response_at IS NULL`, in the same
   transaction as the activity that justifies it.
@@ -123,6 +126,15 @@ is — qualification is rule-based and no model provider is configured.
   authorise a delete.
 - **Anything destructive takes a local snapshot first and aborts if it fails.**
   `scripts/backup_local.py`, output in git-ignored `backups/`.
+- **A workspace says what it is for**, in `tenants.settings.workspace_kind`:
+  `founder`, `pilot`, `test` or `demo`. `application/tenants/provisioning.py` is
+  the one place a workspace is created, for the seed and for a pilot alike - a
+  second copy is how a workspace ends up with managers and no team. A `pilot`
+  counts as real data everywhere it matters, so `RESET_DEMO` refuses while one
+  exists.
+- **A pilot workspace has no demo manifest**, so no refresh can delete anything in
+  it. That is a property of how it was created, not a check somebody remembered
+  to write.
 - **Browser tests run in the `sangam-e2e` tenant, never in `sangam`.** The
   founders' workspace is real working data now. Isolation is a tenant, not an
   `is_test` column and not a cleanup step - activities and source events are
@@ -212,6 +224,39 @@ real prospecting. `--refresh` rebuilds the synthetic rows and is the only path
 that deletes; it touches no other tenant. It cannot delete activities — the
 append-only trigger forbids it — so refreshed runs leave orphaned activity rows
 behind. Use `RESET_DEMO.cmd` for a genuinely empty slate.
+
+## 8a. Pilot workspaces
+
+A real SME running a shadow pilot gets **its own tenant**, created by
+`src/scripts/provision_pilot.py`. Never a folder, a tag or a filtered view.
+
+```
+docker compose exec api python src/scripts/provision_pilot.py \
+    --name "Sharma Motors" --slug sharma-motors \
+    --owner owner@sharmamotors.in "Rakesh Sharma" \
+    --manager manager@sharmamotors.in "Deepa Sharma" \
+    --member sales@sharmamotors.in "Imran Khan"
+```
+
+- No sample prospects, ever. A pilot's starting baseline has to mean something.
+- Owner/manager/salesperson get global/team/self scope, **and the team exists**
+  with real memberships.
+- Re-running never resets a real person's password; the demo seed's opposite
+  behaviour is deliberate and does not apply here.
+- Credentials are printed for the founder to hand over. Email is provider-gated
+  and cannot deliver an invitation, and the script says so rather than implying
+  one was sent.
+
+A third workspace, **`sangam-pilot-e2e`**, is seeded for the session-5 browser
+acceptance. It is stamped `test`, not `pilot`, because a `pilot` counts as real
+data in the destructive guards and a workspace the tests write to must not make
+every reset warning look like a false alarm.
+
+**Starting baseline.** `application/leads/baseline.py`, captured once per
+workspace from the same metrics the Today page reads, stored in
+`tenants.settings`. It is a *before* picture and is never presented as an
+improvement. Where there is not enough history for a truthful figure it says so
+instead of printing a zero.
 
 ## 8b. Data safety and backups
 
@@ -315,10 +360,40 @@ photographs it, so a screenshot can only exist if the step actually worked.
    leaves the prospect showing as waiting. Honest, but say it out loud to any
    pilot customer before they read the number as "our team ignored these people".
 
+## 12b. WhatsApp: what is now real
+
+The adapter was always complete. What was missing was everything after it - a
+verified inbound event was deduplicated, logged and dropped.
+
+- Inbound messages route to a workspace by the **business number they arrived on**
+  (`app.channels`, claimed with `src/scripts/claim_whatsapp_number.py`). An
+  unclaimed number is refused, not guessed.
+- The sender is matched to an existing prospect on the last ten digits, or a thin
+  new prospect is created carrying the number and the WhatsApp profile name.
+  Nothing else is invented.
+- Everything lands in the canonical lead/conversation/activity/message tables.
+  There is no WhatsApp copy of a customer.
+- Idempotency is on the provider's message id **in the database**, not only in
+  Redis, because Meta redelivers hours later.
+- **An inbound message never counts as a reply.** It is recorded with outcome
+  `received` and asked the same canonical question a phone call is asked.
+- An outbound reply records what the provider decided: accepted counts, rejected
+  does not, unconfigured queues honestly. Status callbacks only move a message
+  forward through sent → delivered → read.
+- The Test Centre shows `NOT_CONFIGURED` / `CONNECTED` / `ERROR`, and `CONNECTED`
+  requires a live Graph API call that succeeded.
+
+**Still needs a human at Meta** - login, 2FA, terms, number ownership - and a
+temporary HTTPS tunnel to this machine. `docs/WHATSAPP-LIVE-TEST.md` has the
+exact steps and the number policy (never convert a personal WhatsApp number).
+
 ## 13. Next task
 
-**Pending project-head review.** Session 4 repaired the two defects the founder
-found by hand; it chose no new roadmap item.
+**Pending project-head review and owner manual session-5 testing.**
+
+Session 5 made the product ready for one real SME shadow pilot and built the real
+WhatsApp Cloud API path up to the point where a person has to log in to Meta. No
+roadmap item is chosen here.
 
 Session 3 delivered what the founders need to start entering real prospects. The
 next task is deliberately not chosen here; the project head decides it after

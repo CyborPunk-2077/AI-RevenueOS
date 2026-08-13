@@ -39,14 +39,24 @@ export function Card({
   interactive = false,
   className = '',
   children,
+  // Forwarded explicitly. JSX does not type-check hyphenated attributes on a
+  // component, so a `data-testid` passed here used to be silently dropped - the
+  // element rendered, the test could not find it, and nothing anywhere said why.
+  'data-testid': testId,
 }: {
   as?: 'div' | 'article' | 'section' | 'li';
   interactive?: boolean;
   className?: string;
   children: ReactNode;
+  'data-testid'?: string;
 }): JSX.Element {
   return (
-    <Tag className={`surface p-5 ${interactive ? 'interactive' : ''} ${className}`}>{children}</Tag>
+    <Tag
+      className={`surface p-5 ${interactive ? 'interactive' : ''} ${className}`}
+      data-testid={testId}
+    >
+      {children}
+    </Tag>
   );
 }
 

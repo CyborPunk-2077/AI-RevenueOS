@@ -176,12 +176,12 @@ test('a pilot workspace carries a real day of work, and measures it honestly', a
     direction: 'outbound',
     outcome: 'spoke',
     subject: 'Spoke to the owner about their enquiry',
-    next: 'Send the pricing note',
+    next: `Send the pricing note ${stamp}`,
   });
   await expect(page.getByTestId('lead-awaiting-response')).toHaveCount(0);
   await expect(page.getByTestId('lead-response-time')).toBeVisible();
-  await expect(page.getByTestId('task-rows')).toContainText('Send the pricing note');
-  await expect(page.getByTestId('lead-next-action')).toContainText('Send the pricing note');
+  await expect(page.getByTestId('task-rows')).toContainText(`Send the pricing note ${stamp}`);
+  await expect(page.getByTestId('lead-next-action')).toContainText(`Send the pricing note ${stamp}`);
   const answeredAt = await page.getByTestId('lead-response-time').innerText();
   await shot(page, '07-first-response-recorded');
 
@@ -273,7 +273,7 @@ test('a pilot workspace carries a real day of work, and measures it honestly', a
   // --- 20. finishing a follow-up reconciles against Today -------------------
   // The promise made on the call is in the queue.
   await page.goto('/follow-ups');
-  await expect(page.getByTestId('follow-up-rows')).toContainText('Send the pricing note');
+  await expect(page.getByTestId('follow-up-rows')).toContainText(`Send the pricing note ${stamp}`);
 
   // "No next action" counts open prospects with nothing scheduled. Pilot Motors
   // has this follow-up, so it is not in that count yet.
@@ -282,11 +282,16 @@ test('a pilot workspace carries a real day of work, and measures it honestly', a
 
   await page.goto('/follow-ups');
   await page
-    .getByRole('row', { name: /Send the pricing note/ })
+    .getByRole('row', { name: new RegExp(`Send the pricing note ${stamp}`) })
     .getByRole('button', { name: /done/i })
     .first()
     .click();
-  await expect(page.getByTestId('follow-up-rows')).not.toContainText('Send the pricing note');
+  // Counted, not "does not contain": closing the last open follow-up removes the
+  // table entirely and renders the empty state, and a `not.toContainText` against
+  // an element that no longer exists fails rather than passing.
+  await expect(
+    page.getByRole('row', { name: new RegExp(`Send the pricing note ${stamp}`) }),
+  ).toHaveCount(0);
   await shot(page, '13-follow-up-completed');
 
   // Closing it leaves that prospect with nothing scheduled, and Today says so.

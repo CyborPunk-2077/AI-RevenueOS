@@ -1,7 +1,7 @@
 # Sangam — feature reality map
 
-Last established: **2026-08-13** (session 4B: data safety and recovery), against
-the running local stack at commit `7cc94d4` plus this session's work.
+Last established: **2026-08-13** (session 5: pilot readiness and real WhatsApp),
+against the running local stack.
 
 This file records what is *actually true when the product is running*, not what
 the specification intends. Where something was checked in a browser this session
@@ -30,7 +30,7 @@ trust.
 | Tenant isolation | VERIFIED-USABLE | Three enforcement layers including forced Postgres RLS. Covered by existing e2e tests. |
 | Users and roles | VERIFIED-USABLE | Owner/manager/member with global/team/self scope. **Repaired in session 4:** roles and team membership are read with tenant context bound, so a manager is no longer silently issued a member's scope and a team-scoped user is no longer filtering on an empty set. Branches, a Sales team and memberships are seeded, and a new prospect inherits its creator's team. |
 | Today (operational dashboard) | VERIFIED-USABLE | Counts waiting-for-reply, unassigned, no-next-action and overdue, **all computed server-side in the caller's scope** by `application/leads/metrics.py`. Every figure links to the filtered list that makes it up. Verified that closing a follow-up decrements the overdue count and that answering a prospect decrements the waiting count. |
-| First-response measurement | VERIFIED-USABLE | **New this session.** `first_response_at` is set automatically, in the same transaction as the activity that justifies it, the first time an *outbound* contact on a customer-reaching channel is logged against a lead. Idempotent by conditional UPDATE, never overwritten, never backfilled. Rule lives in `domain/leads/first_response.py` so real provider events can feed it unchanged. Nine-assertion browser acceptance test. |
+| First-response measurement | VERIFIED-USABLE | `first_response_at` is set automatically, in the same transaction as the activity that justifies it. Idempotent by conditional UPDATE, never overwritten, never backfilled. **Rewritten in session 5** to take an *outcome* as well as a channel and direction: a missed call, a meeting still in the diary, an unanswered inbound message and a rejected send all leave the prospect waiting, while an inbound call somebody picked up counts. Records written before outcomes existed keep exactly their old meaning. 44 domain tests, plus browser acceptance for every case. |
 | Response-time reporting | VERIFIED-USABLE | Per-prospect time to first reply, plus tenant median and longest current wait. Median, not mean. Derived only from logged contact, so it moves when behaviour moves and at no other time. |
 | Prospects (leads) list | VERIFIED-USABLE | **Rebuilt this session** to show owner, next action, age and a "no reply yet" flag. |
 | Prospect detail | VERIFIED-USABLE | **Rebuilt this session** into a workbench: requirement, ownership, qualification, follow-ups, history, duplicates. |
@@ -52,7 +52,10 @@ trust.
 | Test Centre | VERIFIED-USABLE | **New this session.** Development-only; the route refuses to render in a production build. Provider rows are probed live. |
 | Analytics / reporting | PARTIAL | Charts render with table equivalents and skeletons. **The numbers have not been reconciled against the underlying records.** Do not quote them. Export is deliberately disabled. |
 | Unified inbox | PARTIAL | The screen and conversation model are real, but with no channel able to send it is a record of nothing. |
-| WhatsApp | PROVIDER-GATED | Adapter, signature verification, retry and reconciliation all exist. Needs a Meta WhatsApp Business account and template approval. Reports "not configured"; never fabricates a send. |
+| WhatsApp | PARTIAL / PROVIDER-GATED | **Completed in session 5, up to the human gate.** A verified webhook now becomes a customer record: tenant routing by business number, phone matching, safe prospect creation, conversation, activity, message, database-level idempotency, outbound reply through the real Cloud API, provider message ids and delivery/read reconciliation. All of it feeds the canonical first-response rule, and an inbound message correctly does *not* count as a reply. 23 provider-contract tests pass without credentials. **Not yet exercised against Meta**: needs a human to log in, accept terms, pass 2FA and claim a test number, plus a temporary HTTPS tunnel. `docs/WHATSAPP-LIVE-TEST.md`. |
+| Pilot workspace provisioning | VERIFIED-USABLE (backend) | `src/scripts/provision_pilot.py` creates a real SME's own tenant with owner/manager/salesperson, a branch, a team and real memberships, and no sample data. 14 integration tests cover roles, scopes, team membership, idempotency and the fact that no refresh can reach a pilot's rows. No screen yet; the founder runs one command. |
+| Starting baseline | VERIFIED-USABLE | Captured once per workspace on Today, from the same metrics the dashboard shows, stored on the tenant. Shows "at the start" beside "now" with no arrows, no percentages and no characterisation of the difference. Says so in words when there is not enough history for a figure. |
+| Workspace identity | VERIFIED-USABLE | The header names the company and what the workspace is for — ours, a pilot's, or the browser-test one. Driven by `workspace_kind` on the tenant, not by a list of slugs. |
 | Email | PROVIDER-GATED | Needs a provider with a verified sending domain. |
 | SMS | PROVIDER-GATED | Needs Indian DLT registration. |
 | Voice | PROVIDER-GATED | Also needs legal sign-off on call-recording consent. |
@@ -74,6 +77,53 @@ trust.
 | Deployment | SPEC-ONLY | Terraform for four environments, statically validated only. No AWS account. Nothing has ever been deployed. |
 
 ---
+
+## Session 5 — what "answered" actually means, and a workspace for a real business
+
+**The first-response rule was too simple, and the founders had already noticed.**
+The outreach form offered "No answer" as an outcome, pasted it onto the subject
+line, and then marked the prospect as answered anyway — because the rule only
+looked at channel and direction. A team could ring twenty people, reach nobody,
+and show a clean dashboard.
+
+The rule now takes an outcome as well, and it is still the only place the question
+is decided:
+
+| What happened | Counts as answering them? |
+| --- | --- |
+| Outbound call, they spoke | Yes |
+| Outbound call, no answer | **No** |
+| Inbound call, somebody picked up | **Yes** — answering the phone is engagement |
+| Inbound call, missed | No |
+| Inbound message received | No — that is the enquiry |
+| Message the provider accepted | Yes |
+| Message the provider rejected | **No** |
+| Meeting that took place | Yes |
+| Meeting booked for later | **No** |
+| Task, note, assignment, qualification | No |
+
+An activity with no outcome behaves exactly as it did in session 2, so nothing
+already recorded changed meaning.
+
+**A pilot business gets its own tenant**, provisioned by the same code the seed
+uses — because a second copy of that logic is how session 4 shipped a manager with
+no team. It holds no sample data and no demo manifest, which is what puts every
+row in it permanently beyond the reach of a refresh.
+
+**The starting baseline** is captured once, from the same metrics the Today page
+reads. It is presented as a "before" picture and never as an improvement, and it
+reports missing history in words rather than as a zero.
+
+**Two defects found while building this**, both real and both in accepted code:
+
+1. **`Card` silently dropped `data-testid`.** JSX does not type-check hyphenated
+   attributes on a component, so the element rendered, the marker vanished, and
+   nothing anywhere said why. Any test written against a `Card` would have failed
+   for reasons that looked like an application bug. Now forwarded explicitly.
+2. **Provisioning did not flush.** Team memberships existed only in Python until
+   something else happened to flush the session, so a caller reading the workspace
+   back saw a manager with no team — the exact session-4 defect, reintroduced by
+   the fix for it. Caught by the integration test, not by a person.
 
 ## Session 4B — a demo refresh destroyed real founder data
 
