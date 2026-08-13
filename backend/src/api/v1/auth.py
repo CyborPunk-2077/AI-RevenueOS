@@ -327,6 +327,13 @@ async def mfa_disable(
 
 @router.get("/me", summary="The authenticated principal")
 async def me(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    from application.tenants.provisioning import workspace_identity
+
+    # Which company's workspace this is, and what it is for. The chrome shows both,
+    # because the founders now keep their own workspace, a pilot's and the test one
+    # open side by side and every screen looks identical.
+    workspace = await workspace_identity(principal.tenant_id)
+
     return success(
         {
             "id": str(principal.user_id),
@@ -334,6 +341,8 @@ async def me(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
             "name": principal.name,
             "tenant_id": str(principal.tenant_id),
             "tenant_slug": principal.tenant_slug,
+            "workspace_name": workspace["name"],
+            "workspace_kind": workspace["kind"],
             "roles": list(principal.roles),
             "scope": principal.scope.value,
             "permissions": sorted(principal.permissions),

@@ -247,15 +247,47 @@ interface ChannelRow {
   readonly flag: string;
 }
 
+/**
+ * Probed on the server, never hand-written. `manual` is a first-class answer:
+ * during a shadow pilot the calls and messages really are made by a person, and
+ * dressing that up as a gap would misdescribe how the pilot works.
+ */
+interface ReadinessCheck {
+  readonly key: string;
+  readonly label: string;
+  readonly state: 'ready' | 'attention' | 'manual';
+  readonly detail: string;
+}
+
+interface ReadinessReport {
+  readonly workspace: { readonly name: string | null; readonly kind: string | null };
+  readonly checks: ReadinessCheck[];
+  readonly summary: { readonly ready: number; readonly attention: number; readonly manual: number };
+}
+
+const READINESS_TONE: Record<ReadinessCheck['state'], 'success' | 'warning' | 'neutral'> = {
+  ready: 'success',
+  attention: 'warning',
+  manual: 'neutral',
+};
+
+const READINESS_LABEL: Record<ReadinessCheck['state'], string> = {
+  ready: 'Proven here',
+  attention: 'Not yet',
+  manual: 'Done by a person',
+};
+
 export default async function TestCenterPage(): Promise<JSX.Element> {
   // Probed, not asserted. If one of these calls fails the row says so rather than
   // quietly rendering a reassuring default.
-  const [channelsResult, storageResult, calendarResult] = await Promise.all([
+  const [channelsResult, storageResult, calendarResult, readinessResult] = await Promise.all([
     apiFetch<{ channels: ChannelRow[] }>('/conversations/channels'),
     apiFetch<{ configured: boolean; blocker?: string | null }>('/files/storage-status'),
     apiFetch<{ enabled: boolean; blocker?: string | null }>('/appointments/calendar-sync'),
+    apiFetch<ReadinessReport>('/tenant/pilot-readiness'),
   ]);
 
+  const readiness = readinessResult.data ?? null;
   const channels = channelsResult.data?.channels ?? [];
   const storageOk = storageResult.data?.configured === true;
   const calendarOk = calendarResult.data?.enabled === true;
@@ -293,6 +325,74 @@ export default async function TestCenterPage(): Promise<JSX.Element> {
 
       {/* The distinction the founders asked for: which figures come from people
           using the product, and which are still assumptions. */}
+      {/* Pilot readiness, probed on every load. This is the page a founder opens
+          before handing a workspace to a real business, so a row that cannot be
+          confirmed says "not yet" rather than quietly rendering something
+          reassuring. */}
+      <section aria-labelledby="pilot-heading" className="space-y-3">
+        <h2 id="pilot-heading" className="text-sm font-medium text-muted-foreground">
+          Pilot readiness
+        </h2>
+        {readiness ? (
+          <Card className="overflow-x-auto p-0" data-testid="pilot-readiness">
+            <p className="px-5 pt-4 text-sm text-muted-foreground">
+              Checked against{' '}
+              <span className="font-medium text-foreground">
+                {readiness.workspace.name ?? 'this workspace'}
+              </span>{' '}
+              just now &mdash; {readiness.summary.ready} proven, {readiness.summary.attention} not
+              yet, {readiness.summary.manual} done by a person during a shadow pilot.
+            </p>
+            <table className="mt-3 w-full text-left text-sm">
+              <caption className="sr-only">Pilot readiness checks</caption>
+              <thead>
+                <tr className="border-b border-border text-xs uppercase text-muted-foreground">
+                  <th scope="col" className="px-5 py-3">
+                    Check
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    What is true right now
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    State
+                  </th>
+                </tr>
+              </thead>
+              <tbody data-testid="pilot-readiness-rows">
+                {readiness.checks.map((check) => (
+                  <tr
+                    key={check.key}
+                    data-testid={`readiness-${check.key}`}
+                    data-state={check.state}
+                    className="border-b border-border/60"
+                  >
+                    <td className="px-5 py-3 font-medium">{check.label}</td>
+                    <td className="px-5 py-3 text-muted-foreground">{check.detail}</td>
+                    <td className="px-5 py-3">
+                      <StatusPill tone={READINESS_TONE[check.state]}>
+                        {READINESS_LABEL[check.state]}
+                      </StatusPill>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="px-5 py-4 text-xs text-muted-foreground">
+              &ldquo;Done by a person&rdquo; is not a gap. In a shadow pilot the business keeps
+              making its own calls and sending its own messages; Sangam coordinates and measures
+              the work rather than performing it.
+            </p>
+          </Card>
+        ) : (
+          <Card data-testid="pilot-readiness-unavailable">
+            <p className="text-sm text-muted-foreground">
+              Pilot readiness could not be checked. That is itself the answer: treat this workspace
+              as not ready until this section loads.
+            </p>
+          </Card>
+        )}
+      </section>
+
       <Card>
         <h2 className="font-medium">Which numbers come from real use</h2>
         <p className="mt-2 text-sm text-muted-foreground">

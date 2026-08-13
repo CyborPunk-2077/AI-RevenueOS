@@ -341,6 +341,32 @@ async def provision_workspace(
     )
 
 
+async def workspace_identity(tenant_id: UUID) -> dict[str, Any]:
+    """Which company's workspace this is, for the signed-in chrome.
+
+    The founders now hold three kinds of workspace open at once - their own, a
+    pilot's, and the one the browser tests write to - and every one of them shows
+    the same screens. Being certain which company you are looking at before you
+    type a customer's name into it is not a nicety.
+    """
+    from sqlalchemy import select
+
+    from infrastructure.database.models.tenancy import Tenant
+    from infrastructure.database.session import tenant_session
+
+    async with tenant_session(tenant_id) as session:
+        row = (
+            await session.execute(
+                select(Tenant.name, Tenant.slug, Tenant.settings).where(Tenant.id == tenant_id)
+            )
+        ).first()
+
+    if row is None:
+        return {"name": None, "slug": None, "kind": None}
+    kind = (row[2] or {}).get(WORKSPACE_KIND_KEY)
+    return {"name": row[0], "slug": row[1], "kind": str(kind) if kind else None}
+
+
 async def workspace_kind(session: Any, tenant_id: UUID) -> str | None:
     """What this workspace is for, or None when it was never stamped."""
     from sqlalchemy import select

@@ -52,6 +52,22 @@ async def read_tenant(
     )
 
 
+@router.get("/tenant/pilot-readiness", summary="Probed pilot-readiness for this workspace")
+async def pilot_readiness(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    """What is genuinely true about this workspace right now.
+
+    Every row is answered from the database or the filesystem on each call. The
+    Test Centre renders it as-is, so a check that cannot be confirmed has to say
+    so rather than fall back to something reassuring.
+    """
+    principal.require("tenant", "read")
+    principal.require("lead", "list")
+    from application.tenants.pilot_readiness import PilotReadinessService
+
+    report = await PilotReadinessService.for_principal(principal).report()
+    return success(report, request_id=getattr(request.state, "correlation_id", None))
+
+
 @router.get("/tenant/feature-flags", summary="Effective feature entitlement")
 async def feature_flags(
     request: Request,

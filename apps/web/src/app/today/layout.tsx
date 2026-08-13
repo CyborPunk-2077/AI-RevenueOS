@@ -7,6 +7,8 @@ export const dynamic = 'force-dynamic';
 interface MeResponse {
   readonly email: string;
   readonly tenant_slug: string;
+  readonly workspace_name: string | null;
+  readonly workspace_kind: string | null;
 }
 
 export default async function TodayLayout({
@@ -20,7 +22,13 @@ export default async function TodayLayout({
   if (!me.ok || !me.data) redirect('/login');
 
   return (
-    <WorkspaceShell tenantSlug={me.data.tenant_slug} email={me.data.email} active="today">
+    <WorkspaceShell
+      tenantSlug={me.data.tenant_slug}
+      email={me.data.email}
+      workspaceName={me.data.workspace_name}
+      workspaceKind={me.data.workspace_kind}
+      active="today"
+    >
       {children}
     </WorkspaceShell>
   );
