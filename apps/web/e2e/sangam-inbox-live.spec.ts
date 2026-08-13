@@ -133,8 +133,16 @@ test('the Inbox list stays honest about where conversations are', async ({ page 
   // --- 4. archiving moves it, and only to Archived --------------------------
   await page.goto('/inbox?status=active');
   await page.getByTestId('conversation-rows').getByText(`Filter check ${stamp}`).click();
+  // Read the id only once the navigation has actually happened, or it is read
+  // off the list URL and comes back undefined.
+  await page.waitForURL(/\/inbox\/[0-9a-f-]{36}/);
   const conversationId = page.url().split('/inbox/')[1];
+  // The select is controlled by the server's value, so it only *stays* on
+  // "archived" once the change has been saved and the page re-rendered. Waiting
+  // for that is the honest signal that the write landed; navigating straight
+  // away would race it.
   await page.getByTestId('conversation-status').selectOption('archived');
+  await expect(page.getByTestId('conversation-status')).toHaveValue('archived');
 
   await page.goto('/inbox?status=archived');
   await expect(page.getByTestId('conversation-rows')).toContainText(`Filter check ${stamp}`);
