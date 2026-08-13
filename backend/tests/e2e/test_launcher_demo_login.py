@@ -23,7 +23,6 @@ import base64
 import re
 import secrets
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -31,9 +30,13 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
+from tests.repo_layout import repository_root
+
 pytestmark = pytest.mark.postgres
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+# `docker-compose.yml` and the launcher live above `backend/`, so the checkout is
+# located rather than inferred from this module's position.
+REPO_ROOT = repository_root()
 COMPOSE_FILE = REPO_ROOT / "docker-compose.yml"
 LAUNCHER = REPO_ROOT / "scripts" / "demo.ps1"
 
@@ -67,10 +70,25 @@ def api_hostname_used_by_the_bff(compose: dict[str, Any]) -> str:
     return host
 
 
+def compose_default(value: str) -> str:
+    """The value Compose would use with nothing set in the environment.
+
+    `TRUSTED_HOSTS` is written as `${TRUSTED_HOSTS:-localhost,127.0.0.1,api,web}`
+    so a live WhatsApp test can add a temporary tunnel hostname from a git-ignored
+    `.env` without an ephemeral address being committed to a tracked file. Split
+    naively on commas, that reads as a host literally called
+    `${TRUSTED_HOSTS:-localhost`. What these tests are about is the *default* set -
+    the one a founder gets by double-clicking the launcher - so the default is what
+    is resolved here.
+    """
+    match = re.fullmatch(r"\$\{[A-Za-z_][A-Za-z0-9_]*:?-(?P<default>.*)\}", value.strip())
+    return match.group("default") if match else value
+
+
 @pytest.fixture(scope="session")
 def api_trusted_hosts(compose: dict[str, Any]) -> list[str]:
-    configured = compose["api"]["environment"].get("TRUSTED_HOSTS", "")
-    return [h.strip() for h in str(configured).split(",") if h.strip()]
+    configured = compose_default(str(compose["api"]["environment"].get("TRUSTED_HOSTS", "")))
+    return [h.strip() for h in configured.split(",") if h.strip()]
 
 
 @pytest.fixture

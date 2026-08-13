@@ -11,8 +11,10 @@ a support action, not a restore-from-backup.
 what the survivor is missing. Overwriting a human-corrected field with older data
 is the failure mode people never forgive.
 
-**Source events are preserved on both sides.** Attribution is the reason the
-duplicate existed; losing it to tidy a list defeats the purpose.
+**Source events are preserved on both sides**, exactly where they were written.
+Attribution is the reason the duplicate existed; losing it to tidy a list defeats
+the purpose, and `app.lead_source_events` is append-only anyway - a merge that
+tried to re-point them could not commit.
 
 Disqualify and restore are a pair: disqualification is reversible by design,
 because "not now" is the most common reason and it is usually wrong within a
@@ -28,7 +30,7 @@ from sqlalchemy import func, select, update
 
 from application.audit.recorder import AuditRecorder
 from domain.leads.lifecycle import LeadStatus, assert_transition, find_duplicates
-from infrastructure.database.models.leads import Lead, LeadDuplicateCandidate, LeadSourceEvent
+from infrastructure.database.models.leads import Lead, LeadDuplicateCandidate
 from infrastructure.database.session import tenant_session
 from infrastructure.logging.setup import get_logger
 from infrastructure.observability.tracing import start_span
@@ -112,8 +114,13 @@ async def deduplicate(
             candidates = find_duplicates(_row(lead), [_row(other) for other in others])
 
             if persist:
+                # Compared as strings, because `DuplicateCandidate.lead_id` is one
+                # and the column is a UUID. A set of UUIDs never contains a str, so
+                # this guard silently matched nothing and the second run of a
+                # deduplication violated the `lead_candidate` unique constraint
+                # instead of being the no-op it is supposed to be.
                 existing = {
-                    row.candidate_lead_id
+                    str(row.candidate_lead_id)
                     for row in (
                         await session.execute(
                             select(LeadDuplicateCandidate).where(
@@ -189,15 +196,13 @@ async def merge_leads(
             survivor.updated_by = actor_id
             survivor.version += 1
 
-            # Attribution follows the survivor; the events themselves are untouched.
-            await session.execute(
-                update(LeadSourceEvent)
-                .where(
-                    LeadSourceEvent.tenant_id == tenant_id,
-                    LeadSourceEvent.lead_id == loser_id,
-                )
-                .values(lead_id=survivor_id)
-            )
+            # Source events are deliberately NOT re-pointed at the survivor.
+            # `app.lead_source_events` is append-only at the database level, so the
+            # UPDATE that used to be here could only ever raise and took the whole
+            # merge down with it. It is also the wrong thing to want: the event
+            # records what arrived and which record it created, and the loser is
+            # kept and stamped with `merged_into_id`, so the attribution is still
+            # reachable from the survivor without rewriting history.
 
             loser.merged_into_id = survivor_id
             loser.status = LeadStatus.ARCHIVED.value
@@ -256,7 +261,10 @@ async def disqualify_lead(
 
     async with tenant_session(tenant_id) as session:
         lead = await _load(session, tenant_id, lead_id)
-        assert_transition(lead.status, LeadStatus.DISQUALIFIED)
+        # The reason has to reach the state machine, not just be validated here:
+        # `DISQUALIFIED` is in `REQUIRES_REASON`, so without it every well-formed
+        # disqualification was refused as though no reason had been given.
+        assert_transition(lead.status, LeadStatus.DISQUALIFIED, reason=cleaned)
 
         before = {"status": lead.status}
         lead.status = LeadStatus.DISQUALIFIED.value

@@ -20,6 +20,8 @@ from api.v1.schemas import (
     LeadReviewRequest,
     LeadUpdate,
     NoteCreateRequest,
+    StartingBaselineRequest,
+    WhatsAppReplyRequest,
 )
 from domain.leads.lifecycle import (
     duplicate_resolution,
@@ -104,6 +106,78 @@ async def response_metrics(request: Request, principal: CurrentPrincipal) -> dic
     metrics = await service.response_metrics()
     metrics["overdue_follow_ups"] = await service.overdue_task_count()
     return success(metrics, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.get("/starting-baseline", summary="The pilot's captured 'before' picture")
+async def read_starting_baseline(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    """The stored baseline plus what the same figures say right now.
+
+    Declared before `/{lead_id}` so the literal path is not swallowed by the UUID
+    route.
+    """
+    principal.require("lead", "list")
+    principal.require("task", "list")
+    from application.leads.baseline import BaselineService
+
+    service = BaselineService.for_principal(principal)
+    payload = await service.reconcile()
+    if not payload.get("has_baseline"):
+        # Nothing captured yet, so show what capturing would record. This is a
+        # preview and says so; it is never presented as a baseline.
+        payload["preview"] = await service.preview()
+    return success(payload, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.post(
+    "/starting-baseline",
+    status_code=status.HTTP_201_CREATED,
+    summary="Capture the starting baseline",
+)
+async def capture_starting_baseline(
+    payload: StartingBaselineRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+) -> dict[str, Any]:
+    """Photograph today's figures and keep them as the pilot's starting point.
+
+    Requires `tenant:configure` rather than `lead:list`: this writes a number the
+    whole pilot will later be discussed against, and a salesperson should not be
+    able to reset it by clicking something.
+    """
+    principal.require("tenant", "configure")
+    principal.require("lead", "list")
+    principal.require("task", "list")
+    from application.leads.baseline import BaselineService
+
+    captured = await BaselineService.for_principal(principal).capture(
+        replace=payload.replace, note=payload.note
+    )
+    return success(captured, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.post(
+    "/{lead_id}/whatsapp-reply",
+    status_code=status.HTTP_201_CREATED,
+    summary="Reply to a prospect on WhatsApp",
+)
+async def whatsapp_reply(
+    lead_id: UUID,
+    payload: WhatsAppReplyRequest,
+    request: Request,
+    principal: CurrentPrincipal,
+) -> dict[str, Any]:
+    """Send through the real Cloud API and record what the provider decided.
+
+    A 201 here does not mean the message was delivered; it means the attempt was
+    recorded. `sent` in the body is the provider's answer, and it is the same
+    answer that decides whether this counted as replying to the prospect.
+    """
+    principal.require("message", "send")
+    principal.require("activity", "create")
+    from application.communications.whatsapp_reply import WhatsAppReplyService
+
+    result = await WhatsAppReplyService.for_principal(principal).reply(lead_id, payload.text)
+    return success(result, request_id=getattr(request.state, "correlation_id", None))
 
 
 @router.get("/{lead_id}", summary="Read a lead")

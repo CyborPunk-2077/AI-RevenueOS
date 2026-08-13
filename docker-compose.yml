@@ -48,7 +48,11 @@ services:
       # looked healthy because its own health check calls localhost.
       # `web` is here for the same reason if the browser is ever pointed straight
       # at the API from inside the compose network.
-      TRUSTED_HOSTS: localhost,127.0.0.1,api,web
+      # Overridable from the git-ignored root `.env` so a temporary webhook
+      # tunnel hostname can be added for a live provider test without an
+      # ephemeral address being written into this tracked file. The default is
+      # the normal local set.
+      TRUSTED_HOSTS: ${TRUSTED_HOSTS:-localhost,127.0.0.1,api,web}
       CORS_ALLOWED_ORIGINS: http://localhost:3000
       # MFA seals the TOTP secret with envelope encryption and fails closed
       # without a key, so enrolment would 422 in the browser. Local value only:
@@ -63,6 +67,13 @@ services:
       # their location from the source layout. Stated explicitly rather than
       # counting directories upwards and landing on `/`.
       PROMPT_ROOT: /prompts
+    # Local-only overrides, git-ignored, optional. It exists so the WhatsApp
+    # live test can supply a Meta access token and app secret without either of
+    # them being pasted into this tracked file. Values here win over the ones
+    # above, which is how the tunnel hostname reaches TRUSTED_HOSTS.
+    env_file:
+      - path: .env.local
+        required: false
     ports: ["8000:8000"]
     volumes:
       - ./backend:/app
@@ -82,6 +93,59 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+  # The backend suite, with the checkout where the tests that need it can reach
+  # it. Under the `test` profile, so it never starts with the stack:
+  #
+  #   docker compose run --rm tests
+  #
+  # Two deliberate differences from `api`:
+  #
+  #  * The whole checkout is mounted read-only at `/repo`, and `REPO_ROOT` names
+  #    it. A handful of tests assert on files that genuinely live outside
+  #    `backend/` - docker-compose.yml, the launcher, the reset script, Terraform,
+  #    the workflows - and inside a container that mounts only `backend/` they
+  #    used to error on a path that could never exist. Read-only because a test
+  #    run must not be able to edit the checkout it is verifying.
+  #  * No DATABASE_URL and no `env_file`. The suite starts its own ephemeral
+  #    PostgreSQL per session, so it never touches the founders' data, and it
+  #    must not inherit the real Meta credentials in `.env.local` - a test whose
+  #    result depends on whose machine it runs on is not a test. `conftest.py`
+  #    strips those variables as well; this is the outer half of the same
+  #    guarantee.
+  # Redis for the suite alone. The auth tests call FLUSHALL between cases - they
+  # have to, because the rate limiter's state is the thing under test - and
+  # pointing them at the running stack's Redis would wipe its sessions, limiter
+  # counters and caches while somebody was using it. `fakeredis` is not an option
+  # either: it cannot run the limiter's Lua script, so every limit assertion would
+  # pass for the wrong reason. Its own instance, on no host port, is the answer.
+  redis-test:
+    image: redis:7-alpine
+    profiles: ["test"]
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  tests:
+    build: {context: ./backend, target: development}
+    profiles: ["test"]
+    environment:
+      ENVIRONMENT: local
+      LOG_JSON: "false"
+      ENCRYPTION_MASTER_KEY: local_development_only_master_key_32_bytes_min
+      PROMPT_ROOT: /prompts
+      REPO_ROOT: /repo
+      REDIS_URL: redis://redis-test:6379/0
+    volumes:
+      - ./backend:/app
+      - ./prompts:/prompts:ro
+      - ./:/repo:ro
+    depends_on:
+      redis-test: {condition: service_healthy}
+    command: ["pytest"]
 
   # --- worker tier ---------------------------------------------------------
   # Pools are isolated by workload so a slow AI call cannot starve payments.

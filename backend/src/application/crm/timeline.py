@@ -24,7 +24,13 @@ from uuid import UUID
 from application.crm.service import _PrincipalScoped
 from domain.base import DomainEvent
 from domain.events.catalog import ACTIVITY_LOGGED, NOTE_ADDED, NOTE_UPDATED
-from domain.leads.first_response import DIRECTIONS, default_direction
+from domain.leads.first_response import (
+    DIRECTIONS,
+    OUTCOMES_BY_CHANNEL,
+    default_direction,
+    describe_outcome,
+    is_valid_outcome,
+)
 from infrastructure.logging.setup import get_logger
 from shared.exceptions import Forbidden, NotFound, ValidationError
 from shared.utils.ids import uuid7
@@ -53,6 +59,11 @@ def serialize_activity(row: Any, *, actor_name: str | None = None) -> dict[str, 
         # Shown in the timeline so a reader can tell "we called them" from "they
         # called us" - the distinction the first-response rule turns on.
         "direction": (row.metadata_json or {}).get("direction"),
+        # And what actually happened, which is the other half of that rule. A
+        # reader who sees "no answer" beside a prospect still marked as waiting
+        # can tell at a glance that the dashboard is right rather than stuck.
+        "outcome": (row.metadata_json or {}).get("outcome"),
+        "outcome_label": describe_outcome((row.metadata_json or {}).get("outcome")),
         "editable": False,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
@@ -208,6 +219,19 @@ class TimelineService(_PrincipalScoped):
                 details={"allowed": sorted(DIRECTIONS)},
             )
 
+        # Optional, because a note or a task has nothing to report and because
+        # every activity written before this existed has none. When it *is* given
+        # it must belong to the channel: "a call that was a no-show" is not a
+        # record anybody can act on, and silently keeping it would put an outcome
+        # in front of the founders that their own dashboard ignores.
+        raw_outcome = payload.get("outcome")
+        outcome: str | None = str(raw_outcome).strip() or None if raw_outcome else None
+        if outcome is not None and not is_valid_outcome(channel=activity_type, outcome=outcome):
+            raise ValidationError(
+                f"That is not something a {activity_type} can end in.",
+                details={"allowed": sorted(OUTCOMES_BY_CHANNEL.get(activity_type, frozenset()))},
+            )
+
         from application.audit.recorder import AuditRecorder
         from application.leads.first_response import record_first_response
         from infrastructure.database.models.crm import Activity
@@ -231,7 +255,7 @@ class TimelineService(_PrincipalScoped):
                     # Direction lives on the record, not only in the decision it
                     # triggered, so "why is this prospect marked answered?" is
                     # answerable from the timeline months later.
-                    metadata_json={"direction": direction},
+                    metadata_json={"direction": direction, "outcome": outcome},
                     created_at=occurred_at,
                 )
             )
@@ -246,6 +270,7 @@ class TimelineService(_PrincipalScoped):
                     lead_id=entity_id,
                     channel=activity_type,
                     direction=direction,
+                    outcome=outcome,
                     occurred_at=occurred_at,
                     actor_id=self.user_id,
                     source="activity.log",
@@ -268,6 +293,7 @@ class TimelineService(_PrincipalScoped):
                     payload={
                         "activity_type": activity_type,
                         "direction": direction,
+                        "outcome": outcome,
                         "entity_type": entity_type,
                         "entity_id": str(entity_id),
                     },

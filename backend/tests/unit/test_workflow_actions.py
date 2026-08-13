@@ -23,13 +23,25 @@ def test_sms_has_an_independent_fail_closed_activation_gate() -> None:
 
 
 def test_a_flag_without_provider_credentials_does_not_report_ready() -> None:
+    # Credentials are stated explicitly rather than left to the environment.
+    # `Settings` reads the process environment, so once a real `.env.local` was
+    # supplied for the live WhatsApp test this asserted the opposite of what it
+    # meant and failed - a test whose result depended on whose laptop it ran on.
     settings = Settings(
         features=FeatureFlagDefaults(
             whatsapp_enabled=True,
             email_enabled=True,
             voice_enabled=True,
             sms_enabled=True,
-        )
+        ),
+        whatsapp_phone_number_id=None,
+        whatsapp_access_token=None,
+        whatsapp_app_secret=None,
+        whatsapp_verify_token=None,
+        email_provider="none",
+        email_api_key=None,
+        email_from_address=None,
+        voice_provider="none",
     )
     assert channel_ready("whatsapp", settings) is False
     assert channel_ready("email", settings) is False

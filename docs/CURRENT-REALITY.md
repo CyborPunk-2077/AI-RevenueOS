@@ -1,7 +1,7 @@
 # Sangam — feature reality map
 
-Last established: **2026-08-13** (session 4B: data safety and recovery), against
-the running local stack at commit `7cc94d4` plus this session's work.
+Last established: **2026-08-14** (session 5 final verification), against the
+running local stack.
 
 This file records what is *actually true when the product is running*, not what
 the specification intends. Where something was checked in a browser this session
@@ -30,7 +30,7 @@ trust.
 | Tenant isolation | VERIFIED-USABLE | Three enforcement layers including forced Postgres RLS. Covered by existing e2e tests. |
 | Users and roles | VERIFIED-USABLE | Owner/manager/member with global/team/self scope. **Repaired in session 4:** roles and team membership are read with tenant context bound, so a manager is no longer silently issued a member's scope and a team-scoped user is no longer filtering on an empty set. Branches, a Sales team and memberships are seeded, and a new prospect inherits its creator's team. |
 | Today (operational dashboard) | VERIFIED-USABLE | Counts waiting-for-reply, unassigned, no-next-action and overdue, **all computed server-side in the caller's scope** by `application/leads/metrics.py`. Every figure links to the filtered list that makes it up. Verified that closing a follow-up decrements the overdue count and that answering a prospect decrements the waiting count. |
-| First-response measurement | VERIFIED-USABLE | **New this session.** `first_response_at` is set automatically, in the same transaction as the activity that justifies it, the first time an *outbound* contact on a customer-reaching channel is logged against a lead. Idempotent by conditional UPDATE, never overwritten, never backfilled. Rule lives in `domain/leads/first_response.py` so real provider events can feed it unchanged. Nine-assertion browser acceptance test. |
+| First-response measurement | VERIFIED-USABLE | `first_response_at` is set automatically, in the same transaction as the activity that justifies it. Idempotent by conditional UPDATE, never overwritten, never backfilled. **Rewritten in session 5** to take an *outcome* as well as a channel and direction: a missed call, a meeting still in the diary, an unanswered inbound message and a rejected send all leave the prospect waiting, while an inbound call somebody picked up counts. Records written before outcomes existed keep exactly their old meaning. 44 domain tests, plus browser acceptance for every case. |
 | Response-time reporting | VERIFIED-USABLE | Per-prospect time to first reply, plus tenant median and longest current wait. Median, not mean. Derived only from logged contact, so it moves when behaviour moves and at no other time. |
 | Prospects (leads) list | VERIFIED-USABLE | **Rebuilt this session** to show owner, next action, age and a "no reply yet" flag. |
 | Prospect detail | VERIFIED-USABLE | **Rebuilt this session** into a workbench: requirement, ownership, qualification, follow-ups, history, duplicates. |
@@ -41,7 +41,7 @@ trust.
 | Notes | VERIFIED-USABLE | Editable by their author only, enforced server-side. |
 | Contacts and accounts | VERIFIED-USABLE | Pre-existing; list, search, create, edit, timeline. |
 | Deals and pipeline | VERIFIED-USABLE | Board by stage, stage moves, won/lost with loss reason. Seeded and viewed this session; stage-move interaction not re-exercised. |
-| Duplicate detection | VERIFIED-USABLE (detection) / PARTIAL (merge) | Candidates are detected on import and on demand, surfaced with the evidence, and left for a human. The panel now identifies the counterpart by business name, person, phone or email. The merge path exists in the API but has still not been exercised. |
+| Duplicate detection | VERIFIED-USABLE (detection) / BACKEND-ONLY (merge) | Candidates are detected on import and on demand, surfaced with the evidence, and left for a human. The panel identifies the counterpart by business name, person, phone or email. **Three defects fixed in the final verification**, all found by tests that had been red long enough to be assumed stale: re-running a deduplication inserted the same candidate twice (the guard compared a string against a set of UUIDs, so it matched nothing); merging tried to re-point append-only source events and could therefore never commit; and disqualifying a lead was refused as though no reason had been given, because the reason never reached the state machine. All three now work and are covered. There is still no merge screen. |
 
 ## Everything else
 
@@ -52,16 +52,19 @@ trust.
 | Test Centre | VERIFIED-USABLE | **New this session.** Development-only; the route refuses to render in a production build. Provider rows are probed live. |
 | Analytics / reporting | PARTIAL | Charts render with table equivalents and skeletons. **The numbers have not been reconciled against the underlying records.** Do not quote them. Export is deliberately disabled. |
 | Unified inbox | PARTIAL | The screen and conversation model are real, but with no channel able to send it is a record of nothing. |
-| WhatsApp | PROVIDER-GATED | Adapter, signature verification, retry and reconciliation all exist. Needs a Meta WhatsApp Business account and template approval. Reports "not configured"; never fabricates a send. |
+| WhatsApp | PARTIAL / PROVIDER-GATED | **Completed in session 5, up to the human gate.** A verified webhook now becomes a customer record: tenant routing by business number, phone matching, safe prospect creation, conversation, activity, message, database-level idempotency, outbound reply through the real Cloud API, provider message ids and delivery/read reconciliation. All of it feeds the canonical first-response rule, and an inbound message correctly does *not* count as a reply. 23 provider-contract tests pass without credentials. **Not yet exercised against Meta**: needs a human to log in, accept terms, pass 2FA and claim a test number, plus a temporary HTTPS tunnel. `docs/WHATSAPP-LIVE-TEST.md`. |
+| Pilot workspace provisioning | VERIFIED-USABLE (backend) | `src/scripts/provision_pilot.py` creates a real SME's own tenant with owner/manager/salesperson, a branch, a team and real memberships, and no sample data. 14 integration tests cover roles, scopes, team membership, idempotency and the fact that no refresh can reach a pilot's rows. No screen yet; the founder runs one command. |
+| Starting baseline | VERIFIED-USABLE | Captured once per workspace on Today, from the same metrics the dashboard shows, stored on the tenant. Shows "at the start" beside "now" with no arrows, no percentages and no characterisation of the difference. Says so in words when there is not enough history for a figure. |
+| Workspace identity | VERIFIED-USABLE | The header names the company and what the workspace is for — ours, a pilot's, or the browser-test one. Driven by `workspace_kind` on the tenant, not by a list of slugs. |
 | Email | PROVIDER-GATED | Needs a provider with a verified sending domain. |
 | SMS | PROVIDER-GATED | Needs Indian DLT registration. |
 | Voice | PROVIDER-GATED | Also needs legal sign-off on call-recording consent. |
-| Web chat | PARTIAL | Full stack implemented (commit 5ebd36f) with a visitor e2e spec. Not exercised this session. |
+| Web chat | PARTIAL | Full stack implemented (commit 5ebd36f) with a visitor e2e spec. **The public path could not work at all until the final verification, for two independent reasons.** Resolving a widget by its public key is necessarily a pre-tenant read; it used an unscoped session, and under forced row-level security an unscoped session matches nothing - so every visitor was told the widget was unavailable, including from its own site. Underneath that, the key pattern guarding the lookup allowed only letters and digits while keys are minted from the URL-safe base64 alphabet, so about two in three were rejected as malformed regardless. That second one is why these tests looked flaky rather than broken: whether they passed was the luck of the draw. Migration `0012` adds a SELECT-only policy for **active widgets under a deliberately bound, logged platform context**, the same shape as the sign-in lookup in `0004`; the pattern now accepts what the generator produces, with a unit test pinning that the two halves agree. Still not exercised in a browser. |
 | Appointments | PARTIAL | Bookings can be recorded and rescheduled. Calendar sync is PROVIDER-GATED on Google OAuth verification and reports itself as inactive. |
 | Documents and files | PROVIDER-GATED | Metadata is recorded; no upload URL is issued because there is no object storage. The API reports this honestly and the UI disables the control with the real reason. |
 | Payments | PROVIDER-GATED | Razorpay adapter exists. Needs a commercial agreement and KYC. |
 | Workflows / automations | BACKEND-ONLY | Engine, schedules and outbox all run. No builder screen, no logs screen. |
-| Forms and capture | PARTIAL | Builder and publish-snapshot exist with a publish permission. Publishing puts an unauthenticated write surface on the internet, so it is treated as a sensitive permission. Not exercised this session. |
+| Forms and capture | PARTIAL | Builder and publish-snapshot exist with a publish permission. Publishing puts an unauthenticated write surface on the internet, so it is treated as a sensitive permission. **Same defect as web chat, same fix**: fetching a published form is a pre-tenant read and returned "form not found" for every form ever published. `0012` exposes **published forms only**, under a logged platform context. Not exercised in a browser. |
 | CSV prospect import | VERIFIED-USABLE | **Proven in a browser this session.** Upload, column mapping, cleaned-up preview values, duplicate matching against existing records, per-row rejection reasons, and a created/already-had/unusable summary. CSV only; nothing claims XLSX. The template download uses the founders' own column names. |
 | Quick prospect capture | VERIFIED-USABLE | Business name plus one contact route is the whole required form; contact person, area, industry, website, source, pain and owner sit behind "More details". A business with no named contact is a first-class record. **Repaired in session 4:** invalid phone, email or amount now produce a specific message on the offending field, keyed off the API's structured faults, with the typed values kept. |
 | Import duplicate matching | VERIFIED-USABLE | Matches on email *and* phone (last ten digits, so `+91 98450 12201` and `09845012201` are the same number). The existing record is never touched; the incoming row is kept as a source event pointing at what it matched. Nothing is merged automatically. |
@@ -74,6 +77,53 @@ trust.
 | Deployment | SPEC-ONLY | Terraform for four environments, statically validated only. No AWS account. Nothing has ever been deployed. |
 
 ---
+
+## Session 5 — what "answered" actually means, and a workspace for a real business
+
+**The first-response rule was too simple, and the founders had already noticed.**
+The outreach form offered "No answer" as an outcome, pasted it onto the subject
+line, and then marked the prospect as answered anyway — because the rule only
+looked at channel and direction. A team could ring twenty people, reach nobody,
+and show a clean dashboard.
+
+The rule now takes an outcome as well, and it is still the only place the question
+is decided:
+
+| What happened | Counts as answering them? |
+| --- | --- |
+| Outbound call, they spoke | Yes |
+| Outbound call, no answer | **No** |
+| Inbound call, somebody picked up | **Yes** — answering the phone is engagement |
+| Inbound call, missed | No |
+| Inbound message received | No — that is the enquiry |
+| Message the provider accepted | Yes |
+| Message the provider rejected | **No** |
+| Meeting that took place | Yes |
+| Meeting booked for later | **No** |
+| Task, note, assignment, qualification | No |
+
+An activity with no outcome behaves exactly as it did in session 2, so nothing
+already recorded changed meaning.
+
+**A pilot business gets its own tenant**, provisioned by the same code the seed
+uses — because a second copy of that logic is how session 4 shipped a manager with
+no team. It holds no sample data and no demo manifest, which is what puts every
+row in it permanently beyond the reach of a refresh.
+
+**The starting baseline** is captured once, from the same metrics the Today page
+reads. It is presented as a "before" picture and never as an improvement, and it
+reports missing history in words rather than as a zero.
+
+**Two defects found while building this**, both real and both in accepted code:
+
+1. **`Card` silently dropped `data-testid`.** JSX does not type-check hyphenated
+   attributes on a component, so the element rendered, the marker vanished, and
+   nothing anywhere said why. Any test written against a `Card` would have failed
+   for reasons that looked like an application bug. Now forwarded explicitly.
+2. **Provisioning did not flush.** Team memberships existed only in Python until
+   something else happened to flush the session, so a caller reading the workspace
+   back saw a manager with no team — the exact session-4 defect, reintroduced by
+   the fix for it. Caught by the integration test, not by a person.
 
 ## Session 4B — a demo refresh destroyed real founder data
 
@@ -217,6 +267,42 @@ real and hit them within minutes, which is the whole argument for dogfooding.
 
 ## Known defects not fixed
 
+- ~~The whole backend suite cannot be run in one command.~~ **Fixed, and then
+  finished.** Migration `0010` now checks whether the constraint exists before
+  adding it, because `0001` builds the baseline from live model metadata and
+  therefore already creates anything the models declare. The two families that
+  remained after that are gone as well:
+
+  - The **20 errors** in modules that read `/docker-compose.yml` were a harness
+    problem, not a test problem. `docker compose run --rm tests` mounts the
+    checkout read-only at `/repo` and names it in `REPO_ROOT`, so those tests run
+    where they always should have. Nothing is skipped to get there.
+  - The **23 assertion failures** were seven distinct causes, and most of them
+    were the product, not the tests. Taken one at a time:
+
+    | Tests | What it really was | Which way it was fixed |
+    | --- | --- | --- |
+    | 12 | Web chat and public forms cannot read their own row before a tenant is bound | Product: migration `0012` |
+    | (same 10) | **And a second defect underneath it**: a widget's public key is generated from the URL-safe base64 alphabet and validated against a pattern that allowed only letters and digits, so roughly two keys in three were rejected as malformed before the lookup even ran | Product: `webchat.py`, plus the unit assertion that would have caught it |
+    | 4 | Merge, deduplication and disqualification each genuinely broken | Product: `lifecycle_ops.py` |
+    | 3 | The test asked for "today" in UTC; the product buckets by Asia/Kolkata, so these passed or failed on the time of day the suite ran | Test |
+    | 1 | Analytics really had grown a `pipeline_by_stage` section | Test |
+    | 1 | "No candidate from another tenant" asserted as "no candidates at all", which stopped being true as the file accumulated same-named fixtures | Test, narrowed to what it claims |
+    | 2 | `TRUSTED_HOSTS` is now `${TRUSTED_HOSTS:-...}` so a tunnel host can be added without editing a tracked file; split on commas that reads as a hostname called `${TRUSTED_HOSTS:-localhost` | Test, resolves the Compose default |
+
+    Blanket-updating the expected values would have hidden **five real defects**:
+    the pre-tenant read, the key pattern, and one each in merge, deduplication and
+    disqualification.
+
+- **The whole browser suite can now be run in one command.** ~~Sign-in is rate
+  limited to 5 attempts per IP per 15 minutes and the specs collectively need more
+  than that.~~ They no longer sign in at all: `e2e/support/global-setup.ts`
+  establishes one session per account, stores it in the git-ignored
+  `apps/web/e2e/.auth/`, and every spec adopts it. A second limiter matters just as
+  much and is easier to miss - `/auth/refresh` allows **10 per 60 seconds per IP** -
+  so a stored session is used as it is while its access token is fresh and renewed
+  only when it is not. Neither limiter was changed.
+
 - ~~The duplicate panel shows "Unknown record".~~ **Fixed this session.** The
   candidate payload now carries the business name and the panel falls back
   business → person → phone → email. A genuinely missing counterpart now says so
@@ -234,11 +320,25 @@ real and hit them within minutes, which is the whole argument for dogfooding.
   the image rebuilt from the previous commit, so it is a regression from the UI
   primitive migration in `dd7c8e8`, not from this work. The other two tests in
   that file pass.
-- **The browser suite cannot be run in one command.** Sign-in is rate limited to
-  5 attempts per IP per 15 minutes and the specs collectively need more than
-  that, so a full run produces spurious `waitForURL` timeouts. Run one spec file
-  at a time. The clean fix is a per-worker storage-state fixture that signs in
-  once and reuses the cookie.
+- **Two test files wrote into the founders' own database, and passed while doing
+  it.** `admin_session()` reads `ALEMBIC_DATABASE_URL` from the environment.
+  Neither `test_whatsapp_provider_contract.py` nor `test_demo_refresh_safety.py`
+  depended on the fixture that starts the session's ephemeral PostgreSQL and
+  repoints that variable, so running either **on its own** in the API container
+  found the compose value instead - the real local database. The WhatsApp file
+  provisioned `wa-contract-a` and `wa-contract-b` into it on 2026-08-13, and the
+  demo-refresh file, whose whole subject is deletion, was one import away from
+  exercising it there. Both now depend on `migrated_database`. Nothing was lost -
+  both invent their own tenants and touch only those - and the whole point is that
+  they passed either way, which is why nothing noticed. The two stray tenants are
+  still in the local database, empty and isolated; they are left alone rather than
+  deleted, because nothing in this session may run a destructive operation against
+  real data.
+
+- **`sangam-first-slice.spec.ts` still writes to the founders' workspace.** Every
+  other browser suite moved to the `sangam-e2e` tenant in session 3; this one
+  predates that and was missed. It is excluded from the documented six-suite run
+  rather than quietly included, and moving it is a small job nobody has done.
 - ~~19 backend tests fail inside the API container only.~~ **Resolved.** Two
   different causes were hiding behind one symptom. The prompt tests were a real
   path bug in production code, now fixed and mounted. The rest assert on files

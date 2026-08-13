@@ -12,16 +12,22 @@ nineteen red tests that meant nothing except "you ran these in the wrong place".
 Red tests that are expected to be red are worse than no tests: people stop reading
 the output.
 
-So the root is *located* rather than assumed - by walking up for a marker that only
-the real checkout has - and when it cannot be found these tests **skip with a
-reason** instead of failing. A skip is the truthful outcome: the assets are absent,
-so the assertion was never evaluated. Nothing is weakened, because the host
-verification path (`make verify`, or pytest from the repository root) still finds
-the checkout and still runs every one of them.
+So the root is *located* rather than assumed. `REPO_ROOT` names it outright when
+the checkout is mounted somewhere the source layout cannot imply - which is what
+the `tests` service in `docker-compose.yml` does, mounting the checkout read-only
+at `/repo`. That is the same reasoning as `PROMPT_ROOT`: state the path rather than
+count directories upwards and land on `/`. Failing that, the root is found by
+walking up for a marker only a real checkout has.
+
+When it genuinely cannot be found these tests **skip with a reason** instead of
+failing. A skip is the truthful outcome: the assets are absent, so the assertion
+was never evaluated. That path is the fallback and not the plan: the documented way
+to run the suite mounts the checkout, so these tests really do run.
 """
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -33,11 +39,26 @@ import pytest
 _ROOT_MARKERS = ("pnpm-workspace.yaml", "turbo.json")
 
 
+def _is_checkout(candidate: Path) -> bool:
+    return all((candidate / marker).exists() for marker in _ROOT_MARKERS)
+
+
 @lru_cache(maxsize=1)
 def find_repository_root() -> Path | None:
     """The checkout root, or None when the tests run somewhere without one."""
+    declared = os.environ.get("REPO_ROOT")
+    if declared:
+        # A checkout that was mounted deliberately and is not there is a wiring
+        # mistake worth failing loudly on, rather than skipping quietly past.
+        root = Path(declared).resolve()
+        if not _is_checkout(root):
+            raise RuntimeError(
+                f"REPO_ROOT={declared} is not a repository checkout: "
+                f"expected {' and '.join(_ROOT_MARKERS)} inside it."
+            )
+        return root
     for candidate in Path(__file__).resolve().parents:
-        if all((candidate / marker).exists() for marker in _ROOT_MARKERS):
+        if _is_checkout(candidate):
             return candidate
     return None
 

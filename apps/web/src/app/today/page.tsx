@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { apiFetch } from '@/lib/session';
 import { Card, EmptyState, PageHeader, Stat, StatusPill } from '@/features/ui/primitives';
+import { StartingBaseline, type BaselinePayload } from '@/features/leads/starting-baseline';
 import { formatDateTime } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
@@ -95,11 +96,12 @@ function taskHref(task: Task): string {
 }
 
 export default async function TodayPage(): Promise<JSX.Element> {
-  const [leadsResult, tasksResult, boardResult, metricsResult] = await Promise.all([
+  const [leadsResult, tasksResult, boardResult, metricsResult, baselineResult] = await Promise.all([
     apiFetch<{ leads: Lead[] }>('/leads?page_size=100'),
     apiFetch<{ tasks: Task[] }>('/tasks?status=open&page_size=100'),
     apiFetch<{ totals: BoardTotals }>('/deals/board'),
     apiFetch<ResponseMetrics>('/leads/response-metrics'),
+    apiFetch<BaselinePayload>('/leads/starting-baseline'),
   ]);
 
   const leads = leadsResult.data?.leads ?? [];
@@ -219,6 +221,10 @@ export default async function TodayPage(): Promise<JSX.Element> {
           </div>
         </div>
       </section>
+
+      {/* The pilot's "before" picture, next to the live figures it mirrors so the
+          two can never be read as different measurements of the same thing. */}
+      <StartingBaseline payload={baselineResult.data ?? null} />
 
       <section aria-labelledby="queue-heading" className="space-y-3">
         <div className="flex items-baseline justify-between">

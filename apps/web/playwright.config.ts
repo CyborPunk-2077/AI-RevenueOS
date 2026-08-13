@@ -14,9 +14,16 @@ import { defineConfig } from '@playwright/test';
  *                  halves agree; the launcher otherwise generates a fresh one
  *                  each run and stores it nowhere.
  *   browsers       `pnpm --filter @airevenueos/web exec playwright install chromium`
+ *
+ * Sign-in happens once per account in `e2e/support/global-setup.ts` and is then
+ * reused from `e2e/.auth/`, because the production limiter allows five attempts
+ * per IP per fifteen minutes and is not relaxed for tests. Global setup runs
+ * whatever subset of specs is selected, so a single-file run gets the same
+ * sessions a full run does.
  */
 export default defineConfig({
   testDir: './e2e',
+  globalSetup: require.resolve('./e2e/support/global-setup'),
   // A cold Next dev server compiles the route on first request.
   timeout: 60_000,
   expect: { timeout: 10_000 },

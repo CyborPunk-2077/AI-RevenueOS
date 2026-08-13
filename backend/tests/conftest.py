@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 from uuid import UUID
 
@@ -22,6 +22,52 @@ from sqlalchemy.pool import NullPool
 from shared.utils.ids import uuid7
 
 APP_DB_ROLE = "airev_app_runtime"
+
+#: Provider credentials and gates that must never reach a test process.
+#:
+#: `Settings` reads the environment, and the API container now carries real Meta
+#: WhatsApp credentials so the founder can run a live test. Those leaked into the
+#: suite and inverted every assertion about a *gated* channel: tests that check
+#: "no credential, so this reports itself unavailable" started failing because a
+#: credential genuinely existed. A test whose result depends on whose machine it
+#: runs on is not a test.
+#:
+#: Cleared globally rather than patched per call site, so a suite written next
+#: month inherits the isolation without having to know about it. Tests that need
+#: a *configured* provider inject their own values explicitly - see
+#: `tests/integration/test_whatsapp_provider_contract.py`, which constructs every
+#: adapter by hand.
+_PROVIDER_ENV = (
+    "WHATSAPP_PHONE_NUMBER_ID",
+    "WHATSAPP_ACCESS_TOKEN",
+    "WHATSAPP_APP_SECRET",
+    "WHATSAPP_VERIFY_TOKEN",
+    "EMAIL_PROVIDER",
+    "EMAIL_API_KEY",
+    "EMAIL_FROM_ADDRESS",
+    "VOICE_PROVIDER",
+    "FEATURE_WHATSAPP_ENABLED",
+    "FEATURE_EMAIL_ENABLED",
+    "FEATURE_SMS_ENABLED",
+    "FEATURE_VOICE_ENABLED",
+    "FEATURE_PAYMENTS_ENABLED",
+)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _no_real_provider_credentials() -> Iterator[None]:
+    """Run every suite as though no provider had ever been configured."""
+    removed = {name: os.environ.pop(name, None) for name in _PROVIDER_ENV}
+
+    from shared.settings import get_settings
+
+    get_settings.cache_clear()
+    yield
+    for name, value in removed.items():
+        if value is not None:
+            os.environ[name] = value
+    get_settings.cache_clear()
+
 
 TENANT_A = UUID("01890000-0000-7000-8000-00000000000a")
 TENANT_B = UUID("01890000-0000-7000-8000-00000000000b")

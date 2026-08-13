@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from api.app.settings import Settings
 from domain.auth.permissions import Role, permissions_for, widest_scope
 from infrastructure.auth.tokens import AccessClaims, TokenService, generate_keypair
+from shared.settings import FeatureFlagDefaults
 
 TENANT_ID = uuid4()
 OTHER_TENANT_ID = uuid4()
@@ -30,6 +31,29 @@ def settings() -> Settings:
         trusted_hosts=["testserver", "localhost"],
         redis_url="redis://localhost:6379/15",
         log_json=False,
+        # Provider credentials are pinned to "absent" rather than inherited from
+        # the environment. These contracts assert the *gated* behaviour - that a
+        # channel with no credential reports itself unavailable - and once a real
+        # `.env.local` existed for the live WhatsApp test they started asserting
+        # the opposite of what they meant. A contract whose result depends on
+        # whose machine it runs on is not a contract.
+        # Flags too: `FEATURE_WHATSAPP_ENABLED` in the environment would
+        # otherwise switch the gate on and make these assertions inverted.
+        features=FeatureFlagDefaults(
+            whatsapp_enabled=False,
+            email_enabled=False,
+            voice_enabled=False,
+            sms_enabled=False,
+            payments_enabled=False,
+        ),
+        whatsapp_phone_number_id=None,
+        whatsapp_access_token=None,
+        whatsapp_app_secret=None,
+        whatsapp_verify_token=None,
+        email_provider="none",
+        email_api_key=None,
+        email_from_address=None,
+        voice_provider="none",
     )
 
 

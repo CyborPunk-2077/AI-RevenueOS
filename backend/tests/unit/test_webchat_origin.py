@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from application.communications.webchat import (
+    _PUBLIC_KEY,
     MAX_MESSAGE_CHARS,
     SESSION_TTL,
     new_public_key,
@@ -66,6 +67,18 @@ class TestPublicKey:
 
     def test_two_keys_never_collide(self) -> None:
         assert len({new_public_key() for _ in range(200)}) == 200
+
+    def test_every_generated_key_passes_the_lookup_guard(self) -> None:
+        """The two halves must agree, or a widget cannot find itself.
+
+        `_widget_by_key` refuses anything that does not match this pattern before
+        it goes near the database. The pattern allowed only letters and digits
+        while the generator draws from the URL-safe base64 alphabet, so a key
+        containing `-` or `_` - roughly two in three of them - was rejected as
+        malformed and its widget answered "not available" to its own site. Two
+        hundred keys, because one is a coin toss.
+        """
+        assert all(_PUBLIC_KEY.match(new_public_key()) for _ in range(200))
 
 
 class TestLimits:

@@ -13,9 +13,15 @@ async def get_published_form(form_id: UUID) -> dict[str, Any] | None:
     from sqlalchemy import select
 
     from infrastructure.database.models.leads import Form
-    from infrastructure.database.session import unscoped_session
+    from infrastructure.database.session import platform_session
 
-    async with unscoped_session() as session:
+    # The caller is anonymous and the form id is the only thing that names the
+    # tenant, so this read has to happen before a tenant can be bound. An unscoped
+    # session sees nothing under the tenant policy - it answered "no such form" for
+    # every published form there has ever been. The `public_surface_lookup` policy
+    # added in migration 0012 exposes published forms only, and only under a
+    # deliberately bound platform context, which is logged.
+    async with platform_session("public form lookup") as session:
         form = (
             await session.execute(
                 select(Form).where(Form.id == form_id, Form.is_published.is_(True))
@@ -61,9 +67,11 @@ async def submit_public_form(
     from sqlalchemy import select
 
     from infrastructure.database.models.leads import Form
-    from infrastructure.database.session import unscoped_session
+    from infrastructure.database.session import platform_session
 
-    async with unscoped_session() as session:
+    # Same reason as above: the submitter is anonymous, and this row is what says
+    # whose tenant the enquiry belongs in. The form was already proved published.
+    async with platform_session("public form submission") as session:
         tenant_id = (
             await session.execute(select(Form.tenant_id).where(Form.id == form_id))
         ).scalar_one()

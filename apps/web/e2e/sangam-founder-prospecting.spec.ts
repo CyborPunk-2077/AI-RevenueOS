@@ -3,6 +3,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
+import { signInAs } from './support/auth';
+
 /**
  * The founders' actual working day, end to end.
  *
@@ -23,9 +25,6 @@ import { tmpdir } from 'node:os';
  *   $env:DEMO_PASSWORD='sangam-demo-2026'
  *   pnpm --filter @airevenueos/web exec playwright test sangam-founder-prospecting
  */
-
-const PASSWORD = process.env.DEMO_PASSWORD ?? 'sangam-demo-2026';
-const OWNER = 'owner@sangam-e2e.test';
 
 const EVIDENCE = resolve(
   __dirname,
@@ -60,11 +59,8 @@ test('a founder imports a prospect list, then works one business through the day
   const tiffinsPhone = `984${tail}01`;
   const tailorsPhone = `984${tail}02`;
 
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(OWNER);
-  await page.getByLabel('Password').fill(PASSWORD);
-  await page.getByTestId('sign-in').click();
-  await page.waitForURL('**/today');
+  // Signed in once per machine, in `support/global-setup.ts`, and adopted here.
+  await signInAs(page, 'e2e-owner');
 
   const baseline = await awaitingCount(page);
   await shot(page, '01-today-work-queue');
@@ -145,7 +141,9 @@ test('a founder imports a prospect list, then works one business through the day
   // --- 6 & 8. record the call actually made, and the promise made on it ------
   await page.getByLabel('Type').selectOption('call');
   await page.getByTestId('activity-direction').selectOption('outbound');
-  await page.getByTestId('activity-outcome').selectOption('Spoke to them');
+  // A structured outcome now, not decorative text on the subject line. "spoke" is
+  // what makes this count as answering the enquiry; "no_answer" would not.
+  await page.getByTestId('activity-outcome').selectOption('spoke');
   await page.getByLabel('Subject').fill('Called Suresh about the counter orders');
   await page.getByLabel('Details').fill('Writes every order in a notebook. Interested, wants to see it working.');
   await page.getByTestId('next-action-input').fill('Send Suresh the one-page summary');

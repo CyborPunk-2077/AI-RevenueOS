@@ -52,6 +52,53 @@ async def read_tenant(
     )
 
 
+@router.get("/tenant/pilot-readiness", summary="Probed pilot-readiness for this workspace")
+async def pilot_readiness(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    """What is genuinely true about this workspace right now.
+
+    Every row is answered from the database or the filesystem on each call. The
+    Test Centre renders it as-is, so a check that cannot be confirmed has to say
+    so rather than fall back to something reassuring.
+    """
+    principal.require("tenant", "read")
+    principal.require("lead", "list")
+    from application.tenants.pilot_readiness import PilotReadinessService
+
+    report = await PilotReadinessService.for_principal(principal).report()
+    return success(report, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.get("/tenant/whatsapp-status", summary="Live WhatsApp connection state")
+async def whatsapp_status(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    """NOT_CONFIGURED / CONNECTED / ERROR, decided by asking Meta.
+
+    Never returns a credential. `CONNECTED` requires a live call to the Graph API
+    that succeeded, not the presence of a token somebody pasted.
+    """
+    principal.require("tenant", "read")
+    from application.communications.whatsapp_status import connection_status
+
+    report = await connection_status(principal.tenant_id)
+    return success(report, request_id=getattr(request.state, "correlation_id", None))
+
+
+@router.get("/tenant/whatsapp-test-checklist", summary="How far a real WhatsApp test has got")
+async def whatsapp_test_checklist(request: Request, principal: CurrentPrincipal) -> dict[str, Any]:
+    """Observed, never asserted. Nothing is ticked because the code exists."""
+    principal.require("tenant", "read")
+    from application.communications.whatsapp_status import real_test_checklist
+
+    checks = await real_test_checklist(principal.tenant_id)
+    return success(
+        {
+            "checks": checks,
+            "observed": sum(1 for c in checks if c["observed"]),
+            "total": len(checks),
+        },
+        request_id=getattr(request.state, "correlation_id", None),
+    )
+
+
 @router.get("/tenant/feature-flags", summary="Effective feature entitlement")
 async def feature_flags(
     request: Request,

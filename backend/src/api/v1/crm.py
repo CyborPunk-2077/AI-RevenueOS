@@ -505,9 +505,14 @@ async def list_conversations(
     mine: bool = False,
 ) -> dict[str, Any]:
     principal.require("conversation", "list")
-    page = await _inbox(principal).list_conversations(query, status=conversation_status, mine=mine)
+    service = _inbox(principal)
+    page = await service.list_conversations(query, status=conversation_status, mine=mine)
     return success(
-        {"conversations": page.items}, pagination=page.meta(), request_id=_request_id(request)
+        # Counts travel with the list so an empty filter can say how many threads
+        # sit under the others, instead of reading as "everything is gone".
+        {"conversations": page.items, "status_counts": await service.status_counts()},
+        pagination=page.meta(),
+        request_id=_request_id(request),
     )
 
 
