@@ -433,6 +433,17 @@ writing things down.
 
 ---
 
+## 6b. Your password after a restart
+
+Starting Sangam again **never changes anybody's password**. Whatever you signed in
+with yesterday still works today.
+
+That was not always true: an earlier version reset every password each time the
+stack started, so starting it without setting one first quietly locked the
+founders out of their own workspace. If you ever genuinely want to reset
+everybody's password, it is now a deliberate command rather than a side effect of
+starting up — ask for it by name.
+
 ## 7. If something goes wrong
 
 **It says Docker is not installed.** That is the one thing Sangam cannot do for

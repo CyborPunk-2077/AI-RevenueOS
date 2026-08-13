@@ -850,14 +850,24 @@ def _spec(
     )
 
 
-async def ensure_workspace(password_hash: str) -> dict[str, UUID]:
+async def ensure_workspace(
+    password_hash: str, *, reset_passwords: bool = False
+) -> tuple[dict[str, UUID], int]:
     """The founders' workspace, plus the empty one the browser tests write to.
 
     The tenant, role, user, branch and team routines this used to carry live in
     `application.tenants.provisioning` now, because a pilot needs exactly the same
     ones and a second copy is how a workspace ends up with managers and no team -
     the defect the founders hit in session 4.
+
+    **Existing people keep their passwords.** This used to rewrite the hash of
+    every seeded account on every run, so starting the stack without
+    `DEMO_PASSWORD` minted a fresh random password and silently locked the
+    founders out of their own workspace - which is exactly what happened. A first
+    seed may create credentials; a later start must not rotate them. Rotation is
+    now something somebody asks for by name, with `--reset-passwords`.
     """
+    created = 0
     async with admin_session() as session:
         result = await provision_workspace(
             session,
@@ -869,8 +879,10 @@ async def ensure_workspace(password_hash: str) -> dict[str, UUID]:
                 kind=FOUNDER,
             ),
             password_hash=password_hash,
+            reset_credentials=reset_passwords,
         )
-        await provision_workspace(
+        created += len(result.created_users)
+        e2e = await provision_workspace(
             session,
             _spec(
                 tenant_id=SANGAM_E2E_ID,
@@ -880,8 +892,10 @@ async def ensure_workspace(password_hash: str) -> dict[str, UUID]:
                 kind=TEST,
             ),
             password_hash=password_hash,
+            reset_credentials=reset_passwords,
         )
-        await provision_workspace(
+        created += len(e2e.created_users)
+        pilot = await provision_workspace(
             session,
             _spec(
                 tenant_id=SANGAM_PILOT_E2E_ID,
@@ -891,9 +905,11 @@ async def ensure_workspace(password_hash: str) -> dict[str, UUID]:
                 kind=TEST,
             ),
             password_hash=password_hash,
+            reset_credentials=reset_passwords,
         )
+        created += len(pilot.created_users)
 
-    return result.users
+    return result.users, created
 
 
 async def refresh() -> None:
@@ -1303,6 +1319,14 @@ async def main() -> int:
             "refresh can rebuild them. Never adopts unmarked or founder-created records."
         ),
     )
+    parser.add_argument(
+        "--reset-passwords",
+        action="store_true",
+        help=(
+            "rotate the passwords of people who already exist. Off by default: a "
+            "normal start must never lock the founders out of their own workspace."
+        ),
+    )
     args = parser.parse_args()
 
     configure_logging(json_output=False)
@@ -1311,7 +1335,9 @@ async def main() -> int:
         raise SystemExit(f"seed_sangam refuses to run in the '{settings.environment}' environment")
 
     password, generated = resolve_password()
-    users = await ensure_workspace(hash_password(password))
+    users, created = await ensure_workspace(
+        hash_password(password), reset_passwords=args.reset_passwords
+    )
 
     if args.adopt_existing_samples:
         from application.tenants.demo_data import adopt_existing_demo_rows
@@ -1332,8 +1358,20 @@ async def main() -> int:
         print(f"  {email:26} {role.value}")  # noqa: T201
     print("\n  browser tests use a separate, empty workspace:")  # noqa: T201
     print(f"  {E2E_TEAM[0][0]:26} (sangam-e2e)")  # noqa: T201
-    print(f"\n  password: {password}")  # noqa: T201
-    if generated:
+    # Only claim the printed password works for accounts it was actually applied
+    # to. Printing it unconditionally is how somebody ends up certain they know a
+    # credential that was never set - and how a normal start silently locked the
+    # founders out of their own workspace.
+    if args.reset_passwords:
+        print(f"\n  password (reset for everyone): {password}")  # noqa: T201
+    elif created:
+        print(f"\n  password for the {created} new account(s): {password}")  # noqa: T201
+        print("  everyone else kept the password they already had.")  # noqa: T201
+    else:
+        print("\n  passwords: unchanged. Every account here already existed.")  # noqa: T201
+        print("  to rotate them deliberately:")  # noqa: T201
+        print("    DEMO_PASSWORD='...' python src/scripts/seed_sangam.py --reset-passwords")  # noqa: T201
+    if generated and (args.reset_passwords or created):
         print("  (generated for this run only; set DEMO_PASSWORD to choose your own)")  # noqa: T201
     if any(counts.values()):
         print(  # noqa: T201

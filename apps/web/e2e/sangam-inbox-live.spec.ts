@@ -63,13 +63,19 @@ async function apiPost(page: Page, path: string, body: unknown): Promise<void> {
   expect(status, `POST ${path}`).toBeLessThan(300);
 }
 
-test('a message that arrives while the conversation is open shows up on its own', async ({
+test('the live Inbox stays honest: refresh, filters, identity and no fake inbound', async ({
   page,
 }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(600_000);
   const stamp = Date.now();
 
+  // Signed in once for the whole file. Sign-in is rate limited to five attempts
+  // per IP per fifteen minutes, and three separate tests spent three of them on
+  // the same account - so the suite failed on the limiter rather than on
+  // anything it was checking. The limiter is left exactly as it is.
   await signIn(page);
+
+  await test.step('a message arriving while the conversation is open shows up on its own', async () => {
 
   // A conversation on a channel with no provider, so this suite never touches
   // the live WhatsApp thread.
@@ -103,14 +109,9 @@ test('a message that arrives while the conversation is open shows up on its own'
     timeout: 30_000,
   });
   await shot(page, '03-status-visible');
-});
+  });
 
-test('the Inbox list stays honest about where conversations are', async ({ page }) => {
-  test.setTimeout(240_000);
-  const stamp = Date.now();
-
-  await signIn(page);
-
+  await test.step('the Inbox list stays honest about where conversations are', async () => {
   await page.goto('/inbox');
   await page.getByTestId('new-conversation').click();
   await page.getByLabel('Subject').fill(`Filter check ${stamp}`);
@@ -164,14 +165,9 @@ test('the Inbox list stays honest about where conversations are', async ({ page 
   await page.goto('/inbox?status=active');
   await expect(page.getByTestId('conversation-rows')).toContainText(`Filter check ${stamp}`);
   await shot(page, '06-inbound-reopens-thread');
-});
+  });
 
-test('the fake-inbound control is gone once a channel is really connected', async ({ page }) => {
-  test.setTimeout(240_000);
-  const stamp = Date.now();
-
-  await signIn(page);
-
+  await test.step('the fake-inbound control is gone once a channel is really connected', async () => {
   // --- 6 & 7. present for a gated channel, absent for a live one ------------
   await page.goto('/inbox');
   await page.getByTestId('new-conversation').click();
@@ -200,4 +196,5 @@ test('the fake-inbound control is gone once a channel is really connected', asyn
   // The real reply box is still there.
   await expect(page.getByTestId('send-reply')).toBeVisible();
   await shot(page, '08-dev-control-absent-when-live');
+  });
 });

@@ -267,14 +267,16 @@ real and hit them within minutes, which is the whole argument for dogfooding.
 
 ## Known defects not fixed
 
-- **The whole backend suite cannot be run in one command.** `pytest` with no
-  arguments produces ~375 fixture errors, all the same cause: migration `0001`
-  creates the schema from model metadata, so it already makes the constraint that
-  migration `0010` then adds, and the ephemeral test database never gets built.
-  **Confirmed pre-existing** — it reproduces on the accepted `master` commit. The
-  954 tests that do not need that fixture (unit, contract, and the integration
-  files that create their own tenants) run and pass; everything that does depend
-  on it cannot run at all.
+- ~~The whole backend suite cannot be run in one command.~~ **Fixed.** Migration
+  `0010` now checks whether the constraint exists before adding it, because
+  `0001` builds the baseline from live model metadata and therefore already
+  creates anything the models declare. A brand-new database migrates the whole
+  chain cleanly and the real database is unaffected. What remains in a full run
+  is pre-existing and unrelated: 20 errors in modules that read
+  `/docker-compose.yml` (they need the checkout mounted) and 23 assertion
+  failures in older e2e modules whose expected shapes have drifted — the
+  analytics dashboard, for instance, returns a `pipeline_by_stage` section the
+  test does not list.
   This should be fixed before it hides something real.
 
 - ~~The duplicate panel shows "Unknown record".~~ **Fixed this session.** The

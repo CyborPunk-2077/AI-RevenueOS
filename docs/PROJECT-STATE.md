@@ -302,7 +302,15 @@ Two traps worth remembering before touching that script:
 - Data lives in the `airevenueos_pgdata` volume and survives restarts.
 - `RESET_DEMO.cmd` wipes it and makes you type "reset" first.
 - Sign-in is rate limited to **5 attempts per IP per 15 minutes**. Keep this in
-  mind before adding automated logins anywhere.
+  mind before adding automated logins anywhere: a browser file signs in **once**
+  and uses `test.step` for the rest, because three tests in one file spend three
+  of the five attempts and the suite then fails on the limiter rather than on
+  anything it was checking.
+- **A normal start never rotates anybody's password.** `seed_sangam.py` creates
+  credentials for accounts that do not exist and leaves existing ones alone.
+  Rotation is `--reset-passwords`, asked for by name. This used to rewrite every
+  seeded hash on every run, so starting the stack without `DEMO_PASSWORD` minted
+  a random password and locked the founders out of their own workspace.
 
 For a fixed password (needed by the browser tests):
 `powershell -ExecutionPolicy Bypass -File scripts\demo.ps1 -Password "..."`
@@ -315,6 +323,8 @@ For a fixed password (needed by the browser tests):
 | Backend mypy (strict) | Clean, 236 source files |
 | import-linter | 6 contracts kept, 0 broken |
 | Backend unit + contract + session-5 integration | **954 passed, 0 failed** (exit 0) |
+| Fresh-database migration chain | **Clean** — a brand-new database migrates `0001`→`0011` with no error |
+| Test isolation from real credentials | **Enforced globally** — provider credentials and feature flags are stripped from the test process in `tests/conftest.py` |
 | First-response rule (`test_first_response_rule.py`) | **44 passed** — every case the founders named |
 | Pilot provisioning (`test_pilot_provisioning.py`) | **14 passed** — roles, scopes, team membership, isolation |
 | WhatsApp provider contract (`test_whatsapp_provider_contract.py`) | **23 passed** — signatures, replay, routing, isolation, no fabricated success |
@@ -326,20 +336,32 @@ For a fixed password (needed by the browser tests):
 | Browser e2e (`sangam-dogfood-repairs`) | 3 passed — reassignment, team scope, field-level validation |
 | Browser e2e (`sangam-data-safety`) | **2 passed** — Claida present once with its history, samples beside it |
 | Browser e2e (`sangam-pilot-readiness`) | **4 passed** — the full session-5 acceptance, 19 screenshots |
+| Browser e2e (`sangam-inbox-live`) | **1 passed** — live refresh, filter reconciliation, reopening, no fake inbound. One sign-in for the whole file |
 | Founder workspace isolation | Verified: nothing this session wrote to `sangam`; the audit log shows only read-only sign-ins |
 
-⚠️ **The whole-suite container run cannot currently be used as a gate.** Running
-`pytest` with no arguments produces ~375 errors, all of them the same thing:
-migration `0001` builds the schema with `Base.metadata.create_all()`, so it
-already creates the `execution_node_approval` constraint that migration `0010`
-then tries to add. Every test needing the ephemeral database fails in its
-fixture.
+**The whole-suite run works again.** Migration `0001` builds the baseline with
+`Base.metadata.create_all()`, so on a database created today it already makes the
+`execution_node_approval` constraint that migration `0010` then tried to add —
+`DuplicateTable`, and every test needing the ephemeral database died in its
+fixture (~375 errors). `0010` now asks the database what it already has. Both
+histories work: a database migrated before the model gained the constraint still
+gets it from `0010`, and a fresh one skips it. Verified by migrating a brand-new
+database through the whole chain, and the real database is untouched at `0011`.
 
-**This is pre-existing and not a session-5 regression** — it reproduces
-identically on the accepted `master` commit, checked by switching branches and
-re-running one of the failing tests. It is recorded here rather than worked
-around, and it means the honest figure above is the 954 tests that do not depend
-on that fixture. Worth fixing before it hides a real failure.
+**Any migration after `0001` must be written this way.** The baseline is built
+from live model metadata, so anything a later migration adds that the models
+already declare will exist before that migration runs.
+
+Two families of failure remain in a full run, both pre-existing and neither a
+product fault:
+
+- 20 errors in `test_local_stack_contract.py` and `test_launcher_demo_login.py`,
+  which read `/docker-compose.yml`. They need the checkout mounted; the container
+  does not have it.
+- 23 assertion failures in older e2e modules (analytics, webchat, lead lifecycle,
+  form builder) that have drifted from the responses they assert on — for
+  example the analytics dashboard now returns a `pipeline_by_stage` section the
+  test does not expect.
 
 ## 11. Visual evidence
 

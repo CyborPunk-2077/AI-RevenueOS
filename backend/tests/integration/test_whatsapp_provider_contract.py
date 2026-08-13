@@ -669,6 +669,29 @@ class TestOutboundNeverFabricatesSuccess:
         assert result.external_id == "wamid.out"
 
 
+class TestTheseTestsIgnoreTheRealEnvironment:
+    """Results must not depend on whether a real `.env.local` happens to exist.
+
+    Every adapter in this file is constructed with explicit values, so the live
+    Meta credentials on the founder's machine cannot make a "configured" case
+    pass for the wrong reason - or an "unconfigured" one fail.
+    """
+
+    def test_the_configured_adapter_uses_injected_credentials(self) -> None:
+        assert adapter().is_configured()
+
+    def test_the_unconfigured_adapter_is_unconfigured_whatever_the_environment(self) -> None:
+        blank = WhatsAppAdapter(
+            phone_number_id=None, access_token=None, app_secret=None, enabled=True
+        )
+        assert not blank.is_configured()
+        assert set(blank.activation_status()["missing_configuration"]) == {
+            "WHATSAPP_PHONE_NUMBER_ID",
+            "WHATSAPP_ACCESS_TOKEN",
+            "WHATSAPP_APP_SECRET",
+        }
+
+
 class TestSecretsAreNotLeaked:
     def test_the_activation_report_names_what_is_missing_not_what_is_set(self) -> None:
         report = adapter().activation_status()

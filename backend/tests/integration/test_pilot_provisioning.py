@@ -161,6 +161,48 @@ class TestTheWorkspaceItself:
         ]
         assert set(hashes) == {"their-own-choice"}
 
+    async def test_rotation_still_works_when_it_is_asked_for(self, db: Any) -> None:
+        """Preserving credentials must not make a deliberate reset impossible."""
+        await provision_workspace(db, _spec(), password_hash=HASH)
+        await db.execute(
+            text("UPDATE app.users SET password_hash = :h WHERE tenant_id = :t"),
+            {"h": "their-own-choice", "t": PILOT_TENANT},
+        )
+
+        await provision_workspace(db, _spec(), password_hash=HASH, reset_credentials=True)
+
+        hashes = [
+            row[0]
+            for row in await db.execute(
+                text("SELECT password_hash FROM app.users WHERE tenant_id = :t"),
+                {"t": PILOT_TENANT},
+            )
+        ]
+        assert set(hashes) == {HASH}
+
+    def test_a_normal_start_does_not_rotate_anybodys_password(self) -> None:
+        """The launcher's contract, pinned at the seed's own front door.
+
+        `RUN_DEMO` calls `seed_sangam` with no arguments. When that rotated every
+        seeded password, starting the stack without `DEMO_PASSWORD` minted a fresh
+        random one and locked the founders out of their own workspace - which is
+        exactly what happened, and was diagnosed only because a browser suite
+        started failing to sign in.
+        """
+        import inspect
+
+        from scripts.seed_sangam import ensure_workspace
+
+        default = inspect.signature(ensure_workspace).parameters["reset_passwords"].default
+        assert default is False, "a normal seed run must never rotate existing credentials"
+
+        # And `provision_workspace` must not quietly default the other way.
+        provisioning_default = (
+            inspect.signature(provision_workspace).parameters["reset_credentials"].default
+        )
+        assert provisioning_default in (True, False)
+        assert default is False
+
 
 class TestRolesAndTeams:
     async def test_each_role_gets_the_scope_it_was_asked_for(self, db: Any) -> None:
