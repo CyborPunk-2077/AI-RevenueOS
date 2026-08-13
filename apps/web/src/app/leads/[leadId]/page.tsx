@@ -7,6 +7,7 @@ import { LeadOwner, type Member } from '@/features/leads/lead-owner';
 import { LeadQualification } from '@/features/leads/lead-qualification';
 import { Timeline, type TimelineEntry } from '@/features/crm/timeline';
 import { TaskPanel, type TaskEntry } from '@/features/crm/task-panel';
+import { WhatsAppReplyBox } from '@/features/crm/whatsapp-reply-box';
 import { Card, StatusPill } from '@/features/ui/primitives';
 import { formatDate } from '@/lib/dates';
 
@@ -225,6 +226,13 @@ export default async function LeadDetailPage({
           score={lead.qualification_score}
           category={lead.category}
         />
+      </Card>
+
+      {/* The only control in Sangam that sends anything to a customer. Placed
+          above the timeline it writes into, so the reply and its record read as
+          one thing rather than two. */}
+      <Card>
+        <WhatsAppReplyBox leadId={lead.id} phone={lead.phone} />
       </Card>
 
       <Card>
