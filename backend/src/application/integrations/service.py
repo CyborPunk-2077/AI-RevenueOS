@@ -109,10 +109,21 @@ def _integration_runtime_ready(provider: str) -> bool:
 
 def _activation_issues(provider: str, *, channel: bool, has_credentials: bool) -> list[str]:
     issues: list[str] = []
+    runtime_ready = (
+        _channel_runtime_ready(provider) if channel else _integration_runtime_ready(provider)
+    )
+    # "credentials have not been recorded" is true of the tenant configuration
+    # table and was being read as "this channel has no credentials at all" - on a
+    # screen that sat beside a WhatsApp thread which had plainly just delivered
+    # messages. The deployment supplies those credentials; Sangam has simply not
+    # been asked to store a second copy. Say which one is missing.
     if not has_credentials and provider != "web_chat":
-        issues.append("credentials have not been recorded")
+        issues.append(
+            "credentials are supplied by the deployment, not stored in this workspace"
+            if runtime_ready
+            else "credentials have not been recorded"
+        )
     if channel:
-        runtime_ready = _channel_runtime_ready(provider)
         if not runtime_ready:
             issues.append("runtime feature flag and deployed provider credentials are not active")
             issues.extend(
@@ -125,7 +136,6 @@ def _activation_issues(provider: str, *, channel: bool, has_credentials: bool) -
                 }[provider]
             )
     else:
-        runtime_ready = _integration_runtime_ready(provider)
         if not runtime_ready:
             issues.append("runtime feature flag and deployed provider credentials are not active")
             issues.append(
@@ -136,7 +146,41 @@ def _activation_issues(provider: str, *, channel: bool, has_credentials: bool) -
     return issues
 
 
-def _serialize_channel(row: Any) -> dict[str, Any]:
+async def _channel_activity(session: Any, channel: str) -> dict[str, Any]:
+    """What this channel has actually been observed doing, from the message record.
+
+    The one part of this screen that is evidence rather than configuration. A
+    stored credential proves somebody typed something in; an inbound message
+    proves Meta reached the webhook, and an outbound failure proves what the
+    provider said when we last tried to send. Both are facts already in the
+    database, and neither is inferred from the other.
+    """
+    from sqlalchemy import desc, select
+
+    from infrastructure.database.models.communications import Message
+
+    async def latest(direction: str) -> Any:
+        return (
+            await session.execute(
+                select(Message)
+                .where(Message.channel == channel, Message.direction == direction)
+                .order_by(desc(Message.created_at))
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+    inbound = await latest("inbound")
+    outbound = await latest("outbound")
+    return {
+        "last_inbound_at": inbound.created_at.isoformat() if inbound is not None else None,
+        "last_outbound_at": outbound.created_at.isoformat() if outbound is not None else None,
+        "last_outbound_status": outbound.status if outbound is not None else None,
+        # Whatever the provider said, verbatim and truncated, never a paraphrase.
+        "last_outbound_error": (outbound.failure_reason or None) if outbound is not None else None,
+    }
+
+
+def _serialize_channel(row: Any, activity: dict[str, Any] | None = None) -> dict[str, Any]:
     has_credentials = bool(row.encrypted_credentials)
     credential_requirement_met = has_credentials or (
         row.channel_type == "email" and dict(row.settings or {}).get("provider") == "ses"
@@ -159,6 +203,49 @@ def _serialize_channel(row: Any) -> dict[str, Any]:
         "status": "ready" if not issues else "pending_activation",
         "activation_issues": issues,
         "version": row.version,
+        **_truth(row.channel_type, channel=True, stored=has_credentials, activity=activity),
+    }
+
+
+def _truth(
+    provider: str, *, channel: bool, stored: bool, activity: dict[str, Any] | None
+) -> dict[str, Any]:
+    """The five questions this screen kept answering as if they were one.
+
+    `ready` collapsed all of these into a single boolean, which is how the
+    Integrations page came to say "credentials not recorded", "needs activation"
+    and "live activation claimed: no" about a channel that was at that moment
+    carrying a real customer conversation. Every one of those sentences was true
+    of a *different* question, and none of them was the question the reader was
+    asking.
+
+    Kept separate, and each derived from its own evidence:
+
+    * `runtime_credentials_present` - the deployed adapter reports itself
+      configured. This is what actually decides whether a send is attempted.
+    * `stored_credentials_present` - this workspace has its own encrypted copy.
+      Independent of the above, and usually false for a single-tenant deployment.
+    * `configuration_source` - which of the two is in force.
+    * `activity` - what the provider has been observed doing: webhook receipts
+      and the last send's outcome. Facts, not configuration.
+    * `production_activation` - the commercial and legal gate. Always false until
+      external approval evidence exists, and never inferred from anything above.
+    """
+    runtime = _channel_runtime_ready(provider) if channel else _integration_runtime_ready(provider)
+    return {
+        "runtime_credentials_present": runtime,
+        "stored_credentials_present": stored,
+        "configuration_source": "deployment" if runtime else ("workspace" if stored else "none"),
+        "activity": activity
+        or {
+            "last_inbound_at": None,
+            "last_outbound_at": None,
+            "last_outbound_status": None,
+            "last_outbound_error": None,
+        },
+        # Deliberately a constant. The day this is computed from anything is the
+        # day the screen can start flattering the product.
+        "production_activation": False,
     }
 
 
@@ -180,6 +267,7 @@ def _serialize_integration(row: Any) -> dict[str, Any]:
         "status": "ready" if not issues else "pending_activation",
         "activation_issues": issues,
         "version": row.version,
+        **_truth(row.provider, channel=False, stored=has_credentials, activity=None),
     }
 
 
@@ -215,7 +303,14 @@ async def list_configurations(principal: Any) -> dict[str, Any]:
             .scalars()
             .all()
         )
-    configured = [_serialize_channel(row) for row in channels] + [
+        # One activity lookup per distinct channel type, inside the same
+        # tenant-scoped session, so the evidence obeys row-level security like
+        # everything else on this screen.
+        activity = {
+            channel_type: await _channel_activity(session, channel_type)
+            for channel_type in {row.channel_type for row in channels}
+        }
+    configured = [_serialize_channel(row, activity.get(row.channel_type)) for row in channels] + [
         _serialize_integration(row) for row in integrations
     ]
     configured_providers = {str(row["provider"]) for row in configured}
@@ -239,6 +334,7 @@ async def list_configurations(principal: Any) -> dict[str, Any]:
                     provider, channel=is_channel, has_credentials=False
                 ),
                 "version": 0,
+                **_truth(provider, channel=is_channel, stored=False, activity=None),
             }
         )
     return {"configurations": configured, "live_activation_claimed": False}
