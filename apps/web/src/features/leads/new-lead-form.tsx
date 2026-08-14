@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
+import { Button, controlClass } from '@/features/ui/controls';
+import { Drawer } from '@/features/ui/drawer';
 
 interface Member {
   readonly id: string;
@@ -61,16 +63,25 @@ function readFaults(payload: unknown): Record<string, string> {
 /**
  * Adding a business you have just decided to approach.
  *
- * Shaped around how a prospect actually arrives: somebody walks past a shop,
- * gets a name from a friend, or spots a business online, and has about twenty
- * seconds to record it before the moment passes. So the first row is the whole
+ * Shaped around how a prospect actually arrives: somebody walks past a shop, gets
+ * a name from a friend, or spots a business online, and has about twenty seconds
+ * to record it before the moment passes. So the first section is the whole
  * required form - who they are and one way to reach them - and everything else
  * lives behind "More details", filled in later when it is known.
  *
  * The contact person is optional on purpose. A prospecting list is a list of
- * businesses, and demanding a named human on day one is how a real list becomes
- * a spreadsheet nobody transfers into the CRM. If only the business is known, the
- * business name becomes the record's name, exactly as the import does.
+ * businesses, and demanding a named human on day one is how a real list stays in
+ * a spreadsheet. If only the business is known, the business name becomes the
+ * record's name and `capture.name_is_business` records that it is not a person -
+ * which is what lets every list in the product show an em dash in the contact
+ * column instead of printing the shop's name twice.
+ *
+ * **It is a drawer now, not a panel at the top of the list.** People come to
+ * Prospects to look at prospects; adding one is something they do occasionally
+ * and deliberately. The validation behaviour is unchanged and deliberately so -
+ * every `error-*` marker, the typed values surviving a rejection, and the
+ * `aria-invalid`/`aria-describedby` wiring were hard-won in session 4 and are
+ * pinned by browser tests.
  */
 export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Element {
   const router = useRouter();
@@ -92,10 +103,10 @@ export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Eleme
     clearErrors();
 
     const form = new FormData(element);
-    const text = (key: string): string => String(form.get(key) ?? '').trim();
+    const value = (key: string): string => String(form.get(key) ?? '').trim();
 
-    const company = text('company');
-    const person = text('first_name');
+    const company = value('company');
+    const person = value('first_name');
 
     // Checked here for immediacy only. Every one of these is enforced again by
     // the API, and the mapping below shows whatever the server says - the browser
@@ -104,10 +115,10 @@ export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Eleme
     if (!company && !person) {
       local.company = 'Enter the business name, or a contact person under More details.';
     }
-    if (!text('phone') && !text('email')) {
+    if (!value('phone') && !value('email')) {
       local.phone = 'Add a phone number or an email, otherwise nobody can contact them.';
     }
-    const amountText = text('estimated_value');
+    const amountText = value('estimated_value');
     if (amountText && !/^[\d,. ]+$/.test(amountText)) {
       // The server stores this as free-form captured text and has no opinion on
       // it, so this check is the only one there is. Said plainly rather than
@@ -118,6 +129,7 @@ export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Eleme
       setFieldErrors(local);
       setError(null);
       setBusy(false);
+      if (local.estimated_value) setDetailed(true);
       return;
     }
 
@@ -125,24 +137,24 @@ export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Eleme
     // identity and ownership are lead columns.
     const capture: Record<string, string | boolean> = {};
     for (const key of ['company', 'city', 'industry', 'website', 'requirement', 'notes']) {
-      const value = text(key);
-      if (value) capture[key] = value;
+      const entered = value(key);
+      if (entered) capture[key] = entered;
     }
     if (!person && company) capture.name_is_business = true;
 
-    const amount = text('estimated_value');
+    const amount = value('estimated_value');
     if (amount) capture.estimated_value_inr = amount;
 
-    const assignee = text('assignee_id');
+    const assignee = value('assignee_id');
 
     const response = await mutate('/api/leads', {
       method: 'POST',
       body: {
         first_name: person || company,
-        last_name: text('last_name') || null,
-        email: text('email') || null,
-        phone: text('phone') || null,
-        source: text('source') || 'manual',
+        last_name: value('last_name') || null,
+        email: value('email') || null,
+        phone: value('phone') || null,
+        source: value('source') || 'manual',
         capture,
         assignee_id: assignee || null,
       },
@@ -158,6 +170,11 @@ export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Eleme
         // the one box that is wrong.
         setFieldErrors(faults);
         setError(null);
+        // A rejected field behind the disclosure would otherwise be a message
+        // nobody can see.
+        if (faults.first_name || faults.last_name || faults.source || faults.assignee_id) {
+          setDetailed(true);
+        }
       } else {
         setFieldErrors({});
         setError(body.error?.message ?? 'Could not add the prospect. Please try again.');
@@ -173,211 +190,256 @@ export function NewLeadForm({ members = [] }: { members?: Member[] }): JSX.Eleme
     router.refresh();
   }
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        data-testid="new-lead"
-        onClick={() => setOpen(true)}
-        className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
-      >
-        Add a business
-      </button>
-    );
-  }
-
-  const field = 'mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm';
-  const bad = 'mt-1 w-full rounded-md border-2 border-destructive bg-background px-3 py-2 text-sm';
-
   /**
-   * Wires a control to its message. `aria-invalid` and `aria-describedby` are what
-   * make the error reach a screen reader, and the message is a sentence rather
+   * Wires a control to its message. `aria-invalid` and `aria-describedby` are
+   * what make the error reach a screen reader; the message is a sentence rather
    * than a red outline, so nobody has to see colour to know what went wrong.
    */
   const attrs = (
     name: string,
   ): { className: string; 'aria-invalid'?: true; 'aria-describedby'?: string } =>
     fieldErrors[name]
-      ? { className: bad, 'aria-invalid': true, 'aria-describedby': `${name}-error` }
-      : { className: field };
+      ? {
+          className: controlClass(true),
+          'aria-invalid': true,
+          'aria-describedby': `${name}-error`,
+        }
+      : { className: controlClass(false) };
 
   const Fault = ({ name }: { name: string }): JSX.Element | null =>
     fieldErrors[name] ? (
-      <p id={`${name}-error`} data-testid={`error-${name}`} className="mt-1 text-sm text-destructive">
+      <p id={`${name}-error`} data-testid={`error-${name}`} className="mt-1 text-[13px] text-critical">
         {fieldErrors[name]}
       </p>
     ) : null;
 
+  const label = 'block text-[13px] font-medium text-foreground';
+
   return (
-    <form onSubmit={onSubmit} className="surface space-y-4 p-5" noValidate>
-      <h2 className="font-medium">Add a business you want to approach</h2>
+    <>
+      <Button
+        variant="primary"
+        data-testid="new-lead"
+        onClick={() => setOpen(true)}
+        aria-expanded={open}
+      >
+        Add a business
+      </Button>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div>
-          <label htmlFor="company" className="block text-sm font-medium">
-            Business name
-          </label>
-          <input id="company" name="company" data-testid="lead-company" {...attrs('company')} />
-          <Fault name="company" />
-        </div>
-        <div>
-          <label htmlFor="phone" className="block text-sm font-medium">
-            Phone
-          </label>
-          <input id="phone" name="phone" data-testid="lead-phone-input" {...attrs('phone')} />
-          <Fault name="phone" />
-        </div>
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium">
-            Email
-          </label>
-          <input id="email" name="email" type="email" {...attrs('email')} />
-          <Fault name="email" />
-        </div>
-      </div>
-
-      <p className="text-xs text-muted-foreground">
-        A business name or a contact person, plus one way to reach them. Everything else can wait.
-      </p>
-
-      {detailed ? (
-        <div className="space-y-4 border-t border-border pt-4">
-          <div className="grid gap-4 sm:grid-cols-3">
+      <Drawer
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Add a business you want to approach"
+        description="A business name or a contact person, plus one way to reach them. Everything else can wait."
+        data-testid="new-lead-drawer"
+        footer={
+          <div className="flex items-center gap-2">
+            <Button variant="primary" type="submit" form="new-lead-form" disabled={busy} data-testid="create-lead">
+              {busy ? 'Adding…' : 'Add prospect'}
+            </Button>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        }
+      >
+        <form id="new-lead-form" onSubmit={onSubmit} className="space-y-4" noValidate>
+          <div className="space-y-3">
             <div>
-              <label htmlFor="first_name" className="block text-sm font-medium">
-                Contact person
+              <label htmlFor="company" className={label}>
+                Business name
               </label>
-              <input id="first_name" name="first_name" {...attrs('first_name')} />
-              <Fault name="first_name" />
+              <div className="mt-1">
+                <input id="company" name="company" data-testid="lead-company" {...attrs('company')} />
+              </div>
+              <Fault name="company" />
             </div>
-            <div>
-              <label htmlFor="last_name" className="block text-sm font-medium">
-                Surname
-              </label>
-              <input id="last_name" name="last_name" {...attrs('last_name')} />
-              <Fault name="last_name" />
-            </div>
-            <div>
-              <label htmlFor="city" className="block text-sm font-medium">
-                Area or city
-              </label>
-              <input id="city" name="city" className={field} />
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="phone" className={label}>
+                  Phone
+                </label>
+                <div className="mt-1">
+                  <input id="phone" name="phone" data-testid="lead-phone-input" {...attrs('phone')} />
+                </div>
+                <Fault name="phone" />
+              </div>
+              <div>
+                <label htmlFor="email" className={label}>
+                  Email
+                </label>
+                <div className="mt-1">
+                  <input id="email" name="email" type="email" {...attrs('email')} />
+                </div>
+                <Fault name="email" />
+              </div>
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <label htmlFor="industry" className="block text-sm font-medium">
-                What they do
-              </label>
-              <input id="industry" name="industry" placeholder="Dental clinic" className={field} />
-            </div>
-            <div>
-              <label htmlFor="website" className="block text-sm font-medium">
-                Website
-              </label>
-              <input id="website" name="website" className={field} />
-            </div>
-            <div>
-              <label htmlFor="source" className="block text-sm font-medium">
-                How we found them
-              </label>
-              <input id="source" name="source" placeholder="Referral" {...attrs('source')} />
-              <Fault name="source" />
-            </div>
-          </div>
+          {detailed ? (
+            <div className="space-y-4 border-t border-border pt-4">
+              <h3 className="text-[13px] font-semibold text-foreground">More details</h3>
 
-          <div>
-            <label htmlFor="requirement" className="block text-sm font-medium">
-              Why we think they need us
-            </label>
-            <textarea id="requirement" name="requirement" rows={2} className={field} />
-          </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="first_name" className={label}>
+                    Contact person
+                  </label>
+                  <div className="mt-1">
+                    <input id="first_name" name="first_name" {...attrs('first_name')} />
+                  </div>
+                  <Fault name="first_name" />
+                </div>
+                <div>
+                  <label htmlFor="last_name" className={label}>
+                    Surname
+                  </label>
+                  <div className="mt-1">
+                    <input id="last_name" name="last_name" {...attrs('last_name')} />
+                  </div>
+                  <Fault name="last_name" />
+                </div>
+              </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="sm:col-span-2">
-              <label htmlFor="notes" className="block text-sm font-medium">
-                Notes
-              </label>
-              <input id="notes" name="notes" className={field} />
-            </div>
-            <div>
-              <label htmlFor="estimated_value" className="block text-sm font-medium">
-                Rough value (₹)
-              </label>
-              <input
-                id="estimated_value"
-                name="estimated_value"
-                inputMode="numeric"
-                {...attrs('estimated_value')}
-              />
-              <Fault name="estimated_value" />
-            </div>
-          </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="city" className={label}>
+                    Area or city
+                  </label>
+                  <div className="mt-1">
+                    <input id="city" name="city" className={controlClass(false)} />
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="industry" className={label}>
+                    What they do
+                  </label>
+                  <div className="mt-1">
+                    <input
+                      id="industry"
+                      name="industry"
+                      placeholder="Dental clinic"
+                      className={controlClass(false)}
+                    />
+                  </div>
+                </div>
+              </div>
 
-          {members.length > 0 ? (
-            <div className="sm:w-1/3">
-              <label htmlFor="assignee_id" className="block text-sm font-medium">
-                Who will handle it
-              </label>
-              <select id="assignee_id" name="assignee_id" data-testid="lead-owner-new" className={field}>
-                <option value="">Decide later</option>
-                {members
-                  .filter((m) => m.is_active)
-                  .map((member) => (
-                    <option key={member.id} value={member.id}>
-                      {member.full_name}
-                    </option>
-                  ))}
-              </select>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="website" className={label}>
+                    Website
+                  </label>
+                  <div className="mt-1">
+                    <input id="website" name="website" className={controlClass(false)} />
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="source" className={label}>
+                    How we found them
+                  </label>
+                  <div className="mt-1">
+                    <input id="source" name="source" placeholder="Referral" {...attrs('source')} />
+                  </div>
+                  <Fault name="source" />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="requirement" className={label}>
+                  Why we think they need us
+                </label>
+                <div className="mt-1">
+                  <textarea
+                    id="requirement"
+                    name="requirement"
+                    rows={2}
+                    className={controlClass(false)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="notes" className={label}>
+                    Notes
+                  </label>
+                  <div className="mt-1">
+                    <input id="notes" name="notes" className={controlClass(false)} />
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="estimated_value" className={label}>
+                    Rough value (₹)
+                  </label>
+                  <div className="mt-1">
+                    <input
+                      id="estimated_value"
+                      name="estimated_value"
+                      inputMode="numeric"
+                      {...attrs('estimated_value')}
+                    />
+                  </div>
+                  <Fault name="estimated_value" />
+                </div>
+              </div>
+
+              {members.length > 0 ? (
+                <div>
+                  <label htmlFor="assignee_id" className={label}>
+                    Who will handle it
+                  </label>
+                  <div className="mt-1">
+                    <select
+                      id="assignee_id"
+                      name="assignee_id"
+                      data-testid="lead-owner-new"
+                      className={controlClass(false)}
+                    >
+                      <option value="">Decide later</option>
+                      {members
+                        .filter((m) => m.is_active)
+                        .map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.full_name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+              ) : null}
             </div>
+          ) : (
+            <button
+              type="button"
+              data-testid="more-details"
+              onClick={() => setDetailed(true)}
+              className="text-[13px] text-accent underline-offset-2 hover:underline"
+            >
+              More details
+            </button>
+          )}
+
+          {/* Form-level fallback for anything that is not about one box - a
+              network failure, or a rejection the server did not attribute to a
+              field. */}
+          {error ? (
+            <p role="alert" data-testid="new-lead-error" className="text-[13px] text-critical">
+              {error}
+            </p>
           ) : null}
-        </div>
-      ) : (
-        <button
-          type="button"
-          data-testid="more-details"
-          onClick={() => setDetailed(true)}
-          className="text-sm text-primary underline-offset-2 hover:underline"
-        >
-          More details
-        </button>
-      )}
 
-      {/* Form-level fallback for anything that is not about one box - a network
-          failure, or a rejection the server did not attribute to a field. */}
-      {error ? (
-        <p role="alert" data-testid="new-lead-error" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-
-      {/* Announced once for the whole form, so a screen-reader user is told there
-          is something to fix without every field shouting separately. */}
-      {Object.keys(fieldErrors).length > 0 ? (
-        <p role="alert" data-testid="new-lead-field-errors" className="text-sm text-destructive">
-          Please correct the highlighted {Object.keys(fieldErrors).length === 1 ? 'field' : 'fields'}{' '}
-          above.
-        </p>
-      ) : null}
-
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={busy}
-          data-testid="create-lead"
-          className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
-        >
-          {busy ? 'Adding…' : 'Add prospect'}
-        </button>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="rounded-md border border-border px-4 py-2 text-sm"
-        >
-          Cancel
-        </button>
-      </div>
-    </form>
+          {/* Announced once for the whole form, so a screen-reader user is told
+              there is something to fix without every field shouting separately. */}
+          {Object.keys(fieldErrors).length > 0 ? (
+            <p role="alert" data-testid="new-lead-field-errors" className="text-[13px] text-critical">
+              Please correct the highlighted{' '}
+              {Object.keys(fieldErrors).length === 1 ? 'field' : 'fields'} above.
+            </p>
+          ) : null}
+        </form>
+      </Drawer>
+    </>
   );
 }

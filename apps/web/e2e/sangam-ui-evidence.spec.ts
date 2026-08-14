@@ -98,6 +98,14 @@ for (const theme of ['light', 'dark'] as const) {
       }
     }
 
+    // The one drawer in the product, over the list it writes into.
+    await page.goto('/leads');
+    await page.getByTestId('new-lead').click();
+    await expect(page.getByTestId('lead-company')).toBeVisible();
+    await page.getByTestId('more-details').click();
+    await page.screenshot({ path: `${EVIDENCE}/${theme}-02b-add-business-drawer.png` });
+    await page.keyboard.press('Escape');
+
     // A record, which is a different layout problem from a list: one dominant
     // subject, a lot of metadata, and a timeline that has to stay readable.
     await page.goto('/leads');
