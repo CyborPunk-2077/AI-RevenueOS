@@ -201,15 +201,14 @@ export function Timeline({
       <SectionHeader
         id="timeline-heading"
         title="Activity"
-        description="Everything that has happened with this prospect, oldest change last. Nothing here can be edited or removed once it is written."
+        description="Append-only: once written, nothing here can be edited or removed."
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <form onSubmit={onLogActivity} className="space-y-3" noValidate>
           <h3 className="text-[13px] font-semibold text-foreground">Record an outreach you made</h3>
           <p className="text-[13px] text-muted-foreground">
-            You make the call or send the message yourself; Sangam records it. Nothing here sends
-            anything.
+            You make the contact yourself; this only records it. Nothing here sends anything.
           </p>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -276,9 +275,8 @@ export function Timeline({
                 ))}
               </select>
               <p className="mt-1 text-[13px] text-muted-foreground">
-                Only contact that actually reached the customer counts as replying to them. A missed
-                call or a meeting still in the diary leaves this prospect waiting, which is what the
-                Today page will keep telling you.
+                Only contact that actually reached the customer counts as a reply. A missed call
+                leaves this prospect waiting.
               </p>
             </div>
           ) : null}
@@ -324,8 +322,7 @@ export function Timeline({
               />
             </div>
             <p className="text-[13px] text-muted-foreground">
-              Leave blank if there is nothing to do next. Anything typed here becomes a follow-up on
-              this prospect.
+              Anything typed here becomes a follow-up on this prospect.
             </p>
           </div>
 
@@ -336,9 +333,7 @@ export function Timeline({
 
         <form onSubmit={onAddNote} className="space-y-3" noValidate>
           <h3 className="text-[13px] font-semibold text-foreground">Add a note</h3>
-          <p className="text-[13px] text-muted-foreground">
-            Anything worth knowing before the next call. Only you can edit your own notes.
-          </p>
+          <p className="text-[13px] text-muted-foreground">Only you can edit your own notes.</p>
           <div>
             <label htmlFor="note_body" className={label}>
               Note

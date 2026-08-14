@@ -98,8 +98,8 @@ export function LeadQualification({
       />
 
       <p className="text-[13px] text-muted-foreground">
-        Scored from what was captured with the enquiry. No AI provider is connected, so the rules do
-        this &mdash; the result is the same every time and you can see why below.
+        No AI provider is connected, so rules score this from the enquiry &mdash; the same result
+        every time, and you can see why.
       </p>
 
       <div className="flex flex-wrap items-end gap-3">

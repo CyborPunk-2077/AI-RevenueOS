@@ -195,15 +195,19 @@ export default async function LeadDetailPage({
                   )}
                 </>
               ) : isOpen ? (
-                // The state is emphasised; the explanation of it is not. A whole
-                // paragraph in critical red reads as an error the reader caused,
-                // and it makes the two words that matter harder to find.
+                // The state is emphasised; the explanation of it is not.
+                //
+                // The sentence after it is kept, shortened, because it is the one
+                // piece of instruction on this page that prevents a wrong action:
+                // people assume assigning or scoring a prospect counts as
+                // answering them, and it does not. Everything else that merely
+                // described the interface has gone.
                 <span data-testid="lead-awaiting-response">
                   <span className="font-medium text-critical">Waiting for a first reply.</span>
                   <span className="text-muted-foreground">
                     {' '}
-                    Assigning, scoring or scheduling does not count &mdash; log the call, email or
-                    message below once you have actually contacted them.
+                    Only contact that actually reached them counts &mdash; assigning or scoring does
+                    not.
                   </span>
                 </span>
               ) : (
@@ -227,13 +231,9 @@ export default async function LeadDetailPage({
                   ) : null}
                 </>
               ) : (
-                <>
-                  <span className="font-medium text-critical">No follow-up is scheduled.</span>
-                  <span className="text-muted-foreground">
-                    {' '}
-                    This is how prospects go quiet &mdash; add one on the right.
-                  </span>
-                </>
+                // "add one on the right" was both a lecture and a lie below
+                // 1100px, where the rail is underneath rather than beside.
+                <span className="font-medium text-critical">No follow-up is scheduled.</span>
               )}
             </p>
 
@@ -285,11 +285,23 @@ export default async function LeadDetailPage({
         </div>
 
         {/*
-          The metadata column: set once, then glanced at. Separated from the
-          narrative by a rule rather than by wrapping each piece in its own box.
+          The rail: the three things somebody changes while working this customer.
+
+          It used to carry five sections at equal weight, and two of them were
+          maintenance - a duplicate panel that said "Nothing flagged" on almost
+          every record, and a form for correcting the contact's name. Both sat at
+          the same visual weight as "who owns this" and "what happens next",
+          which is how a rail stops being read at all.
+
+          What is left is ordered by how often it is touched: the next action
+          first, because that is the answer to "what do I do about this one".
         */}
-        <aside className="w-full shrink-0 space-y-6 min-[1100px]:w-[20rem] min-[1100px]:border-l min-[1100px]:border-border min-[1100px]:pl-8">
-          <section aria-labelledby="ownership-heading" className="space-y-3">
+        <aside className="w-full shrink-0 space-y-6 min-[1100px]:w-[20rem] min-[1100px]:border-l min-[1100px]:border-border min-[1100px]:pl-8 min-[1500px]:w-[22rem]">
+          <section>
+            <TaskPanel parent="leads" parentId={lead.id} tasks={tasks} />
+          </section>
+
+          <section aria-labelledby="ownership-heading" className="space-y-3 border-t border-border pt-6">
             <SectionHeader id="ownership-heading" title="Ownership" />
             <LeadOwner
               leadId={lead.id}
@@ -306,20 +318,32 @@ export default async function LeadDetailPage({
               category={lead.category}
             />
           </section>
-
-          <section className="border-t border-border pt-6">
-            <TaskPanel parent="leads" parentId={lead.id} tasks={tasks} />
-          </section>
-
-          <section className="border-t border-border pt-6">
-            <DuplicateReview lead={lead} candidates={duplicates.data?.candidates ?? []} />
-          </section>
-
-          <section className="border-t border-border pt-6">
-            <EditLeadForm lead={lead} />
-          </section>
         </aside>
       </div>
+
+      {/*
+        Record maintenance: correcting the contact's name, and merging a
+        duplicate. Real capabilities, rarely the reason anybody opened this page.
+
+        Below the workbench rather than hidden behind a click - both are one
+        scroll away and neither has grown an extra step - but no longer competing
+        with the conversation and the timeline for the same eye. The heading says
+        what they are, so nobody has to guess why the page continues.
+      */}
+      <section
+        aria-labelledby="maintenance-heading"
+        className="space-y-5 border-t border-border pt-6"
+      >
+        <SectionHeader
+          id="maintenance-heading"
+          title="Record maintenance"
+          description="Corrections and duplicate handling. Nothing here contacts the customer."
+        />
+        <div className="grid gap-8 min-[1100px]:grid-cols-2">
+          <EditLeadForm lead={lead} />
+          <DuplicateReview lead={lead} candidates={duplicates.data?.candidates ?? []} />
+        </div>
+      </section>
     </div>
   );
 }

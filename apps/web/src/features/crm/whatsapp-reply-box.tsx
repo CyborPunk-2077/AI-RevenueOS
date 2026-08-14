@@ -93,7 +93,7 @@ export function WhatsAppReplyBox({
     <section className="space-y-3">
       <SectionHeader
         title="Reply on WhatsApp"
-        description={`This one really does send, through WhatsApp, to ${phone}. Everything else in Sangam only records contact you made yourself.`}
+        description={`Genuinely sends, through WhatsApp, to ${phone}.`}
       />
 
       <form onSubmit={onSubmit} className="max-w-reading space-y-3" noValidate>
