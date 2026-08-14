@@ -95,7 +95,9 @@ export function AppointmentPanel({
           title="Book a slot"
           description="Two requests for the same slot cannot both succeed; the database refuses the second."
         />
-        <form onSubmit={onBook} className="flex flex-wrap items-end gap-3" noValidate>
+        {/* Capped: a four-field booking form spread across 1136px reads as an
+            unfinished layout rather than a considered one. */}
+        <form onSubmit={onBook} className="flex max-w-3xl flex-wrap items-end gap-3" noValidate>
           <div className="min-w-[16rem] grow">
             <label htmlFor="appt_title" className={label}>
               Title

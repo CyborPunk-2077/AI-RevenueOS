@@ -177,7 +177,7 @@ const COLUMNS: Array<Column<AttentionRow>> = [
     header: 'Last touch',
     align: 'right',
     dropAt: 1100,
-    width: '11%',
+    width: '12%',
     cell: (row) =>
       row.lastTouch ? (
         <RelativeTime iso={row.lastTouch} mode="date" className="text-muted-foreground" />
@@ -189,7 +189,7 @@ const COLUMNS: Array<Column<AttentionRow>> = [
     key: 'next-action',
     header: 'Next action',
     dropAt: 900,
-    width: '19%',
+    width: '18%',
     cell: (row) =>
       row.nextAction ? (
         <span className="flex items-baseline gap-2">
