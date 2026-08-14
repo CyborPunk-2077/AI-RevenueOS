@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import { signInAs } from './support/auth';
 
@@ -128,6 +129,40 @@ for (const theme of ['light', 'dark'] as const) {
     }
   });
 }
+
+/**
+ * The Review step, which is the whole product on the Import screen and the only
+ * one the static route cannot show.
+ *
+ * Run in `sangam-e2e` and stopped before the confirm, so nothing is written
+ * anywhere - which is also the property the screen is claiming.
+ */
+test('the import review step shows what would happen, and writes nothing', async ({ page }) => {
+  test.setTimeout(120_000);
+  const stamp = Date.now();
+  await page.setViewportSize(LAPTOP);
+  await signInAs(page, 'e2e-owner');
+
+  const csv = [
+    'Business name,Contact person,Phone,Email,City,Industry,Why we are approaching them',
+    `Evidence Sweets ${stamp},Ramesh Rao,98450${String(stamp).slice(-5)},ramesh${stamp}@sweets.in,Basavanagudi,Food,Counter orders on paper`,
+    `Evidence Tailors ${stamp},,98451${String(stamp).slice(-5)},,Malleshwaram,Tailoring,Measurements in a diary`,
+    `Evidence Broken ${stamp},,,,Hebbal,Unknown,No way to contact them`,
+  ].join('\n');
+  const csvPath = join(tmpdir(), `sangam-ui-evidence-${stamp}.csv`);
+  writeFileSync(csvPath, csv, 'utf-8');
+
+  for (const theme of ['light', 'dark'] as const) {
+    await page.goto('/sangam-e2e/imports');
+    await setTheme(page, theme);
+    await page.setInputFiles('#csv', csvPath);
+    await expect(page.getByTestId('normalised-sample')).toBeVisible();
+    await expect(page.getByTestId('rejection-rows')).toBeVisible();
+    await page.screenshot({ path: `${EVIDENCE}/${theme}-13b-import-review.png` });
+    await shootBelowTheFold(page, `${theme}-13c-import-review-lower`);
+  }
+  // Deliberately never committed.
+});
 
 test('the shell holds together as the desktop narrows', async ({ page }) => {
   test.setTimeout(180_000);

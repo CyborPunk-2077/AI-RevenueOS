@@ -3,11 +3,13 @@
 import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { Card, EmptyState, PageHeader, StatusPill } from '@/features/ui/primitives';
+import { Button, Checkbox, controlClass } from '@/features/ui/controls';
+import { DataTable, type Column } from '@/features/ui/data-table';
+import { PageHeader, SectionHeader } from '@/features/ui/primitives';
 import { mutate } from '@/lib/csrf';
 
 /**
- * CSV import: upload, confirm the mapping, review, commit.
+ * CSV import: upload, review, confirm.
  *
  * Three decisions the UI has to honour, because the server already does:
  *
@@ -25,6 +27,10 @@ import { mutate } from '@/lib/csrf';
  * with the commit, so a double-clicked button, an impatient retry, or a
  * connection that drops after the server committed all replay to the same
  * result instead of importing twice.
+ *
+ * The redesign deliberately changed the presentation only. This flow was already
+ * the right shape and its safety model - nothing is written before the confirm -
+ * is the most valuable thing on the screen.
  */
 
 interface Rejection {
@@ -105,10 +111,7 @@ export function ImportWizard(): JSX.Element {
 
   const step: Step = committed ? 'result' : preview ? 'mapping' : 'upload';
 
-  const mappedTargets = useMemo(
-    () => new Set(Object.values(mapping).filter(Boolean)),
-    [mapping],
-  );
+  const mappedTargets = useMemo(() => new Set(Object.values(mapping).filter(Boolean)), [mapping]);
   const contactable = mappedTargets.has('email') || mappedTargets.has('phone');
   const named = mappedTargets.has('first_name') || mappedTargets.has('company');
 
@@ -206,190 +209,196 @@ export function ImportWizard(): JSX.Element {
       <Steps current={step} />
 
       {error ? (
-        <p role="alert" className="rounded border border-destructive/40 bg-destructive-soft p-3 text-sm text-destructive">
+        <p
+          role="alert"
+          className="max-w-reading rounded border border-critical/40 bg-critical-soft px-3 py-2 text-[13px] text-critical"
+        >
           {error}
         </p>
       ) : null}
 
       {step === 'upload' ? (
-        <Card>
-          <label htmlFor="csv" className="block text-sm font-medium">
-            CSV file
-          </label>
-          <p id="csv-help" className="mt-1 text-xs text-muted-foreground">
-            Up to 10,000 rows and 5 MB. The first row must be the column headers. UTF-8 or
-            Windows-1252, which is what Excel writes by default.
-          </p>
-          <input
-            ref={fileRef}
-            id="csv"
-            type="file"
-            accept=".csv,text/csv"
-            aria-describedby="csv-help"
-            disabled={busy}
-            onChange={(event) => {
-              const chosen = event.target.files?.[0];
-              if (chosen) void choose(chosen);
-            }}
-            className="field mt-3 block"
-          />
-          {busy ? (
-            <p role="status" className="mt-3 text-sm text-muted-foreground">
-              Reading the file…
+        <div className="max-w-reading space-y-6">
+          <div>
+            <label htmlFor="csv" className="block text-[13px] font-medium text-foreground">
+              CSV file
+            </label>
+            <p id="csv-help" className="mt-1 text-[13px] text-muted-foreground">
+              Up to 10,000 rows and 5 MB. The first row must be the column headers. UTF-8 or
+              Windows-1252, which is what Excel writes by default.
             </p>
-          ) : null}
+            <input
+              ref={fileRef}
+              id="csv"
+              type="file"
+              accept=".csv,text/csv"
+              aria-describedby="csv-help"
+              disabled={busy}
+              onChange={(event) => {
+                const chosen = event.target.files?.[0];
+                if (chosen) void choose(chosen);
+              }}
+              className={`${controlClass(false)} mt-2 py-1.5`}
+            />
+            {busy ? (
+              <p role="status" className="mt-2 text-[13px] text-muted-foreground">
+                Reading the file…
+              </p>
+            ) : null}
+          </div>
 
           {/* Offered before the upload, not buried in documentation. The columns
               are the words a founder would use, and the file maps itself. */}
-          <div className="mt-5 border-t border-border pt-4">
-            <p className="text-sm font-medium">Not sure what the file should look like?</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Download the template, replace the three example businesses with your own, and
-              upload it. Columns you do not have can be left empty or deleted.
-            </p>
+          <div className="space-y-3 border-t border-border pt-5">
+            <SectionHeader
+              title="Not sure what the file should look like?"
+              description="Download the template, replace the three example businesses with your own, and upload it. Columns you do not have can be left empty or deleted."
+            />
             <a
               href="/api/imports/leads/template"
               download="sangam-prospect-template.csv"
               data-testid="download-template"
-              className="btn btn-ghost mt-3 inline-block"
+              className="btn btn-ghost inline-flex"
             >
               Download the template
             </a>
           </div>
-        </Card>
+        </div>
       ) : null}
 
       {step === 'mapping' && preview ? (
-        <>
-          <Card>
-            <h2 className="heading text-base">Columns</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              We matched these from your headers. Change anything we got wrong. Columns left
-              unmapped are kept on the lead as captured data rather than discarded.
-            </p>
+        <div className="space-y-8">
+          <section className="space-y-3">
+            <SectionHeader
+              title="Columns"
+              description="We matched these from your headers. Change anything we got wrong. Columns left unmapped are kept on the lead as captured data rather than discarded."
+            />
 
-            <table className="mt-4 w-full text-left text-sm">
-              <caption className="sr-only">Column mapping</caption>
-              <thead>
-                <tr className="border-b border-border text-xs uppercase text-muted-foreground">
-                  <th scope="col" className="py-2">
-                    Your column
-                  </th>
-                  <th scope="col" className="py-2">
-                    Imports as
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {preview.headers.map((header) => (
-                  <tr key={header} className="border-b border-border/60">
-                    <td className="py-2 font-mono text-xs">{header}</td>
-                    <td className="py-2">
-                      <label htmlFor={`map-${header}`} className="sr-only">
-                        Field for column {header}
-                      </label>
-                      <select
-                        id={`map-${header}`}
-                        value={mapping[header] ?? ''}
-                        disabled={busy}
-                        onChange={(event) => {
-                          const next = { ...mapping };
-                          if (event.target.value) next[header] = event.target.value;
-                          else delete next[header];
-                          void reprice(next);
-                        }}
-                        className="field w-auto py-1"
-                      >
-                        {TARGETS.map((target) => (
-                          <option key={target} value={target}>
-                            {target === '' ? 'Keep as captured data' : target}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
+            <div className="max-w-2xl overflow-hidden rounded-lg border border-border bg-surface">
+              <table className="w-full border-collapse text-left">
+                <caption className="sr-only">Column mapping</caption>
+                <thead>
+                  <tr className="border-b border-border-strong bg-surface-sunken">
+                    <th
+                      scope="col"
+                      className="px-4 py-2 text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground"
+                    >
+                      Your column
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-4 py-2 text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground"
+                    >
+                      Imports as
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {preview.headers.map((header) => (
+                    <tr key={header} className="border-b border-border last:border-b-0">
+                      <td className="px-4 py-1.5 font-mono text-[13px] text-secondary-foreground">
+                        {header}
+                      </td>
+                      <td className="px-4 py-1.5">
+                        <label htmlFor={`map-${header}`} className="sr-only">
+                          Field for column {header}
+                        </label>
+                        <select
+                          id={`map-${header}`}
+                          value={mapping[header] ?? ''}
+                          disabled={busy}
+                          onChange={(event) => {
+                            const next = { ...mapping };
+                            if (event.target.value) next[header] = event.target.value;
+                            else delete next[header];
+                            void reprice(next);
+                          }}
+                          className={`${controlClass(false)} w-auto`}
+                        >
+                          {TARGETS.map((target) => (
+                            <option key={target} value={target}>
+                              {target === '' ? 'Keep as captured data' : target}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {!named || !contactable ? (
-              <p role="alert" className="mt-3 text-sm text-destructive">
+              <p role="alert" className="max-w-reading text-[13px] text-critical">
                 {!named ? 'Map a column to the business name or the contact person. ' : ''}
                 {!contactable
                   ? 'Map a column to email or phone, or the leads created cannot be contacted.'
                   : ''}
               </p>
             ) : null}
-          </Card>
+          </section>
 
           <ReviewPanel preview={preview} />
 
-          <Card>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={assign}
-                onChange={(event) => setAssign(event.target.checked)}
-              />
-              Share the new businesses out using the assignment rules
-            </label>
+          {/*
+            The confirmation. It states exactly what it will do, because this is
+            the only click in the whole flow that writes anything - and until it
+            is pressed, the screen has been promising that nothing has.
+          */}
+          <section className="space-y-3 border-t border-border pt-6">
+            <Checkbox
+              id="assign-rules"
+              checked={assign}
+              onChange={(event) => setAssign(event.target.checked)}
+              label="Share the new businesses out using the assignment rules"
+            />
 
-            <div className="mt-4 flex flex-wrap gap-3">
-              <button
-                type="button"
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="primary"
                 data-testid="commit-import"
                 onClick={() => void commit()}
                 disabled={busy || preview.will_create === 0 || !named || !contactable}
-                className="btn btn-primary"
               >
                 {busy
                   ? 'Importing…'
                   : `Import ${preview.will_create} ${preview.will_create === 1 ? 'business' : 'businesses'}`}
-              </button>
-              <button
-                type="button"
-                onClick={restart}
-                className="btn btn-ghost"
-              >
+              </Button>
+              <Button variant="ghost" onClick={restart}>
                 Choose a different file
-              </button>
+              </Button>
+              <p className="text-[13px] text-muted-foreground">Nothing has been written yet.</p>
             </div>
-          </Card>
-        </>
+          </section>
+        </div>
       ) : null}
 
       {step === 'result' && committed ? (
-        <>
-          <Card>
-            <h2 className="heading text-base">Import complete</h2>
-            <div className="mt-2 flex flex-wrap gap-2" data-testid="import-summary">
-              <StatusPill tone="success">{committed.created} added</StatusPill>
-              {committed.duplicates.length > 0 ? (
-                <StatusPill tone="neutral">
-                  {committed.duplicates.length} already had
-                </StatusPill>
-              ) : null}
-              {committed.rejected > 0 ? (
-                <StatusPill tone="warning">{committed.rejected} unusable</StatusPill>
-              ) : null}
-            </div>
-            <p className="mt-3 text-xs text-muted-foreground">Batch {committed.batch_id}</p>
-            <div className="mt-4 flex gap-3">
-              <a
-                href="/leads"
-                className="btn btn-primary"
-              >
+        <div className="space-y-8">
+          <section className="space-y-3">
+            <SectionHeader title="Import complete" />
+            <Counts
+              testId="import-summary"
+              items={[
+                { key: 'added', value: committed.created, label: 'added' },
+                ...(committed.duplicates.length > 0
+                  ? [{ key: 'had', value: committed.duplicates.length, label: 'already had' }]
+                  : []),
+                ...(committed.rejected > 0
+                  ? [{ key: 'unusable', value: committed.rejected, label: 'unusable' }]
+                  : []),
+              ]}
+            />
+            <p className="text-[13px] text-muted-foreground">Batch {committed.batch_id}</p>
+            <div className="flex flex-wrap gap-3">
+              <a href="/leads" className="btn btn-primary inline-flex">
                 See the prospects
               </a>
-              <button
-                type="button"
-                onClick={restart}
-                className="btn btn-ghost"
-              >
+              <Button variant="ghost" onClick={restart}>
                 Import another file
-              </button>
+              </Button>
             </div>
-          </Card>
+          </section>
 
           {committed.duplicates.length > 0 ? (
             <DuplicateTable duplicates={committed.duplicates} />
@@ -398,22 +407,50 @@ export function ImportWizard(): JSX.Element {
           {committed.rejections.length > 0 ? (
             <RejectionTable rejections={committed.rejections} total={committed.rejected} />
           ) : null}
-        </>
+        </div>
       ) : null}
     </div>
   );
 }
 
+/**
+ * The counts, as figures with words beside them rather than as coloured pills.
+ *
+ * The wording is load-bearing. "24 added / 3 already had / 1 unusable" is what a
+ * founder reads after an import, and the browser suite asserts on those exact
+ * phrases - so this renders them as one string per figure rather than as a
+ * number and a label that a screen reader would have to reassemble.
+ */
+function Counts({
+  items,
+  testId,
+}: {
+  items: Array<{ key: string; value: number; label: string }>;
+  testId: string;
+}): JSX.Element {
+  return (
+    <p className="flex flex-wrap items-baseline gap-x-8 gap-y-2" data-testid={testId}>
+      {items.map((item) => (
+        <span key={item.key} className="text-lg font-semibold tabular text-foreground">
+          {item.value}{' '}
+          <span className="text-sm font-normal text-muted-foreground">{item.label}</span>
+        </span>
+      ))}
+    </p>
+  );
+}
+
 function Steps({ current }: { current: Step }): JSX.Element {
+  // Upload → Review → Confirm: the three words the safety model is built on.
   const steps: { key: Step; label: string }[] = [
-    { key: 'upload', label: 'Choose file' },
-    { key: 'mapping', label: 'Confirm columns' },
-    { key: 'result', label: 'Done' },
+    { key: 'upload', label: 'Upload' },
+    { key: 'mapping', label: 'Review' },
+    { key: 'result', label: 'Confirm' },
   ];
   const index = steps.findIndex((s) => s.key === current);
 
   return (
-    <ol className="flex flex-wrap gap-2 text-sm">
+    <ol className="flex flex-wrap items-center gap-2 border-b border-border pb-4 text-sm">
       {steps.map((step, position) => (
         <li key={step.key} className="flex items-center gap-2">
           <span
@@ -421,17 +458,17 @@ function Steps({ current }: { current: Step }): JSX.Element {
             data-state={position === index ? 'current' : position < index ? 'done' : 'todo'}
             aria-hidden="true"
           >
-            {position < index ? '\u2713' : position + 1}
+            {position < index ? '✓' : position + 1}
           </span>
           <span
             aria-current={position === index ? 'step' : undefined}
-            className={position === index ? 'font-medium' : 'text-muted-foreground'}
+            className={position === index ? 'font-medium text-foreground' : 'text-muted-foreground'}
           >
             {step.label}
             {position < index ? <span className="sr-only"> (completed)</span> : null}
           </span>
           {position < steps.length - 1 ? (
-            <span aria-hidden="true" className="mx-1 h-px w-6 bg-border" />
+            <span aria-hidden="true" className="mx-2 h-px w-8 bg-border" />
           ) : null}
         </li>
       ))}
@@ -442,32 +479,32 @@ function Steps({ current }: { current: Step }): JSX.Element {
 function ReviewPanel({ preview }: { preview: Preview }): JSX.Element {
   return (
     <>
-      <Card>
-        <h2 className="heading text-base">What will happen</h2>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <StatusPill tone="success">{preview.will_create} new businesses</StatusPill>
-          {preview.duplicates.length > 0 ? (
-            <StatusPill tone="neutral">
-              {preview.duplicates.length} already in Sangam
-            </StatusPill>
-          ) : null}
-          {preview.rejected > 0 ? (
-            <StatusPill tone="warning">{preview.rejected} unusable</StatusPill>
-          ) : null}
-        </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          {preview.total_rows} rows read.{' '}
-          {preview.duplicates.length > 0
-            ? 'Rows matching a business you already have are left alone - the existing record keeps its owner and its history.'
-            : ''}
-        </p>
-      </Card>
+      <section className="space-y-3 border-t border-border pt-6">
+        <SectionHeader
+          title="What will happen"
+          description={`${preview.total_rows} rows read.${
+            preview.duplicates.length > 0
+              ? ' Rows matching a business you already have are left alone — the existing record keeps its owner and its history.'
+              : ''
+          }`}
+        />
+        <Counts
+          testId="preview-summary"
+          items={[
+            { key: 'create', value: preview.will_create, label: 'new businesses' },
+            ...(preview.duplicates.length > 0
+              ? [{ key: 'had', value: preview.duplicates.length, label: 'already in Sangam' }]
+              : []),
+            ...(preview.rejected > 0
+              ? [{ key: 'unusable', value: preview.rejected, label: 'unusable' }]
+              : []),
+          ]}
+        />
+      </section>
 
       {preview.sample.length > 0 ? <NormalisedSample sample={preview.sample} /> : null}
 
-      {preview.duplicates.length > 0 ? (
-        <DuplicateTable duplicates={preview.duplicates} />
-      ) : null}
+      {preview.duplicates.length > 0 ? <DuplicateTable duplicates={preview.duplicates} /> : null}
 
       {preview.rejected > 0 ? (
         <RejectionTable rejections={preview.rejections} total={preview.rejected} />
@@ -485,37 +522,83 @@ function ReviewPanel({ preview }: { preview: Preview }): JSX.Element {
  * catches a wrong column mapping before eight hundred rows land.
  */
 function NormalisedSample({ sample }: { sample: SampleRow[] }): JSX.Element {
+  const columns: Array<Column<SampleRow>> = [
+    {
+      key: 'row',
+      header: 'Row',
+      align: 'right',
+      width: '7%',
+      cell: (row) => <span className="text-muted-foreground">{row.row}</span>,
+    },
+    {
+      key: 'company',
+      header: 'Business',
+      width: '25%',
+      cell: (row) => (
+        <span className="block truncate font-medium text-foreground">
+          {row.normalized.company ?? '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'name',
+      header: 'Contact',
+      width: '20%',
+      // The importer stores the company in the name field when a row has no
+      // named human, exactly as quick add does. Printing it in both columns here
+      // would tell a founder their spreadsheet has a contact person called
+      // "Evidence Tailors" - which is the confusion this preview exists to
+      // prevent, not to create.
+      cell: (row) =>
+        row.normalized.name && row.normalized.name !== row.normalized.company ? (
+          <span className="block truncate text-secondary-foreground">{row.normalized.name}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      key: 'phone',
+      header: 'Phone',
+      width: '18%',
+      cell: (row) => <span className="tabular text-secondary-foreground">{row.normalized.phone ?? '—'}</span>,
+    },
+    {
+      key: 'email',
+      header: 'Email',
+      width: '20%',
+      dropAt: 900,
+      cell: (row) => (
+        <span className="block truncate text-secondary-foreground">
+          {row.normalized.email ?? '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'city',
+      header: 'Area',
+      width: '10%',
+      dropAt: 1100,
+      cell: (row) => (
+        <span className="block truncate text-muted-foreground">{row.normalized.city ?? '—'}</span>
+      ),
+    },
+  ];
+
   return (
-    <Card className="overflow-x-auto p-0">
-      <div className="p-5 pb-0">
-        <h2 className="heading text-base">How the first rows will be saved</h2>
-      </div>
-      <table className="mt-3 w-full text-left text-sm">
-        <caption className="sr-only">Normalised preview of the first rows</caption>
-        <thead>
-          <tr className="border-b border-border text-xs uppercase text-muted-foreground">
-            <th scope="col" className="px-5 py-3">Row</th>
-            <th scope="col" className="px-5 py-3">Name</th>
-            <th scope="col" className="px-5 py-3">Business</th>
-            <th scope="col" className="px-5 py-3">Phone</th>
-            <th scope="col" className="px-5 py-3">Email</th>
-            <th scope="col" className="px-5 py-3">Area</th>
-          </tr>
-        </thead>
-        <tbody data-testid="normalised-sample">
-          {sample.map((row) => (
-            <tr key={row.row} className="border-b border-border/60">
-              <td className="tabular px-5 py-3 text-muted-foreground">{row.row}</td>
-              <td className="px-5 py-3">{row.normalized.name ?? '—'}</td>
-              <td className="px-5 py-3 text-muted-foreground">{row.normalized.company ?? '—'}</td>
-              <td className="tabular px-5 py-3">{row.normalized.phone ?? '—'}</td>
-              <td className="px-5 py-3">{row.normalized.email ?? '—'}</td>
-              <td className="px-5 py-3 text-muted-foreground">{row.normalized.city ?? '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Card>
+    <section className="space-y-3 border-t border-border pt-6">
+      <SectionHeader
+        title="How the first rows will be saved"
+        description="Cleaned values, exactly as they will be stored."
+      />
+      <DataTable
+        caption="Normalised preview of the first rows"
+        columns={columns}
+        rows={sample}
+        rowKey={(row) => String(row.row)}
+        bodyTestId="normalised-sample"
+        stickyHeader={false}
+      />
+    </section>
   );
 }
 
@@ -528,48 +611,68 @@ function NormalisedSample({ sample }: { sample: SampleRow[] }): JSX.Element {
  * so nothing is thrown away either.
  */
 function DuplicateTable({ duplicates }: { duplicates: DuplicateMatch[] }): JSX.Element {
+  const columns: Array<Column<DuplicateMatch>> = [
+    {
+      key: 'row',
+      header: 'Row',
+      align: 'right',
+      width: '7%',
+      cell: (match) => <span className="text-muted-foreground">{match.row}</span>,
+    },
+    {
+      key: 'incoming',
+      header: 'In your file',
+      width: '28%',
+      cell: (match) => (
+        <span className="block truncate text-foreground" title={match.incoming}>
+          {match.incoming}
+        </span>
+      ),
+    },
+    {
+      key: 'existing',
+      header: 'Already in Sangam',
+      width: '30%',
+      cell: (match) => (
+        <span className="flex items-baseline gap-2">
+          <a
+            href={`/leads/${match.lead_id}`}
+            className="truncate text-accent underline-offset-2 hover:underline"
+          >
+            {match.name || 'Existing prospect'}
+          </a>
+          <span className="shrink-0 text-[13px] text-muted-foreground">{match.status}</span>
+        </span>
+      ),
+    },
+    {
+      key: 'matched',
+      header: 'Matched on',
+      width: '35%',
+      cell: (match) => (
+        <span className="text-muted-foreground">
+          {match.matched_on === 'phone' ? 'Same phone number' : 'Same email address'}
+          <span className="ml-2 text-[13px]">{match.evidence}</span>
+        </span>
+      ),
+    },
+  ];
+
   return (
-    <Card className="overflow-x-auto p-0">
-      <div className="p-5 pb-0">
-        <h2 className="heading text-base">Already in Sangam</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          These rows match a business you already have. They will not be imported again and the
-          existing record will not be changed.
-        </p>
-      </div>
-      <table className="mt-3 w-full text-left text-sm">
-        <caption className="sr-only">Rows matching existing prospects</caption>
-        <thead>
-          <tr className="border-b border-border text-xs uppercase text-muted-foreground">
-            <th scope="col" className="px-5 py-3">Row</th>
-            <th scope="col" className="px-5 py-3">In your file</th>
-            <th scope="col" className="px-5 py-3">Already in Sangam</th>
-            <th scope="col" className="px-5 py-3">Matched on</th>
-          </tr>
-        </thead>
-        <tbody data-testid="duplicate-rows">
-          {duplicates.map((match) => (
-            <tr key={`${match.row}-${match.lead_id}`} className="border-b border-border/60">
-              <td className="tabular px-5 py-3 text-muted-foreground">{match.row}</td>
-              <td className="px-5 py-3">{match.incoming}</td>
-              <td className="px-5 py-3">
-                <a
-                  href={`/leads/${match.lead_id}`}
-                  className="text-primary underline-offset-2 hover:underline"
-                >
-                  {match.name || 'Existing prospect'}
-                </a>{' '}
-                <span className="text-xs text-muted-foreground">({match.status})</span>
-              </td>
-              <td className="px-5 py-3 text-muted-foreground">
-                {match.matched_on === 'phone' ? 'Same phone number' : 'Same email address'}
-                <span className="ml-2 text-xs">{match.evidence}</span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Card>
+    <section className="space-y-3 border-t border-border pt-6">
+      <SectionHeader
+        title="Already in Sangam"
+        description="These rows match a business you already have. They will not be imported again and the existing record will not be changed."
+      />
+      <DataTable
+        caption="Rows matching existing prospects"
+        columns={columns}
+        rows={duplicates}
+        rowKey={(match) => `${match.row}-${match.lead_id}`}
+        bodyTestId="duplicate-rows"
+        stickyHeader={false}
+      />
+    </section>
   );
 }
 
@@ -584,55 +687,56 @@ function RejectionTable({
   rejections: Rejection[];
   total: number;
 }): JSX.Element {
-  if (rejections.length === 0) {
-    return (
-      <EmptyState title="Nothing skipped" description="Every row in the file can be imported." />
-    );
-  }
-
   return (
-    <Card>
-      <h2 className="heading text-base">Rows that will not be imported</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Fix these in the file and import again, or import without them.
-      </p>
+    <section className="space-y-3 border-t border-border pt-6">
+      <SectionHeader
+        title="Rows that will not be imported"
+        description="Fix these in the file and import again, or import without them."
+      />
 
-      <table className="mt-4 w-full text-left text-sm">
-        <caption className="sr-only">Rejected rows and the reason for each</caption>
-        <thead>
-          <tr className="border-b border-border text-xs uppercase text-muted-foreground">
-            <th scope="col" className="w-20 py-2">
-              Row
-            </th>
-            <th scope="col" className="py-2">
-              Why
-            </th>
-          </tr>
-        </thead>
-        <tbody className="stagger" data-testid="rejection-rows">
-          {rejections.map((rejection) => (
-            <tr key={rejection.row} className="border-b border-border/60 align-top">
-              <th scope="row" className="py-2 font-normal tabular">
-                {rejection.row}
+      <div className="max-w-3xl rounded-lg border border-border bg-surface">
+        <table className="w-full border-collapse text-left">
+          <caption className="sr-only">Rejected rows and the reason for each</caption>
+          <thead>
+            <tr className="border-b border-border-strong bg-surface-sunken">
+              <th
+                scope="col"
+                className="w-20 px-4 py-2 text-right text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground"
+              >
+                Row
               </th>
-              <td className="py-2">
-                <ul className="list-inside list-disc">
-                  {rejection.reasons.map((reason) => (
-                    <li key={reason}>{reason}</li>
-                  ))}
-                </ul>
-              </td>
+              <th
+                scope="col"
+                className="px-4 py-2 text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground"
+              >
+                Why
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody data-testid="rejection-rows">
+            {rejections.map((rejection) => (
+              <tr key={rejection.row} className="border-b border-border align-top last:border-b-0">
+                <th
+                  scope="row"
+                  className="px-4 py-2 text-right text-sm font-normal tabular text-muted-foreground"
+                >
+                  {rejection.row}
+                </th>
+                <td className="px-4 py-2 text-sm text-secondary-foreground">
+                  {rejection.reasons.join('; ')}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {total > rejections.length ? (
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p className="text-[13px] text-muted-foreground">
           Showing the first {rejections.length} of {total}.
         </p>
       ) : null}
-    </Card>
+    </section>
   );
 }
 
