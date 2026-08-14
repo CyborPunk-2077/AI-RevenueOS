@@ -67,6 +67,13 @@ Sign in as `abhishek@sangam.co.in`.
 6. **Import** — drag in a CSV and stop on the review step. Nothing is written
    until Confirm, and the screen says what it would do, including duplicates.
    This is the "we will not mangle your list" moment.
+
+   Related, and worth turning into a feature rather than apologising for: the
+   prospect list deliberately contains **NestCraft Interiors** and **Nestcraft
+   Interior Designs**, same phone number, unmerged. That is what a real
+   prospecting list looks like. Both are flagged as duplicate candidates —
+   open either record and scroll to **Record maintenance → Possible
+   duplicates** to show the match and the merge.
 7. **Analytics** — say out loud that the figures are unreconciled against the
    underlying records, because the screen does.
 8. **Settings → Integrations** — the honesty screen. Each capability reports on
@@ -117,6 +124,15 @@ do **not** try to fix it during a demo. Instead:
 
 Never edit a message status to make a demo look better. A failed message is
 evidence the product is honest.
+
+---
+
+## Developer tooling
+
+The **Test Centre** is not in the Settings menu, deliberately — it is internal
+tooling and should not read as a product feature during a demo. The route still
+works if you open `/test-center` directly. To list it again while developing, set
+`SHOW_TEST_CENTRE=true` for the web container.
 
 ---
 

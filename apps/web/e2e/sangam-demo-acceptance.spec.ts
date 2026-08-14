@@ -364,3 +364,123 @@ test('an import shows what it would do and writes nothing until confirmed', asyn
   await expect(check.getByTestId('lead-rows')).not.toContainText(business);
   await check.close();
 });
+
+// --- final demo evidence ----------------------------------------------------
+
+/**
+ * One concise set of frames for the pre-demo review, not a contact sheet.
+ *
+ * The redesign suite photographs every screen in both themes and produces
+ * sixty-odd files, which is the right artefact for a design review and the wrong
+ * one for "is this ready to show somebody on Tuesday". This is the short list:
+ * each commercial screen once at laptop width, the two screens whose whole
+ * problem is large-monitor composition at 1920, the two other roles, and the
+ * widths where the shell changes shape. Dark mode only where it is the theme
+ * most likely to be demonstrated in a room with a projector.
+ *
+ * Read-only, in the founders' workspace, exactly like the route walk above.
+ */
+test('final demo evidence', async ({ page }) => {
+  test.setTimeout(300_000);
+
+  async function shoot(path: string, name: string): Promise<void> {
+    await page.goto(path);
+    await page.waitForLoadState('networkidle');
+    await page.screenshot({ path: `${EVIDENCE}/${name}.png` });
+  }
+
+  async function theme(value: 'light' | 'dark'): Promise<void> {
+    await page.evaluate((v) => window.localStorage.setItem('airev-theme', v), value);
+    await page.reload();
+  }
+
+  await signInAs(page, 'founder');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await theme('light');
+
+  for (const [path, name] of [
+    ['/today', '01-today-1440'],
+    ['/leads', '02-prospects'],
+    ['/follow-ups', '04-follow-ups'],
+    ['/inbox', '05-inbox-list'],
+    ['/deals', '07-deals'],
+    ['/contacts', '08-contacts'],
+    ['/accounts', '09-accounts'],
+    ['/appointments', '10-appointments'],
+    ['/sangam/imports', '11-import'],
+    ['/analytics', '12-analytics'],
+    ['/settings/integrations', '13-settings-integrations'],
+  ] as const) {
+    await shoot(path, name);
+  }
+
+  // The record, and the conversation - the two screens a demo lingers on.
+  await page.goto('/leads');
+  await page.getByTestId('lead-rows').getByRole('link').first().click();
+  await expect(page.getByTestId('lead-name')).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  await page.screenshot({ path: `${EVIDENCE}/03-prospect-detail.png`, fullPage: true });
+
+  await page.goto('/inbox');
+  const thread = page.getByTestId('conversation-rows').getByRole('link').first();
+  if (await thread.isVisible().catch(() => false)) {
+    await thread.click();
+    await expect(page.getByTestId('thread-messages')).toBeVisible();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${EVIDENCE}/06-inbox-conversation.png` });
+  }
+
+  // Large monitor: the composition the workspace cap exists for.
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await shoot('/today', '01b-today-1920');
+  if (await thread.isVisible().catch(() => false)) {
+    await page.goto('/inbox');
+    await page.getByTestId('conversation-rows').getByRole('link').first().click();
+    await expect(page.getByTestId('thread-messages')).toBeVisible();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${EVIDENCE}/06b-inbox-conversation-1920.png` });
+  }
+
+  // Dark, on the four screens most likely to be shown in a darkened room.
+  await theme('dark');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await shoot('/today', '14-dark-today');
+  await shoot('/settings/integrations', '15-dark-integrations');
+  await page.goto('/inbox');
+  if (await thread.isVisible().catch(() => false)) {
+    await thread.click();
+    await expect(page.getByTestId('thread-messages')).toBeVisible();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${EVIDENCE}/16-dark-inbox-conversation.png` });
+  }
+  await page.goto('/leads');
+  await page.getByTestId('lead-rows').getByRole('link').first().click();
+  await expect(page.getByTestId('lead-name')).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  await page.screenshot({ path: `${EVIDENCE}/17-dark-prospect-detail.png`, fullPage: true });
+  await theme('light');
+
+  // Where the shell changes shape: icon rail at 1024, hamburger below 900.
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await shoot('/today', '18-narrow-1024');
+  await page.setViewportSize({ width: 820, height: 900 });
+  await page.goto('/today');
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  await expect(page.getByTestId('nav-leads')).toBeVisible();
+  await page.screenshot({ path: `${EVIDENCE}/19-narrow-820-navigation.png` });
+});
+
+test('final demo evidence — manager and member views', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  await signInAs(page, 'founder-manager');
+  await page.goto('/today');
+  await page.waitForLoadState('networkidle');
+  await page.screenshot({ path: `${EVIDENCE}/20-manager-today.png` });
+
+  await signInAs(page, 'founder-member');
+  await page.goto('/today');
+  await page.waitForLoadState('networkidle');
+  await page.screenshot({ path: `${EVIDENCE}/21-member-today.png` });
+});
