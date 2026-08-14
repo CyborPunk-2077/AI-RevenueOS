@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, Outfit } from 'next/font/google';
+import { Inter } from 'next/font/google';
 import { Providers } from '@/providers/providers';
 import './globals.css';
 
@@ -7,18 +7,19 @@ import './globals.css';
  * Self-hosted by next/font: no render-blocking request to Google, no layout
  * shift, and no third-party origin in the critical path of a product that makes
  * data-residency claims.
+ *
+ * **One family.** Outfit used to sit alongside this as `--font-display`, applied
+ * by `.heading`. It is a geometric display face and it was a large part of why
+ * the product read as designed for a portfolio rather than for a working day.
+ * Hierarchy now comes from size, weight, colour and spacing. `--font-display`
+ * still resolves to Inter so `.heading` keeps working while callers move to
+ * explicit sizes.
  */
 const sans = Inter({
   subsets: ['latin'],
   variable: '--font-sans',
   display: 'swap',
-});
-
-const display = Outfit({
-  subsets: ['latin'],
-  variable: '--font-display',
-  display: 'swap',
-  weight: ['500', '600', '700'],
+  weight: ['400', '500', '600'],
 });
 
 export const metadata: Metadata = {
@@ -40,7 +41,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <html lang="en-IN" className={`${sans.variable} ${display.variable}`} suppressHydrationWarning>
+    <html lang="en-IN" className={sans.variable} suppressHydrationWarning>
       <head>
         {/*
          * Blocking and inline on purpose. Any deferred script - including a

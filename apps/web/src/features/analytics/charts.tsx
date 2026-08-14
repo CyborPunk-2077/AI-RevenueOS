@@ -121,12 +121,14 @@ function ChartFrame({
   );
 }
 
+// A tooltip is an overlay, which is the one place a shadow is earned.
 const tooltipStyle = {
   background: 'hsl(var(--surface))',
-  border: '1px solid hsl(var(--border))',
-  borderRadius: '0.75rem',
-  boxShadow: 'var(--shadow-md)',
-  fontSize: '0.8rem',
+  border: '1px solid hsl(var(--border-strong))',
+  borderRadius: 'var(--radius)',
+  boxShadow: 'var(--shadow-overlay)',
+  fontSize: '0.8125rem',
+  color: 'hsl(var(--text-primary))',
 };
 
 export function PipelineByStage({ rows }: { rows: Row[] }): JSX.Element {

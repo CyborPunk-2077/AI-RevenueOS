@@ -1,0 +1,116 @@
+import { expect, test, type Page } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+import { signInAs } from './support/auth';
+
+/**
+ * The redesign, photographed on every screen, in both themes.
+ *
+ * This is the visual gate for the UI/UX system in `docs/SANGAM-UI-UX-SYSTEM.md`.
+ * It asserts almost nothing about behaviour - the six behavioural suites do that -
+ * and instead exists so a project head can look at the whole product at once and
+ * so a regression in one theme cannot hide behind a green run in the other.
+ *
+ * **It only reads.** It signs in to the founders' workspace because that is where
+ * the realistic Bengaluru prospect data lives - a business, a different contact
+ * person and a different internal owner on each row, which is exactly what the
+ * layout has to survive - and it navigates and screenshots. It creates nothing,
+ * edits nothing and completes nothing. Every suite that writes runs in
+ * `sangam-e2e`.
+ *
+ *   .\RUN_DEMO.cmd
+ *   $env:DEMO_PASSWORD='sangam-demo-2026'
+ *   pnpm --filter @airevenueos/web exec playwright test sangam-ui-evidence
+ */
+
+const EVIDENCE = resolve(__dirname, '../../../artifacts/visual-evidence/session-06-ui-redesign');
+
+/** A realistic laptop, which is what this product is used on. */
+const LAPTOP = { width: 1440, height: 900 };
+
+test.beforeAll(() => {
+  mkdirSync(EVIDENCE, { recursive: true });
+});
+
+async function setTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
+  // Written the way the product writes it, then reloaded so the pre-paint script
+  // in the root layout is the thing that applies it. Toggling the class by hand
+  // would photograph a state the real theme contract cannot produce.
+  await page.evaluate((value) => window.localStorage.setItem('airev-theme', value), theme);
+  await page.reload();
+  await expect(page.locator('html')).toHaveClass(theme === 'dark' ? /dark/ : /^(?!.*dark).*$/);
+}
+
+async function shoot(page: Page, path: string, name: string): Promise<void> {
+  await page.goto(path);
+  await page.waitForLoadState('networkidle');
+  await page.screenshot({ path: `${EVIDENCE}/${name}.png`, fullPage: true });
+}
+
+/** Every screen worth looking at, in the order the working day runs. */
+const SCREENS: ReadonlyArray<{ path: string; name: string }> = [
+  { path: '/today', name: '01-today' },
+  { path: '/leads', name: '02-prospects' },
+  { path: '/leads?filter=awaiting', name: '03-prospects-filtered' },
+  { path: '/follow-ups', name: '05-follow-ups' },
+  { path: '/follow-ups?filter=overdue', name: '06-follow-ups-overdue' },
+  { path: '/inbox', name: '07-inbox' },
+  { path: '/deals', name: '09-deals' },
+  { path: '/contacts', name: '10-contacts' },
+  { path: '/accounts', name: '11-accounts' },
+  { path: '/appointments', name: '12-appointments' },
+  { path: '/sangam/imports', name: '13-import' },
+  { path: '/analytics', name: '14-analytics' },
+  { path: '/settings/integrations', name: '15-settings-integrations' },
+];
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`every screen reads correctly in ${theme} mode`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.setViewportSize(LAPTOP);
+    await signInAs(page, 'founder');
+    await setTheme(page, theme);
+
+    for (const screen of SCREENS) {
+      await shoot(page, screen.path, `${theme}-${screen.name}`);
+    }
+
+    // A record, which is a different layout problem from a list: one dominant
+    // subject, a lot of metadata, and a timeline that has to stay readable.
+    await page.goto('/leads');
+    const first = page.getByTestId('lead-rows').getByRole('link').first();
+    await expect(first).toBeVisible();
+    await first.click();
+    await expect(page.getByTestId('lead-name')).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    await page.screenshot({ path: `${EVIDENCE}/${theme}-04-prospect-detail.png`, fullPage: true });
+
+    // A conversation, if this workspace has one. The Inbox is the most bespoke
+    // layout in the product and the one most likely to break in a single theme.
+    await page.goto('/inbox');
+    const conversation = page.getByTestId('conversation-rows').getByRole('link').first();
+    if (await conversation.isVisible().catch(() => false)) {
+      await conversation.click();
+      await page.waitForLoadState('networkidle');
+      await page.screenshot({
+        path: `${EVIDENCE}/${theme}-08-inbox-thread.png`,
+        fullPage: true,
+      });
+    }
+  });
+}
+
+test('the shell holds together as the desktop narrows', async ({ page }) => {
+  test.setTimeout(180_000);
+  await signInAs(page, 'founder');
+
+  // The three widths the responsiveness table names: full layout, the width at
+  // which the right rail gives up, and the width at which the sidebar becomes a
+  // 64px icon rail.
+  for (const width of [1440, 1280, 1024]) {
+    await page.setViewportSize({ width, height: 900 });
+    await shoot(page, '/today', `narrow-${width}-today`);
+    await shoot(page, '/leads', `narrow-${width}-prospects`);
+  }
+});

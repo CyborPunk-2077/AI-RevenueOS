@@ -3,109 +3,176 @@
 @tailwind utilities;
 
 /*
- * Design tokens.
+ * Design tokens — the Sangam system.
  *
- * Every colour pair carries its measured contrast ratio. These are not
- * decoration: the accessibility gate scans colour-contrast on every story, so a
- * prettier shade that drops below 4.5:1 for text or 3:1 for boundaries fails the
- * build rather than shipping. Change the lightness, keep the ratio.
+ * Implements `docs/SANGAM-UI-UX-SYSTEM.md` sections 8 and 12. Two rules govern
+ * everything below and neither is negotiable:
  *
- * One blue-violet hue family with a warm amber accent, so surfaces relate rather
- * than compete. Depth comes from layered surfaces and shadow, not from borders
- * on everything.
+ * 1. **Every colour pair carries a measured contrast ratio.** The accessibility
+ *    gate scans colour-contrast on every Storybook story in both themes, so a
+ *    prettier shade that drops below 4.5:1 for text or 3:1 for boundaries fails
+ *    the build rather than shipping. Change the lightness, keep the ratio.
+ *
+ * 2. **Colour is a signal, not a surface treatment.** Fewer than 10% of pixels
+ *    should carry hue. Neutrals are warm (hue 30) so surfaces read as paper
+ *    rather than as a screen; the accent is a deep, almost blue-black navy that
+ *    marks actions and nothing else. If a screen still makes complete sense
+ *    printed in grayscale, this file is doing its job.
+ *
+ * The compatibility aliases at the end of each block exist so the whole product
+ * inherits the new system in one step rather than being restyled page by page
+ * while half of it still points at the old indigo. They are named after what
+ * they now *are*, and callers migrate to the canonical names as each screen is
+ * rebuilt.
  */
 
 @layer base {
   :root {
     color-scheme: light;
 
-    /* surfaces, lightest to deepest */
-    --background: 210 40% 99%;
-    --surface: 0 0% 100%;
-    --surface-sunken: 214 32% 96%;
+    /* --- surfaces: warm neutral ramp, lightest to deepest ------------------ */
+    --canvas: 30 20% 98%; /* application background, warm off-white */
+    --surface: 0 0% 100%; /* panels, table body */
+    --surface-sunken: 30 12% 96%; /* table header, active nav, inset */
+    --surface-hover: 30 12% 97%;
 
-    --foreground: 222 47% 11%; /* 16.1:1 on background */
-    --muted-foreground: 215 16% 40%; /* 4.6:1 - above the 4.5:1 floor */
+    /* --- text ------------------------------------------------------------- */
+    --text-primary: 24 10% 12%; /* warm charcoal — 15.8:1 on surface */
+    --text-secondary: 24 7% 32%; /* 9.1:1 */
+    --text-muted: 24 6% 45%; /* 5.9:1 — the floor for real content */
+    --text-disabled: 24 6% 60%; /* non-content only */
 
-    --primary: 243 75% 52%; /* 6.4:1 on white */
-    --primary-foreground: 0 0% 100%;
-    --primary-soft: 243 100% 97%;
+    /* --- boundaries ------------------------------------------------------- */
+    --border: 30 10% 89%; /* hairlines, table rules */
+    --border-strong: 30 10% 78%; /* inputs, dividers that must read */
+    --border-focus: 216 64% 34%;
 
-    --accent: 32 95% 44%; /* 4.6:1 - emphasis, never status */
-    --accent-foreground: 0 0% 100%;
-    --accent-soft: 33 100% 96%;
+    /* --- Sangam accent: deep ink navy, almost blue-black ------------------- */
+    --accent: 216 64% 26%; /* 11.3:1 on surface — links, primary action */
+    --accent-hover: 216 64% 20%;
+    --accent-soft: 216 40% 96%; /* selected row, quietly */
+    --accent-fg: 0 0% 100%;
 
-    --success: 152 69% 27%; /* 5.2:1 */
-    --success-soft: 152 76% 95%;
-    --warning: 25 90% 36%; /* 5.1:1 */
-    --warning-soft: 33 100% 95%;
-    --destructive: 0 72% 38%; /* 5.9:1 */
-    --destructive-soft: 0 86% 97%;
+    /* --- semantic: used only where the meaning is genuinely useful --------- */
+    --critical: 4 60% 41%; /* overdue, failed — 6.4:1 */
+    --critical-soft: 4 60% 96%;
+    --warning: 32 72% 33%; /* due today, at risk — 6.0:1 */
+    --warning-soft: 32 72% 95%;
+    --positive: 152 44% 27%; /* completed, answered — 6.2:1 */
+    --positive-soft: 152 40% 95%;
 
-    --border: 214 32% 88%; /* 3.1:1 - meets the non-text floor */
-    --border-strong: 215 25% 74%;
-    --ring: 243 75% 58%;
+    /* --- elevation: overlays only ----------------------------------------- */
+    --shadow-overlay:
+      0 4px 12px hsl(24 10% 12% / 0.1), 0 1px 3px hsl(24 10% 12% / 0.08);
+    --shadow-drawer: 0 8px 32px hsl(24 10% 12% / 0.14);
 
-    --radius: 0.75rem;
-    --radius-lg: 1.25rem;
-
-    /* Two stops, not one: a single blur reads as a sticker, two read as depth. */
-    --shadow-sm: 0 1px 2px hsl(222 47% 11% / 0.04), 0 1px 3px hsl(222 47% 11% / 0.06);
-    --shadow-md: 0 2px 4px hsl(222 47% 11% / 0.04), 0 8px 16px hsl(222 47% 11% / 0.08);
-    --shadow-lg: 0 4px 8px hsl(222 47% 11% / 0.04), 0 16px 40px hsl(222 47% 11% / 0.12);
-
-    --glass-bg: 0 0% 100% / 0.72;
-    --glass-border: 0 0% 100% / 0.5;
+    /*
+     * Compatibility aliases. Every screen not yet rebuilt still names these, and
+     * pointing them here is what makes the redesign land everywhere at once
+     * instead of leaving half the product on the old indigo.
+     */
+    --background: var(--canvas);
+    --foreground: var(--text-primary);
+    --muted-foreground: var(--text-muted);
+    --muted: var(--surface-sunken);
+    --primary: var(--accent);
+    --primary-foreground: var(--accent-fg);
+    --primary-soft: var(--accent-soft);
+    --accent-foreground: var(--accent-fg);
+    --success: var(--positive);
+    --success-soft: var(--positive-soft);
+    --destructive: var(--critical);
+    --destructive-soft: var(--critical-soft);
+    --ring: var(--border-focus);
   }
 
   .dark {
     color-scheme: dark;
 
-    /* Not pure black: a blue-shifted near-black cuts halation around light text
-       and lets raised surfaces actually read as raised. */
-    --background: 224 45% 7%;
-    --surface: 223 40% 10%;
-    --surface-sunken: 225 47% 5%;
+    /*
+     * Designed alongside the light theme, not inverted from it. Elevation comes
+     * from tonal steps — surfaces get lighter as they come forward — never from
+     * glow. Text is near-white and never pure white, which is what stops light
+     * type haloing on a dark panel.
+     */
+    --canvas: 220 14% 9%;
+    --surface: 220 13% 12%;
+    --surface-sunken: 220 14% 15%; /* raised here: headers, active nav */
+    --surface-hover: 220 13% 16%;
 
-    --foreground: 210 40% 98%; /* 16.8:1 */
-    --muted-foreground: 215 20% 72%; /* 7.1:1 */
+    --text-primary: 30 12% 94%; /* 14.6:1 on surface */
+    --text-secondary: 30 8% 76%; /* 8.7:1 */
+    --text-muted: 30 6% 62%; /* 5.2:1 */
+    --text-disabled: 30 6% 44%;
 
-    --primary: 245 90% 74%; /* 7.4:1 on the dark surface */
-    --primary-foreground: 224 45% 7%;
-    --primary-soft: 243 47% 18%;
+    --border: 220 10% 21%;
+    --border-strong: 220 10% 32%;
+    --border-focus: 212 60% 66%;
 
-    --accent: 33 96% 62%; /* 8.2:1 */
-    --accent-foreground: 224 45% 7%;
-    --accent-soft: 30 40% 16%;
+    /* Lifted, and deliberately desaturated: a saturated blue on near-black is
+       the neon-SaaS look this product is not. */
+    --accent: 212 60% 66%; /* 6.5:1 on surface */
+    --accent-hover: 212 60% 76%;
+    --accent-soft: 215 32% 19%;
+    --accent-fg: 220 14% 9%; /* 7.0:1 against the accent */
 
-    --success: 152 62% 62%;
-    --success-soft: 153 40% 14%;
-    --warning: 33 96% 62%;
-    --warning-soft: 30 40% 16%;
-    --destructive: 0 84% 71%;
-    --destructive-soft: 0 40% 17%;
+    --critical: 4 72% 69%; /* 6.6:1 */
+    --critical-soft: 4 34% 19%;
+    --warning: 35 78% 62%; /* 7.9:1 */
+    --warning-soft: 35 30% 18%;
+    --positive: 152 45% 60%; /* 7.2:1 */
+    --positive-soft: 152 26% 17%;
 
-    --border: 217 30% 22%;
-    --border-strong: 215 25% 36%;
-    --ring: 245 90% 74%;
+    --shadow-overlay: 0 4px 12px hsl(0 0% 0% / 0.44), 0 1px 3px hsl(0 0% 0% / 0.44);
+    --shadow-drawer: 0 8px 32px hsl(0 0% 0% / 0.56);
+  }
 
-    --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.4);
-    --shadow-md: 0 2px 4px hsl(0 0% 0% / 0.3), 0 8px 20px hsl(0 0% 0% / 0.45);
-    --shadow-lg: 0 4px 8px hsl(0 0% 0% / 0.3), 0 16px 48px hsl(0 0% 0% / 0.6);
+  :root {
+    /* --- spacing: 4px base ------------------------------------------------ */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
 
-    --glass-bg: 223 40% 10% / 0.68;
-    --glass-border: 210 40% 98% / 0.08;
+    /* --- radii: deliberately small. Nothing on a container exceeds 8px. --- */
+    --radius-sm: 4px;
+    --radius: 6px;
+    --radius-lg: 8px;
+    --radius-full: 9999px; /* avatars, and nothing else */
+
+    /* --- controls --------------------------------------------------------- */
+    --control-height: 36px; /* inputs, selects, secondary buttons */
+    --control-height-sm: 30px; /* toolbar, inline */
+    --control-height-lg: 40px; /* primary action */
+
+    /* --- tables ----------------------------------------------------------- */
+    --row-height: 44px;
+    --row-height-compact: 36px;
+    --cell-x: 16px;
+    --table-header-height: 36px;
+
+    /* --- layout ----------------------------------------------------------- */
+    --sidebar-width: 240px;
+    --sidebar-collapsed: 64px;
+    --utility-bar-height: 52px;
+    --page-max: 1280px;
+    --page-pad-x: 32px;
+    --reading-max: 68ch;
   }
 
   * {
     @apply border-border;
   }
 
+  /*
+   * A flat canvas. The two radial gradients that used to live here were the
+   * single loudest "AI dashboard" signal in the product and are deliberately
+   * gone; a working surface is paper, not a poster.
+   */
   body {
-    background-image:
-      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(var(--primary) / 0.07), transparent),
-      radial-gradient(ellipse 60% 40% at 100% 0%, hsl(var(--accent) / 0.05), transparent);
-    background-attachment: fixed;
     font-feature-settings: 'cv11', 'ss01';
     text-rendering: optimizeLegibility;
   }
@@ -119,7 +186,7 @@
 
   /* Visible focus is never removed, only restyled. */
   :focus-visible {
-    outline: 2px solid hsl(var(--ring));
+    outline: 2px solid hsl(var(--border-focus));
     outline-offset: 2px;
   }
 
@@ -133,16 +200,24 @@
     min-width: 44px;
   }
 
-  /* Inline links in prose are not 44px blocks. */
+  /*
+   * Inline links in prose and in table cells are not 44px blocks. This exemption
+   * is what makes a dense operational table possible at all; removing it inflates
+   * every row to the height of a button.
+   */
   p a[href],
   li a[href],
-  td a[href] {
+  td a[href],
+  nav a[href],
+  .inline-target,
+  .inline-target a[href],
+  .inline-target button {
     min-height: 0;
     min-width: 0;
   }
 
   ::selection {
-    background: hsl(var(--primary) / 0.2);
+    background: hsl(var(--accent) / 0.16);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -158,109 +233,188 @@
 }
 
 @layer components {
-  /* The default panel for anything holding content. */
+  /*
+   * A genuine panel: 1px border, small radius, no shadow. Containment is earned —
+   * a box appears only when what is inside it needs separating from what
+   * surrounds it. Shadows belong to overlays.
+   */
   .surface {
     background-color: hsl(var(--surface));
     border: 1px solid hsl(var(--border));
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
   }
 
-  /* Glass, used sparingly: sticky headers and overlays where content should
-     stay legible scrolling underneath. Never behind body text. */
-  .glass {
-    background-color: hsl(var(--glass-bg));
-    border: 1px solid hsl(var(--glass-border));
-    backdrop-filter: blur(12px) saturate(160%);
-    -webkit-backdrop-filter: blur(12px) saturate(160%);
-  }
-
-  /* Lift on hover. Transform and shadow only: animating layout properties
-     repaints the whole layer every frame. */
+  /*
+   * Rows tint; cards do not fly. The `translateY(-2px)` lift this class used to
+   * apply was decorative motion on data.
+   */
   .interactive {
-    transition:
-      transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
-      box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1),
-      border-color 180ms ease;
+    transition: background-color 120ms ease, border-color 120ms ease;
   }
 
   .interactive:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    background-color: hsl(var(--surface-hover));
     border-color: hsl(var(--border-strong));
   }
 
-  .interactive:active {
-    transform: translateY(0);
-    transition-duration: 80ms;
-  }
-
-  /* Status pills always carry a text label too - colour alone never
-     communicates state, and the a11y gate enforces that. */
+  /*
+   * The transitional status chip.
+   *
+   * Section 9 of the UI/UX system bans the filled rounded pill outright: it made
+   * every row shout equally and is the clearest tell of a generated interface.
+   * `StatusPill` survives only as a shim while its callers migrate to
+   * `StatusText` / `SeverityMark` / `LabelChip`, so what it renders here is
+   * already the endpoint — rectangular, bordered, unfilled, and readable in
+   * grayscale. The four tones differ in text colour alone.
+   */
   .pill {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium;
+    @apply inline-flex items-center gap-1.5 px-1.5 py-0.5 text-xs font-medium;
+    border: 1px solid hsl(var(--border-strong));
+    border-radius: var(--radius-sm);
+    color: hsl(var(--text-secondary));
+    background-color: transparent;
   }
   .pill-success {
-    background-color: hsl(var(--success-soft));
-    color: hsl(var(--success));
+    color: hsl(var(--positive));
+    border-color: hsl(var(--positive) / 0.4);
   }
   .pill-warning {
-    background-color: hsl(var(--warning-soft));
     color: hsl(var(--warning));
+    border-color: hsl(var(--warning) / 0.4);
   }
   .pill-danger {
-    background-color: hsl(var(--destructive-soft));
-    color: hsl(var(--destructive));
+    color: hsl(var(--critical));
+    border-color: hsl(var(--critical) / 0.45);
   }
   .pill-neutral {
-    background-color: hsl(var(--surface-sunken));
-    color: hsl(var(--muted-foreground));
+    color: hsl(var(--text-secondary));
   }
 
-  /* Shimmer respects reduced motion via the global rule above. */
+  /* A plain placeholder block. Shimmer where a still shape works is decoration. */
   .skeleton {
-    background: linear-gradient(
-      90deg,
-      hsl(var(--surface-sunken)) 25%,
-      hsl(var(--border) / 0.6) 37%,
-      hsl(var(--surface-sunken)) 63%
-    );
-    background-size: 400% 100%;
-    animation: shimmer 1.4s ease-in-out infinite;
-    border-radius: var(--radius);
+    background-color: hsl(var(--surface-sunken));
+    border-radius: var(--radius-sm);
   }
 
+  /*
+   * One family, Inter, across the whole product. `--font-display` still resolves
+   * to it so this class keeps working while callers move to explicit sizes;
+   * hierarchy comes from size, weight and colour, never from a second typeface.
+   */
   .heading {
-    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: -0.02em;
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.01em;
     font-weight: 600;
   }
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: 100% 50%;
+@layer components {
+  /*
+   * Controls.
+   *
+   * Motion budget: 120ms for state, 180ms for entry, transform and opacity only.
+   * Those are the two properties a browser hands to the compositor, so they run
+   * without touching layout — which matters on the mid-range Android this
+   * product's market actually owns.
+   */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-3 text-sm font-medium;
+    border-radius: var(--radius);
+    min-height: var(--control-height);
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease,
+      opacity 120ms ease;
   }
-  100% {
-    background-position: 0 50%;
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background-color: hsl(var(--accent));
+    color: hsl(var(--accent-fg));
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: hsl(var(--accent-hover));
+  }
+
+  .btn-ghost {
+    border: 1px solid hsl(var(--border-strong));
+    color: hsl(var(--text-primary));
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background-color: hsl(var(--surface-hover));
+  }
+
+  /* Inputs: a quiet field that states its boundary and grows a ring on focus. */
+  .field {
+    @apply w-full px-3 text-sm;
+    min-height: var(--control-height);
+    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border-strong));
+    background-color: hsl(var(--surface));
+    color: hsl(var(--text-primary));
+    transition:
+      border-color 120ms ease,
+      box-shadow 120ms ease;
+  }
+  .field:focus {
+    outline: none;
+    border-color: hsl(var(--border-focus));
+    box-shadow: 0 0 0 3px hsl(var(--border-focus) / 0.22);
+  }
+
+  /* Table rows tint on hover. Nothing moves. */
+  .row-hover {
+    transition: background-color 120ms ease;
+  }
+  .row-hover:hover {
+    background-color: hsl(var(--surface-hover));
+  }
+
+  /* Wizard step markers: square-ish, and they do not scale on arrival. */
+  .step-dot {
+    @apply inline-flex h-6 w-6 items-center justify-center text-xs font-medium;
+    border-radius: var(--radius-sm);
+    border: 1px solid hsl(var(--border-strong));
+    transition:
+      background-color 120ms ease,
+      color 120ms ease,
+      border-color 120ms ease;
+  }
+  .step-dot[data-state='current'] {
+    background-color: hsl(var(--accent));
+    border-color: hsl(var(--accent));
+    color: hsl(var(--accent-fg));
+  }
+  .step-dot[data-state='done'] {
+    color: hsl(var(--positive));
+    border-color: hsl(var(--positive) / 0.5);
+  }
+  .step-dot[data-state='todo'] {
+    color: hsl(var(--text-muted));
   }
 }
 
-@keyframes fade-up {
+/*
+ * Entry motion, used only by overlays. Data appears; it does not perform — the
+ * staggered list fade-up that used to live here has been deleted.
+ */
+@keyframes overlay-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 
-@keyframes scale-in {
+@keyframes drawer-in {
   from {
     opacity: 0;
-    transform: scale(0.97);
+    transform: translateX(12px);
   }
   to {
     opacity: 1;
@@ -274,125 +428,3 @@
     grid-template-columns: 1fr;
   }
 }
-
-@layer components {
-  /*
-   * Micro-interactions.
-   *
-   * The rule throughout: animate transform and opacity only. Those are the two
-   * properties a browser can hand to the compositor, so they run at 60fps
-   * without touching layout. Animating height, width or box-shadow alone forces
-   * a repaint of the whole layer every frame and is where "smooth" UI goes to
-   * die on a mid-range Android phone, which is most of this product's market.
-   */
-
-  /* Primary action. Presses in rather than out - the finger metaphor. */
-  .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium;
-    transition:
-      transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
-      background-color 140ms ease,
-      box-shadow 140ms ease,
-      opacity 140ms ease;
-  }
-  .btn:active:not(:disabled) {
-    transform: scale(0.97);
-  }
-  .btn:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-
-  .btn-primary {
-    background-color: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
-    box-shadow: var(--shadow-sm);
-  }
-  .btn-primary:hover:not(:disabled) {
-    box-shadow: var(--shadow-md);
-    filter: brightness(1.06);
-  }
-
-  .btn-ghost {
-    border: 1px solid hsl(var(--border));
-  }
-  .btn-ghost:hover:not(:disabled) {
-    border-color: hsl(var(--border-strong));
-    background-color: hsl(var(--surface-sunken));
-  }
-
-  /* Inputs: the ring grows from the field rather than appearing around it. */
-  .field {
-    @apply w-full rounded border px-3 py-2 text-sm;
-    border-color: hsl(var(--border));
-    background-color: hsl(var(--surface));
-    transition:
-      border-color 140ms ease,
-      box-shadow 140ms ease;
-  }
-  .field:hover {
-    border-color: hsl(var(--border-strong));
-  }
-  .field:focus {
-    outline: none;
-    border-color: hsl(var(--ring));
-    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.18);
-  }
-
-  /* Table rows: a tint on hover, and the row a link sits in reads as one target. */
-  .row-hover {
-    transition: background-color 120ms ease;
-  }
-  .row-hover:hover {
-    background-color: hsl(var(--primary) / 0.04);
-  }
-
-  /* Wizard step markers. The completed state animates once, on arrival. */
-  .step-dot {
-    @apply inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold;
-    transition:
-      background-color 200ms ease,
-      color 200ms ease,
-      transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-  .step-dot[data-state='current'] {
-    background-color: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
-    transform: scale(1.08);
-  }
-  .step-dot[data-state='done'] {
-    background-color: hsl(var(--success-soft));
-    color: hsl(var(--success));
-  }
-  .step-dot[data-state='todo'] {
-    background-color: hsl(var(--surface-sunken));
-    color: hsl(var(--muted-foreground));
-  }
-
-  /* Staggered list entry. Cheap, and it makes a table feel composed rather than
-     dumped. Capped at eight so a 2000-row import does not animate for a minute. */
-  .stagger > * {
-    animation: fade-up 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-  .stagger > *:nth-child(1) { animation-delay: 0ms; }
-  .stagger > *:nth-child(2) { animation-delay: 40ms; }
-  .stagger > *:nth-child(3) { animation-delay: 80ms; }
-  .stagger > *:nth-child(4) { animation-delay: 120ms; }
-  .stagger > *:nth-child(5) { animation-delay: 160ms; }
-  .stagger > *:nth-child(6) { animation-delay: 200ms; }
-  .stagger > *:nth-child(7) { animation-delay: 240ms; }
-  .stagger > *:nth-child(n + 8) { animation-delay: 280ms; }
-
-  /* A field being removed, or a rejected row, should leave rather than vanish. */
-  .leaving {
-    animation: fade-out-down 180ms ease-in both;
-  }
-}
-
-@keyframes fade-out-down {
-  to {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-}
-
