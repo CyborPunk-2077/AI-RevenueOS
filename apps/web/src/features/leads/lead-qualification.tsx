@@ -3,7 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
-import { StatusPill } from '@/features/ui/primitives';
+import { Button, controlClass } from '@/features/ui/controls';
+import { SectionHeader } from '@/features/ui/primitives';
+import { StatusText, type Severity } from '@/features/ui/status';
 
 interface QualificationResponse {
   readonly data?: {
@@ -19,9 +21,9 @@ interface QualificationResponse {
   readonly error?: { readonly message?: string };
 }
 
-function tone(category: string | null): 'success' | 'warning' | 'neutral' {
-  if (category === 'hot') return 'success';
-  if (category === 'warm') return 'warning';
+/** Hot/warm/cold is a temperature, not an alarm. Only "hot" earns any colour. */
+function tone(category: string | null): Severity {
+  if (category === 'hot') return 'positive';
   return 'neutral';
 }
 
@@ -74,40 +76,45 @@ export function LeadQualification({
   }
 
   return (
-    <section aria-labelledby="qualification-heading" className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 id="qualification-heading" className="font-medium">
-          Qualification
-        </h2>
-        <p data-testid="lead-score">
-          {score === null ? (
-            <span className="text-sm text-muted-foreground">Not scored yet</span>
-          ) : (
-            <>
-              <span className="heading text-2xl tabular">{score}</span>
-              <span className="sr-only"> out of 100. </span>
-              <span className="ml-2">
-                <StatusPill tone={tone(category)}>{category ?? 'unrated'}</StatusPill>
-              </span>
-            </>
-          )}
-        </p>
-      </div>
+    <section aria-labelledby="qualification-heading" className="space-y-3">
+      <SectionHeader
+        id="qualification-heading"
+        title="Qualification"
+        actions={
+          <p data-testid="lead-score">
+            {score === null ? (
+              <span className="text-[13px] text-muted-foreground">Not scored yet</span>
+            ) : (
+              <>
+                <span className="text-xl font-semibold tabular text-foreground">{score}</span>
+                <span className="sr-only"> out of 100. </span>
+                <StatusText tone={tone(category)} className="ml-2 text-[13px]">
+                  {category ?? 'unrated'}
+                </StatusText>
+              </>
+            )}
+          </p>
+        }
+      />
+
+      <p className="text-[13px] text-muted-foreground">
+        Scored from what was captured with the enquiry. No AI provider is connected, so the rules do
+        this &mdash; the result is the same every time and you can see why below.
+      </p>
 
       <div className="flex flex-wrap items-end gap-3">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           disabled={busy}
           data-testid="qualify-rules"
           onClick={() => void run({ mode: 'rule' })}
-          className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
         >
           Score with rules
-        </button>
+        </Button>
 
         <form onSubmit={onManual} className="flex items-end gap-2" noValidate>
           <div>
-            <label htmlFor="manual_score" className="block text-sm text-muted-foreground">
+            <label htmlFor="manual_score" className="block text-[13px] text-muted-foreground">
               Or set it yourself
             </label>
             <input
@@ -117,35 +124,25 @@ export function LeadQualification({
               min={0}
               max={100}
               data-testid="manual-score"
-              className="mt-1 w-24 rounded-md border border-border bg-background px-3 py-2 text-sm"
+              className={`${controlClass(false)} mt-1 w-20`}
             />
           </div>
-          <button
-            type="submit"
-            disabled={busy}
-            data-testid="qualify-manual"
-            className="rounded-md border border-border px-3 py-2 text-sm disabled:opacity-50"
-          >
-            Save score
-          </button>
+          <Button variant="ghost" type="submit" disabled={busy} data-testid="qualify-manual">
+            Save
+          </Button>
         </form>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Scored from what was captured with the enquiry. No AI provider is connected, so the rules
-        do this &mdash; the result is the same every time and you can see why below.
-      </p>
-
       {error ? (
-        <p role="alert" data-testid="qualify-error" className="text-sm text-destructive">
+        <p role="alert" data-testid="qualify-error" className="text-[13px] text-critical">
           {error}
         </p>
       ) : null}
 
       {reasons.length > 0 ? (
         <div data-testid="qualify-reasons">
-          <h3 className="text-sm font-medium">Why</h3>
-          <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+          <h3 className="text-[13px] font-semibold text-foreground">Why</h3>
+          <ul className="mt-1 list-disc space-y-1 pl-5 text-[13px] text-muted-foreground">
             {reasons.map((reason) => (
               <li key={reason}>{reason}</li>
             ))}
@@ -154,7 +151,7 @@ export function LeadQualification({
       ) : null}
 
       {missing.length > 0 ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-[13px] text-muted-foreground">
           Still missing: {missing.join(', ')}. Fill these in and score again for a firmer answer.
         </p>
       ) : null}

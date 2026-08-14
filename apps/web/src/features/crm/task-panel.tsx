@@ -3,6 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
+import { Button, controlClass } from '@/features/ui/controls';
+import { SectionHeader } from '@/features/ui/primitives';
+import { StatusText } from '@/features/ui/status';
 import { formatDate } from '@/lib/dates';
 
 export interface TaskEntry {
@@ -21,6 +24,10 @@ export interface TaskEntry {
  *
  * `is_overdue` comes from the server. Deciding it here from the browser clock
  * would disagree with the audit trail the moment a machine's time drifts.
+ *
+ * Overdue is emphasised text, not a red pill, and priority is shown only when it
+ * is not the default - a row of `normal` chips beside every follow-up is noise
+ * that makes the two urgent ones harder to find.
  */
 export function TaskPanel({
   parent,
@@ -89,66 +96,109 @@ export function TaskPanel({
   }
 
   return (
-    <section aria-labelledby="tasks-heading" className="space-y-4">
-      <h2 id="tasks-heading" className="font-medium">Tasks</h2>
+    // Deliberately no `aria-labelledby` on the section. Naming the region
+    // "Follow-ups" makes it an element with that accessible name, and the field
+    // inside it is labelled "Follow-up" - so `getByLabel('Follow-up')`, which is
+    // how the founders' own journey test fills this in, resolves to both. The
+    // heading is still an `h2` and still in the heading list, which is how a
+    // screen-reader user actually navigates a page like this.
+    <section className="space-y-3">
+      <SectionHeader title="Follow-ups" />
 
-      <form onSubmit={onAdd} className="flex flex-wrap items-end gap-3 rounded border p-4" noValidate>
-        <div className="grow">
-          <label htmlFor="task_title" className="block text-sm">Follow-up</label>
-          <input id="task_title" name="title" required className="mt-1 w-full rounded border px-3 py-2" />
-        </div>
+      <form onSubmit={onAdd} className="space-y-3" noValidate>
         <div>
-          <label htmlFor="task_due" className="block text-sm">Due</label>
-          <input id="task_due" name="due_at" type="datetime-local" className="mt-1 rounded border px-3 py-2" />
+          <label htmlFor="task_title" className="block text-[13px] font-medium text-foreground">
+            Follow-up
+          </label>
+          <input
+            id="task_title"
+            name="title"
+            required
+            placeholder="Send the pricing note"
+            className={`${controlClass(false)} mt-1`}
+          />
         </div>
-        <div>
-          <label htmlFor="task_priority" className="block text-sm">Priority</label>
-          <select id="task_priority" name="priority" defaultValue="normal" className="mt-1 rounded border px-3 py-2">
-            <option value="low">Low</option>
-            <option value="normal">Normal</option>
-            <option value="high">High</option>
-            <option value="urgent">Urgent</option>
-          </select>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-0">
+            <label htmlFor="task_due" className="block text-[13px] font-medium text-foreground">
+              Due
+            </label>
+            <input
+              id="task_due"
+              name="due_at"
+              type="datetime-local"
+              className={`${controlClass(false)} mt-1`}
+            />
+          </div>
+          <div>
+            <label htmlFor="task_priority" className="block text-[13px] font-medium text-foreground">
+              Priority
+            </label>
+            <select
+              id="task_priority"
+              name="priority"
+              defaultValue="normal"
+              className={`${controlClass(false)} mt-1`}
+            >
+              <option value="low">Low</option>
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+          <Button variant="secondary" type="submit" disabled={busy} data-testid="add-task">
+            Add
+          </Button>
         </div>
-        <button type="submit" disabled={busy} data-testid="add-task"
-          className="rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50">
-          Add task
-        </button>
       </form>
 
-      {error ? (<p role="alert" data-testid="task-error" className="text-sm text-destructive">{error}</p>) : null}
+      {error ? (
+        <p role="alert" data-testid="task-error" className="text-[13px] text-critical">
+          {error}
+        </p>
+      ) : null}
 
       {tasks.length === 0 ? (
-        <p data-testid="tasks-empty" className="rounded border border-dashed p-6 text-sm text-muted-foreground">
+        <p data-testid="tasks-empty" className="text-[13px] text-muted-foreground">
           No follow-ups yet.
         </p>
       ) : (
-        <ul className="divide-y" data-testid="task-rows">
+        <ul className="divide-y divide-border border-t border-border" data-testid="task-rows">
           {tasks.map((task) => (
-            <li key={task.id} className="flex items-center justify-between gap-4 py-2 text-sm">
-              <div>
-                <span className={task.status === 'completed' ? 'line-through text-muted-foreground' : ''}>
+            <li key={task.id} className="flex items-start justify-between gap-3 py-2.5 text-[13px]">
+              <div className="min-w-0">
+                <span
+                  className={
+                    task.status === 'completed'
+                      ? 'text-muted-foreground line-through'
+                      : 'text-foreground'
+                  }
+                >
                   {task.title}
                 </span>
-                <span className="ml-2 rounded bg-muted px-2 py-0.5 text-xs">{task.priority}</span>
-                {task.is_overdue ? (
-                  <span data-testid={`overdue-${task.id}`} className="ml-2 text-xs font-medium text-destructive">
-                    overdue
-                  </span>
-                ) : null}
-                {task.due_at ? (
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    due {formatDate(task.due_at)}
-                  </span>
-                ) : null}
+                <span className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-muted-foreground">
+                  {task.due_at ? <span>due {formatDate(task.due_at)}</span> : null}
+                  {task.is_overdue ? (
+                    <StatusText tone="critical" data-testid={`overdue-${task.id}`}>
+                      overdue
+                    </StatusText>
+                  ) : null}
+                  {/* Only when it is not the default. */}
+                  {task.priority !== 'normal' ? <span>{task.priority}</span> : null}
+                </span>
               </div>
               {task.status !== 'completed' && task.status !== 'cancelled' ? (
-                <button type="button" disabled={busy} data-testid={`complete-${task.id}`}
-                  onClick={() => void complete(task)} className="rounded border px-3 py-1 text-xs disabled:opacity-50">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  data-testid={`complete-${task.id}`}
+                  onClick={() => void complete(task)}
+                >
                   Complete
-                </button>
+                </Button>
               ) : (
-                <span className="text-xs text-muted-foreground">{task.status}</span>
+                <span className="shrink-0 text-muted-foreground">{task.status}</span>
               )}
             </li>
           ))}

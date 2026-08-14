@@ -3,6 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
+import { ChannelIcon } from '@/features/ui/channel-icon';
+import { Button, Checkbox, controlClass } from '@/features/ui/controls';
+import { SectionHeader } from '@/features/ui/primitives';
 import { formatDateTime } from '@/lib/dates';
 
 export interface TimelineEntry {
@@ -33,10 +36,6 @@ function when(iso: string | null): string {
  * rejects a pairing that is not in its own copy, so the worst a drift here can
  * do is offer something the API refuses - never record something the dashboard
  * then misreads.
- *
- * The starred options are the ones that mean somebody actually got through. It
- * is worth the founders knowing which those are: they are exactly the ones that
- * stop a prospect showing as waiting.
  */
 const OUTCOMES_BY_TYPE: Record<string, ReadonlyArray<{ value: string; label: string }>> = {
   call: [
@@ -63,15 +62,20 @@ const OUTCOMES_BY_TYPE: Record<string, ReadonlyArray<{ value: string; label: str
 };
 
 /**
- * The activity and note timeline for one lead, contact or account.
+ * The activity and note history for one lead, contact or account.
+ *
+ * **Append-only, and it looks it.** There is no edit or delete affordance on an
+ * activity, because the database trigger would refuse one and an affordance that
+ * cannot work is worse than none. A note may be edited by its author only, which
+ * the server decides and this reflects.
  *
  * Leads are included deliberately: the call that happened while somebody was
  * still a prospect is the same record after they become a customer, so the
  * history does not restart at conversion.
  *
- * `editable` comes from the server, which knows who wrote each note. The button
- * is hidden when it is false and the API refuses the edit regardless, so the two
- * cannot disagree in the caller's favour.
+ * Direction is stated in words - "We contacted them" / "They contacted us" -
+ * because only outbound contact answers an enquiry, and a coloured dot cannot
+ * carry that distinction.
  */
 export function Timeline({
   parent,
@@ -190,67 +194,71 @@ export function Timeline({
     router.refresh();
   }
 
-  return (
-    <section aria-labelledby="timeline-heading" className="space-y-6">
-      <h2 id="timeline-heading" className="font-medium">
-        Timeline
-      </h2>
+  const label = 'block text-[13px] font-medium text-foreground';
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <form onSubmit={onLogActivity} className="space-y-3 rounded border p-4" noValidate>
-          <h3 className="text-sm font-medium">Record an outreach you made</h3>
-          <p className="text-xs text-muted-foreground">
+  return (
+    <section aria-labelledby="timeline-heading" className="space-y-5">
+      <SectionHeader
+        id="timeline-heading"
+        title="Activity"
+        description="Everything that has happened with this prospect, oldest change last. Nothing here can be edited or removed once it is written."
+      />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <form onSubmit={onLogActivity} className="space-y-3" noValidate>
+          <h3 className="text-[13px] font-semibold text-foreground">Record an outreach you made</h3>
+          <p className="text-[13px] text-muted-foreground">
             You make the call or send the message yourself; Sangam records it. Nothing here sends
             anything.
           </p>
-          <div>
-            <label htmlFor="activity_type" className="block text-sm">
-              Type
-            </label>
-            <select
-              id="activity_type"
-              name="activity_type"
-              value={activityType}
-              onChange={(e) => setActivityType(e.target.value)}
-              data-testid="activity-type"
-              className="mt-1 w-full rounded border px-3 py-2"
-            >
-              <option value="call">Call</option>
-              <option value="meeting">Meeting</option>
-              <option value="email">Email</option>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="task">Task</option>
-            </select>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor="activity_type" className={label}>
+                Type
+              </label>
+              <select
+                id="activity_type"
+                name="activity_type"
+                value={activityType}
+                onChange={(e) => setActivityType(e.target.value)}
+                data-testid="activity-type"
+                className={`${controlClass(false)} mt-1`}
+              >
+                <option value="call">Call</option>
+                <option value="meeting">Meeting</option>
+                <option value="email">Email</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="task">Task</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="direction" className={label}>
+                Who got in touch
+              </label>
+              <select
+                id="direction"
+                name="direction"
+                defaultValue="outbound"
+                data-testid="activity-direction"
+                className={`${controlClass(false)} mt-1`}
+              >
+                <option value="outbound">We contacted them</option>
+                <option value="inbound">They contacted us</option>
+              </select>
+            </div>
           </div>
+
           <div>
-            <label htmlFor="direction" className="block text-sm">
-              Who got in touch
-            </label>
-            <select
-              id="direction"
-              name="direction"
-              defaultValue="outbound"
-              data-testid="activity-direction"
-              className="mt-1 w-full rounded border px-3 py-2"
-            >
-              <option value="outbound">We contacted them</option>
-              <option value="inbound">They contacted us</option>
-            </select>
-          </div>
-          <div>
-            <label htmlFor="subject" className="block text-sm">
+            <label htmlFor="subject" className={label}>
               Subject
             </label>
-            <input
-              id="subject"
-              name="subject"
-              required
-              className="mt-1 w-full rounded border px-3 py-2"
-            />
+            <input id="subject" name="subject" required className={`${controlClass(false)} mt-1`} />
           </div>
+
           {(OUTCOMES_BY_TYPE[activityType] ?? []).length > 0 ? (
             <div>
-              <label htmlFor="outcome" className="block text-sm">
+              <label htmlFor="outcome" className={label}>
                 What actually happened
               </label>
               <select
@@ -258,7 +266,7 @@ export function Timeline({
                 name="outcome"
                 defaultValue=""
                 data-testid="activity-outcome"
-                className="mt-1 w-full rounded border px-3 py-2"
+                className={`${controlClass(false)} mt-1`}
               >
                 <option value="">Not recorded</option>
                 {(OUTCOMES_BY_TYPE[activityType] ?? []).map((option) => (
@@ -267,151 +275,145 @@ export function Timeline({
                   </option>
                 ))}
               </select>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Only contact that actually reached the customer counts as replying to them. A
-                missed call or a meeting still in the diary leaves this prospect waiting, which is
-                what the Today page will keep telling you.
+              <p className="mt-1 text-[13px] text-muted-foreground">
+                Only contact that actually reached the customer counts as replying to them. A missed
+                call or a meeting still in the diary leaves this prospect waiting, which is what the
+                Today page will keep telling you.
               </p>
             </div>
           ) : null}
+
           <div>
-            <label htmlFor="activity_body" className="block text-sm">
+            <label htmlFor="activity_body" className={label}>
               Details
             </label>
             <textarea
               id="activity_body"
               name="activity_body"
               rows={2}
-              className="mt-1 w-full rounded border px-3 py-2"
+              className={`${controlClass(false)} mt-1`}
             />
           </div>
 
           {/* The next action is part of this form, not a separate errand. Most
               calls end with a promise, and a promise recorded ten minutes later
               is usually a promise not recorded. */}
-          <div className="rounded border border-dashed p-3">
-            <label htmlFor="next_action" className="block text-sm font-medium">
-              And what happens next
-            </label>
-            <input
-              id="next_action"
-              name="next_action"
-              placeholder="Send the pricing note"
-              data-testid="next-action-input"
-              className="mt-1 w-full rounded border px-3 py-2"
-            />
-            <label htmlFor="next_due" className="mt-2 block text-sm">
-              By when
-            </label>
-            <input
-              id="next_due"
-              name="next_due"
-              type="datetime-local"
-              data-testid="next-action-due"
-              className="mt-1 w-full rounded border px-3 py-2"
-            />
-            <p className="mt-2 text-xs text-muted-foreground">
-              Leave blank if there is nothing to do next. Anything typed here becomes a follow-up
-              on this prospect.
+          <div className="space-y-2 border-t border-border pt-3">
+            <div>
+              <label htmlFor="next_action" className={label}>
+                And what happens next
+              </label>
+              <input
+                id="next_action"
+                name="next_action"
+                placeholder="Send the pricing note"
+                data-testid="next-action-input"
+                className={`${controlClass(false)} mt-1`}
+              />
+            </div>
+            <div>
+              <label htmlFor="next_due" className={label}>
+                By when
+              </label>
+              <input
+                id="next_due"
+                name="next_due"
+                type="datetime-local"
+                data-testid="next-action-due"
+                className={`${controlClass(false)} mt-1`}
+              />
+            </div>
+            <p className="text-[13px] text-muted-foreground">
+              Leave blank if there is nothing to do next. Anything typed here becomes a follow-up on
+              this prospect.
             </p>
           </div>
 
-          <button
-            type="submit"
-            disabled={busy}
-            data-testid="log-activity"
-            className="rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
-          >
+          <Button variant="primary" type="submit" disabled={busy} data-testid="log-activity">
             Log activity
-          </button>
+          </Button>
         </form>
 
-        <form onSubmit={onAddNote} className="space-y-3 rounded border p-4" noValidate>
-          <h3 className="text-sm font-medium">Add a note</h3>
+        <form onSubmit={onAddNote} className="space-y-3" noValidate>
+          <h3 className="text-[13px] font-semibold text-foreground">Add a note</h3>
+          <p className="text-[13px] text-muted-foreground">
+            Anything worth knowing before the next call. Only you can edit your own notes.
+          </p>
           <div>
-            <label htmlFor="note_body" className="block text-sm">
+            <label htmlFor="note_body" className={label}>
               Note
             </label>
             <textarea
               id="note_body"
               name="note_body"
-              rows={4}
+              rows={5}
               required
-              className="mt-1 w-full rounded border px-3 py-2"
+              className={`${controlClass(false)} mt-1`}
             />
           </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="is_pinned" />
-            Pin to the top
-          </label>
-          <button
-            type="submit"
-            disabled={busy}
-            data-testid="add-note"
-            className="rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
-          >
-            Add note
-          </button>
+          <Checkbox id="is_pinned" name="is_pinned" label="Pin to the top" />
+          <div>
+            <Button variant="secondary" type="submit" disabled={busy} data-testid="add-note">
+              Add note
+            </Button>
+          </div>
         </form>
       </div>
 
       {error ? (
-        <p role="alert" data-testid="timeline-error" className="text-sm text-destructive">
+        <p role="alert" data-testid="timeline-error" className="text-[13px] text-critical">
           {error}
         </p>
       ) : null}
 
       {entries.length === 0 ? (
-        <p
-          data-testid="timeline-empty"
-          className="rounded border border-dashed p-6 text-sm text-muted-foreground"
-        >
+        <p data-testid="timeline-empty" className="border-t border-border pt-5 text-sm text-muted-foreground">
           Nothing logged yet. Record a call or add a note above.
         </p>
       ) : (
-        <ol className="space-y-3" data-testid="timeline-entries">
+        <ol className="border-t border-border" data-testid="timeline-entries">
           {entries.map((entry) => (
-            <li key={`${entry.kind}-${entry.id}`} className="rounded border p-4 text-sm">
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="font-medium">
+            <li key={`${entry.kind}-${entry.id}`} className="border-b border-border py-3.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-sm">
                   {entry.kind === 'activity' ? (
                     <>
-                      <span className="rounded bg-muted px-2 py-0.5 text-xs uppercase">
-                        {entry.activity_type}
-                      </span>{' '}
+                      {entry.activity_type ? (
+                        <ChannelIcon channel={entry.activity_type} className="self-center" />
+                      ) : null}
                       {/* Which way it went, because "we called them" and "they
                           called us" are different events and only one of them
                           answers an enquiry. */}
                       {entry.direction ? (
-                        <span className="mr-1 text-xs text-muted-foreground">
-                          {entry.direction === 'inbound' ? 'they contacted us ·' : 'we contacted them ·'}
+                        <span className="text-muted-foreground">
+                          {entry.direction === 'inbound' ? 'They contacted us' : 'We contacted them'}
                         </span>
                       ) : null}
-                      {entry.subject}
+                      <span className="font-medium text-foreground">{entry.subject}</span>
                       {/* What came of it, in plain words. Six weeks later this is
-                          the difference between "we called them" and "we tried
-                          to call them", and only one of those answered anybody. */}
+                          the difference between "we called them" and "we tried to
+                          call them", and only one of those answered anybody. */}
                       {entry.outcome_label ? (
                         <span
                           data-testid={`activity-outcome-${entry.id}`}
-                          className="ml-2 rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                          className="text-muted-foreground"
                         >
-                          {entry.outcome_label}
+                          &middot; {entry.outcome_label}
                         </span>
                       ) : null}
                     </>
                   ) : (
                     <>
-                      <span className="rounded bg-muted px-2 py-0.5 text-xs uppercase">note</span>
+                      <span className="text-muted-foreground">Note</span>
                       {entry.is_pinned ? (
-                        <span className="ml-2 text-xs text-muted-foreground">pinned</span>
+                        <span className="text-muted-foreground">&middot; pinned</span>
                       ) : null}
                     </>
                   )}
-                </span>
-                <span className="whitespace-nowrap text-xs text-muted-foreground">
+                </p>
+                <p className="whitespace-nowrap text-[13px] text-muted-foreground">
                   {entry.actor_name ?? 'Unknown'} &middot; {when(entry.created_at)}
-                </span>
+                </p>
               </div>
 
               {editingId === entry.id ? (
@@ -424,30 +426,32 @@ export function Timeline({
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     rows={3}
-                    className="w-full rounded border px-3 py-2"
+                    className={controlClass(false)}
                   />
                   <div className="flex gap-2">
-                    <button
-                      type="button"
+                    <Button
+                      variant="primary"
+                      size="sm"
                       disabled={busy}
                       data-testid={`save-note-${entry.id}`}
                       onClick={() => void onSaveNote(entry)}
-                      className="rounded bg-primary px-3 py-1 text-primary-foreground disabled:opacity-50"
                     >
                       Save
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingId(null)}
-                      className="rounded border px-3 py-1"
-                    >
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setEditingId(null)}>
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
                 <>
-                  {entry.body ? <p className="mt-2 whitespace-pre-wrap">{entry.body}</p> : null}
+                  {entry.body ? (
+                    <p className="mt-1 max-w-reading whitespace-pre-wrap text-sm text-secondary-foreground">
+                      {entry.body}
+                    </p>
+                  ) : null}
+                  {/* Notes only. An activity has no edit control because the
+                      database would refuse one. */}
                   {entry.kind === 'note' && entry.editable ? (
                     <button
                       type="button"
@@ -456,7 +460,7 @@ export function Timeline({
                         setEditingId(entry.id);
                         setDraft(entry.body ?? '');
                       }}
-                      className="mt-2 text-xs underline"
+                      className="mt-1 text-[13px] text-accent underline-offset-2 hover:underline"
                     >
                       Edit
                     </button>

@@ -43,7 +43,13 @@ test('the recovered prospect is back, once, with its history', async ({ page }) 
 
   // --- 2. the details the source event preserved -----------------------------
   await page.goto(`/leads/${CLAIDA}`);
-  await expect(page.getByTestId('lead-name')).toContainText('Claida');
+  // The heading is the *business*, and Claida is the person at it. That is the
+  // redesign's business/contact separation (UI/UX system section 16): this
+  // record was captured as company "Oxon" with contact "Claida", and a heading
+  // that printed the person there is exactly the conflation the separation
+  // exists to remove. Both facts are still on the page, in their own places.
+  await expect(page.getByTestId('lead-name')).toContainText('Oxon');
+  await expect(page.getByRole('main')).toContainText('Claida');
   await expect(page.getByTestId('lead-phone')).toContainText('919929552295');
   await expect(page.getByTestId('lead-email')).toContainText('aka.collective@gmail.com');
 

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { apiFetch } from '@/lib/session';
+import { identifyLead } from '@/features/leads/identity';
 import { NewLeadForm } from '@/features/leads/new-lead-form';
 import { Avatar } from '@/features/ui/avatar';
 import { DataTable, TableEmpty, type Column } from '@/features/ui/data-table';
@@ -85,22 +86,6 @@ const FILTER_LABEL: Record<Exclude<Filter, 'all'>, string> = {
 function days(iso: string | null): number | null {
   if (!iso) return null;
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-}
-
-function text(capture: Record<string, unknown> | null, key: string): string | null {
-  const value = capture?.[key];
-  return value === undefined || value === null || value === '' ? null : String(value);
-}
-
-/** See the note at the top of this file. The contact is never a duplicate. */
-function identify(lead: Lead): { business: string; contact: string | null } {
-  const company = text(lead.capture, 'company');
-  const person = [lead.first_name, lead.last_name].filter(Boolean).join(' ').trim();
-  const nameIsBusiness = lead.capture?.name_is_business === true;
-  if (company) {
-    return { business: company, contact: nameIsBusiness || !person ? null : person };
-  }
-  return { business: person || 'Unnamed record', contact: null };
 }
 
 interface Row {
@@ -301,7 +286,7 @@ export default async function LeadsPage({
           : all;
 
   const rows: Row[] = leads.map((lead) => {
-    const { business, contact } = identify(lead);
+    const { business, contact } = identifyLead(lead);
     const open = OPEN_STATUSES.has(lead.status);
     return {
       lead,

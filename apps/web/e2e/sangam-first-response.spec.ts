@@ -82,7 +82,11 @@ test('first response is recorded only by real outbound contact, and only once', 
   await page.getByLabel('Surname').fill(surname);
   await page.getByTestId('create-lead').click();
 
-  const row = page.getByRole('link', { name: new RegExp(`Nikhil ${surname}`) });
+  // Located by the business, because that is what the list is a list of. The
+  // link used to carry the contact person's name; the redesign makes the
+  // business the identifying column everywhere (UI/UX system section 15), and
+  // the contact sits beside it in its own column - asserted below.
+  const row = page.getByRole('link', { name: new RegExp(`Sharma Auto Works ${stamp}`) });
   await expect(row).toBeVisible();
 
   // Sangam counts it as waiting immediately.
@@ -92,7 +96,10 @@ test('first response is recorded only by real outbound contact, and only once', 
   await expect(page.getByTestId('lead-rows')).toContainText(surname);
   await shot(page, '02-awaiting-list');
 
-  await page.getByRole('link', { name: new RegExp(`Nikhil ${surname}`) }).click();
+  await page.getByRole('link', { name: new RegExp(`Sharma Auto Works ${stamp}`) }).click();
+  // Both facts are on the record, and they are different facts.
+  await expect(page.getByTestId('lead-name')).toContainText('Sharma Auto Works');
+  await expect(page.getByRole('main')).toContainText(`Nikhil ${surname}`);
   await expect(page.getByTestId('lead-awaiting-response')).toBeVisible();
   const leadUrl = page.url();
 

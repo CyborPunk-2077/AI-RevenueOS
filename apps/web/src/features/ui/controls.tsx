@@ -143,22 +143,55 @@ export function FieldRow({
 }
 
 /**
- * A checkbox with its label. The 44px target rule already applies to the input,
- * so the label sits beside it rather than stretching the row.
+ * A checkbox with its label.
+ *
+ * The global rule gives every checkbox a 44px minimum target, which is correct
+ * and stays - but a *native* checkbox stretched to 44px draws a 44px square, and
+ * a form with three of those looks like a form for children. So the real input
+ * is a transparent 44px hit area and the 16px box beside the label is drawn
+ * around it. It is still a real `<input type="checkbox">` with a real label, so
+ * keyboard, screen readers and form submission are untouched; only the paint
+ * changes.
  */
 export function Checkbox({
   id,
   label,
+  className = '',
   ...rest
-}: { id: string; label: ReactNode } & React.InputHTMLAttributes<HTMLInputElement>): JSX.Element {
+}: {
+  id: string;
+  label: ReactNode;
+  className?: string;
+} & React.InputHTMLAttributes<HTMLInputElement>): JSX.Element {
   return (
-    <label htmlFor={id} className="inline-flex items-center gap-2 text-sm text-foreground">
-      <input
-        id={id}
-        type="checkbox"
-        className="h-4 w-4 rounded-sm border-border-strong accent-accent"
-        {...rest}
-      />
+    <label
+      htmlFor={id}
+      className={cn('inline-flex cursor-pointer items-center gap-2 text-sm text-foreground', className)}
+    >
+      <span className="relative inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-border-strong bg-surface">
+        <input
+          id={id}
+          type="checkbox"
+          className="peer absolute h-11 w-11 cursor-pointer opacity-0"
+          {...rest}
+        />
+        <span className="pointer-events-none absolute inset-0 hidden rounded-sm bg-accent peer-checked:block" />
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 16 16"
+          className="pointer-events-none relative hidden h-3 w-3 text-accent-foreground peer-checked:block"
+        >
+          <path
+            d="M3.5 8.5l3 3 6-7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span className="pointer-events-none absolute -inset-1 hidden rounded ring-2 ring-ring peer-focus-visible:block" />
+      </span>
       {label}
     </label>
   );

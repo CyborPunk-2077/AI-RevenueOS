@@ -3,6 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
+import { Button, controlClass } from '@/features/ui/controls';
+import { SectionHeader } from '@/features/ui/primitives';
+import { LabelChip } from '@/features/ui/status';
 
 /**
  * Sending a WhatsApp reply from Sangam, through the real Cloud API.
@@ -78,23 +81,22 @@ export function WhatsAppReplyBox({
 
   if (!phone) {
     return (
-      <p className="text-sm text-muted-foreground" data-testid="whatsapp-reply-unavailable">
+      <p className="text-[13px] text-muted-foreground" data-testid="whatsapp-reply-unavailable">
         This prospect has no phone number, so there is nothing to reply to on WhatsApp.
       </p>
     );
   }
 
   return (
-    <section aria-labelledby="whatsapp-reply-heading" className="space-y-3">
-      <h2 id="whatsapp-reply-heading" className="font-medium">
-        Reply on WhatsApp
-      </h2>
-      <p className="text-xs text-muted-foreground">
-        This one really does send, through WhatsApp, to {phone}. Everything else in Sangam only
-        records contact you made yourself.
-      </p>
+    // No `aria-labelledby` here either: "Reply on WhatsApp" as a region name
+    // collides with the textarea's own "Reply" label under a substring match.
+    <section className="space-y-3">
+      <SectionHeader
+        title="Reply on WhatsApp"
+        description={`This one really does send, through WhatsApp, to ${phone}. Everything else in Sangam only records contact you made yourself.`}
+      />
 
-      <form onSubmit={onSubmit} className="space-y-3" noValidate>
+      <form onSubmit={onSubmit} className="max-w-reading space-y-3" noValidate>
         <label htmlFor="reply_text" className="sr-only">
           Reply
         </label>
@@ -106,20 +108,15 @@ export function WhatsAppReplyBox({
           maxLength={4096}
           placeholder="Type your reply…"
           data-testid="whatsapp-reply-text"
-          className="w-full rounded border px-3 py-2"
+          className={controlClass(false)}
         />
-        <button
-          type="submit"
-          disabled={busy}
-          data-testid="send-whatsapp-reply"
-          className="rounded bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
-        >
+        <Button variant="primary" type="submit" disabled={busy} data-testid="send-whatsapp-reply">
           {busy ? 'Sending…' : 'Send WhatsApp reply'}
-        </button>
+        </Button>
       </form>
 
       {error ? (
-        <p role="alert" data-testid="whatsapp-reply-error" className="text-sm text-destructive">
+        <p role="alert" data-testid="whatsapp-reply-error" className="text-[13px] text-critical">
           {error}
         </p>
       ) : null}
@@ -129,20 +126,20 @@ export function WhatsAppReplyBox({
           role="status"
           data-testid="whatsapp-reply-result"
           data-sent={result.sent ? 'yes' : 'no'}
-          className={`rounded border p-3 text-sm ${
-            result.sent ? 'border-border' : 'border-destructive'
+          className={`max-w-reading rounded border p-3 text-[13px] ${
+            result.sent ? 'border-border' : 'border-critical/50'
           }`}
         >
           {result.sent ? (
             <>
-              <p className="font-medium">WhatsApp accepted it.</p>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="font-medium text-foreground">WhatsApp accepted it.</p>
+              <p className="mt-1 text-muted-foreground">
                 Provider reference {result.provider_message_id ?? 'unknown'}. Accepted is not the
                 same as read — delivery and read receipts appear on the timeline only when WhatsApp
                 actually reports them.
               </p>
               {result.recorded_first_response ? (
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 text-muted-foreground">
                   This was the first genuine reply to this prospect, so the response time has been
                   recorded.
                 </p>
@@ -150,12 +147,16 @@ export function WhatsAppReplyBox({
             </>
           ) : (
             <>
-              <p className="font-medium text-destructive">Not sent.</p>
-              <p className="mt-1 text-xs text-muted-foreground">
+              {/* Failure is the one delivery state that earns a chip: it means
+                  the customer never received it. */}
+              <p>
+                <LabelChip tone="critical">not sent</LabelChip>
+              </p>
+              <p className="mt-1.5 text-muted-foreground">
                 {result.error_message ?? 'WhatsApp did not accept it.'}
                 {result.error_code ? ` (${result.error_code})` : ''}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-muted-foreground">
                 This prospect is still counted as waiting, because nothing reached them.
               </p>
             </>

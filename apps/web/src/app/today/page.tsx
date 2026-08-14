@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { apiFetch } from '@/lib/session';
+import { identifyLead } from '@/features/leads/identity';
 import { StartingBaseline, type BaselinePayload } from '@/features/leads/starting-baseline';
 import { Avatar } from '@/features/ui/avatar';
 import { DataTable, TableEmpty, type Column, type RowGroup } from '@/features/ui/data-table';
@@ -81,32 +82,6 @@ const OPEN_STATUSES = new Set(['new', 'contacted', 'qualified', 'nurturing']);
 const WEEK = 7 * 86_400_000;
 /** A prospect answered this long ago with nothing scheduled has gone quiet. */
 const STALLED_DAYS = 14;
-
-function text(capture: Record<string, unknown> | null, key: string): string | null {
-  const value = capture?.[key];
-  return value === undefined || value === null || value === '' ? null : String(value);
-}
-
-/**
- * The business, the person at it, and whether there is a person at all.
- *
- * `new-lead-form` writes the company name into `first_name` when no human was
- * supplied, and marks it with `capture.name_is_business`. A row that ignores that
- * marker prints the same string in the Business and Contact columns, which
- * quietly teaches somebody that the business is a person. The contact is
- * therefore returned only when it is genuinely a different fact from the
- * business - never as a duplicate, and never invented to fill the column.
- */
-function identify(lead: Lead): { business: string; contact: string | null } {
-  const company = text(lead.capture, 'company');
-  const person = [lead.first_name, lead.last_name].filter(Boolean).join(' ').trim();
-  const nameIsBusiness = lead.capture?.name_is_business === true;
-
-  if (company) {
-    return { business: company, contact: nameIsBusiness || !person ? null : person };
-  }
-  return { business: person || 'Unnamed record', contact: null };
-}
 
 function isToday(iso: string | null): boolean {
   if (!iso) return false;
@@ -264,7 +239,7 @@ export default async function TodayPage(): Promise<JSX.Element> {
   }
 
   const toRow = (lead: Lead, when: string, whenTone: 'plain' | 'critical'): AttentionRow => {
-    const { business, contact } = identify(lead);
+    const { business, contact } = identifyLead(lead);
     const next = nextActions.get(lead.id) ?? null;
     return {
       key: lead.id,

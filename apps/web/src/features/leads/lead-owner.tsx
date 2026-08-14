@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
+import { Button, controlClass } from '@/features/ui/controls';
 
 export interface Member {
   readonly id: string;
@@ -60,9 +61,9 @@ export function LeadOwner({
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-3" noValidate>
+    <form onSubmit={onSubmit} className="space-y-3" noValidate>
       <div>
-        <label htmlFor="assignee_id" className="block text-sm text-muted-foreground">
+        <label htmlFor="assignee_id" className="block text-[13px] font-medium text-foreground">
           Owner
         </label>
         <select
@@ -70,7 +71,7 @@ export function LeadOwner({
           name="assignee_id"
           defaultValue={assigneeId ?? ''}
           data-testid="lead-owner-select"
-          className="mt-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
+          className={`${controlClass(false)} mt-1`}
         >
           <option value="">Unassigned</option>
           {members
@@ -82,19 +83,18 @@ export function LeadOwner({
             ))}
         </select>
       </div>
-      <button
-        type="submit"
-        disabled={busy}
-        data-testid="assign-lead"
-        className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
-      >
-        {current ? 'Reassign' : 'Assign'}
-      </button>
-      <p data-testid="lead-owner-current" className="pb-2 text-sm text-muted-foreground">
-        Currently {current ? current.full_name : 'unassigned'}
-      </p>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="secondary" type="submit" disabled={busy} data-testid="assign-lead">
+          {current ? 'Reassign' : 'Assign'}
+        </Button>
+        <p data-testid="lead-owner-current" className="text-[13px] text-muted-foreground">
+          Currently {current ? current.full_name : 'unassigned'}
+        </p>
+      </div>
+
       {error ? (
-        <p role="alert" data-testid="owner-error" className="w-full text-sm text-destructive">
+        <p role="alert" data-testid="owner-error" className="text-[13px] text-critical">
           {error}
         </p>
       ) : null}

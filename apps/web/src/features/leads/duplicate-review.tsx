@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { mutate } from '@/lib/csrf';
-import { Card, StatusPill } from '@/features/ui/primitives';
+import { Button } from '@/features/ui/controls';
+import { SectionHeader } from '@/features/ui/primitives';
 
 /**
  * Duplicate review and merge.
@@ -125,66 +126,56 @@ export function DuplicateReview({
   }
 
   return (
-    <Card>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="heading text-base">Possible duplicates</h2>
-        <button
-          type="button"
-          onClick={() => void scan()}
-          disabled={busy}
-          className="btn btn-ghost px-3 py-1.5"
-        >
-          {busy ? 'Scanning…' : 'Scan again'}
-        </button>
-      </div>
+    <section aria-labelledby="duplicates-heading" className="space-y-3">
+      <SectionHeader
+        id="duplicates-heading"
+        title="Possible duplicates"
+        actions={
+          <Button variant="ghost" size="sm" onClick={() => void scan()} disabled={busy}>
+            {busy ? 'Scanning…' : 'Scan again'}
+          </Button>
+        }
+      />
 
       {error ? (
-        <p role="alert" className="mt-3 text-sm text-destructive">
+        <p role="alert" className="text-[13px] text-critical">
           {error}
         </p>
       ) : null}
       {notice ? (
-        <p role="status" className="mt-3 text-sm text-muted-foreground">
+        <p role="status" className="text-[13px] text-muted-foreground">
           {notice}
         </p>
       ) : null}
 
       {rows.length === 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">
+        <p className="text-[13px] text-muted-foreground">
           Nothing flagged. Scanning compares email, phone and name against your other open leads.
         </p>
       ) : (
-        <ul className="mt-4 space-y-3">
+        <ul className="divide-y divide-border border-t border-border" data-testid="duplicate-rows">
           {rows.map((row) => (
-            <li key={row.candidate_lead_id} className="rounded border border-border p-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium">
-                    {row.candidate ? name(row.candidate) : 'Record no longer available'}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {row.candidate
-                      ? (row.candidate.phone ?? row.candidate.email ?? 'no contact details')
-                      : 'It may have been merged or archived since this match was recorded.'}
-                  </p>
-                  <p className="mt-1">
-                    <StatusPill tone={row.confidence >= 0.9 ? 'warning' : 'neutral'}>
-                      {REASON_LABEL[row.match_reason] ?? row.match_reason} ·{' '}
-                      {Math.round(row.confidence * 100)}% match
-                    </StatusPill>
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setConfirming(row)}
-                  className="btn btn-ghost px-3 py-1.5"
-                >
-                  Merge into this lead
-                  <span className="sr-only">
-                    {row.candidate ? `, ${name(row.candidate)}` : ''}
-                  </span>
-                </button>
-              </div>
+            <li key={row.candidate_lead_id} className="space-y-1.5 py-3">
+              <p className="text-sm font-medium text-foreground">
+                {row.candidate ? name(row.candidate) : 'Record no longer available'}
+              </p>
+              <p className="text-[13px] text-muted-foreground">
+                {row.candidate
+                  ? (row.candidate.phone ?? row.candidate.email ?? 'no contact details')
+                  : 'It may have been merged or archived since this match was recorded.'}
+              </p>
+              {/*
+                The evidence, in words. A percentage on its own asks somebody to
+                trust a number; "same phone number" lets them check.
+              */}
+              <p className="text-[13px] text-muted-foreground">
+                {REASON_LABEL[row.match_reason] ?? row.match_reason} &middot;{' '}
+                {Math.round(row.confidence * 100)}% match
+              </p>
+              <Button variant="ghost" size="sm" onClick={() => setConfirming(row)}>
+                Merge into this lead
+                <span className="sr-only">{row.candidate ? `, ${name(row.candidate)}` : ''}</span>
+              </Button>
             </li>
           ))}
         </ul>
@@ -199,7 +190,7 @@ export function DuplicateReview({
           onConfirm={() => void merge(confirming)}
         />
       ) : null}
-    </Card>
+    </section>
   );
 }
 
@@ -231,13 +222,13 @@ function MergeConfirmation({
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="merge-title"
-      className="mt-4 rounded border border-warning/50 bg-warning-soft p-4"
+      className="rounded border border-warning/50 bg-warning-soft p-4"
     >
-      <h3 id="merge-title" className="heading text-sm">
+      <h3 id="merge-title" className="text-[13px] font-semibold text-foreground">
         Merge {other ? name(other) : 'that record'} into {name(lead)}?
       </h3>
 
-      <ul className="mt-3 list-inside list-disc space-y-1 text-sm">
+      <ul className="mt-3 list-inside list-disc space-y-1 text-[13px] text-foreground">
         <li>
           <strong>{name(lead)}</strong> stays, and keeps every value it already has.
         </li>
@@ -254,21 +245,12 @@ function MergeConfirmation({
       </ul>
 
       <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={onConfirm}
-          disabled={busy}
-          className="btn btn-primary"
-        >
+        <Button variant="primary" onClick={onConfirm} disabled={busy}>
           {busy ? 'Merging…' : 'Merge'}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="btn btn-ghost"
-        >
+        </Button>
+        <Button variant="ghost" onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );
