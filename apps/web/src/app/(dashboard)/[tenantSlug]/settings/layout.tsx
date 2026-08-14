@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { apiFetch } from '@/lib/session';
 import { WorkspaceShell } from '@/features/crm/workspace-shell';
+import { TenantSettingsSections } from '@/features/ui/tenant-settings-sections';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,9 @@ export default async function TenantSettingsLayout({
       workspaceKind={me.data.workspace_kind}
       active="settings"
     >
-      {children}
+      <TenantSettingsSections tenantSlug={me.data.tenant_slug}>
+        {children}
+      </TenantSettingsSections>
     </WorkspaceShell>
   );
 }

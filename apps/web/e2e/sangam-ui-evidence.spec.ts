@@ -81,6 +81,8 @@ const SCREENS: ReadonlyArray<{ path: string; name: string }> = [
   { path: '/sangam/imports', name: '13-import' },
   { path: '/analytics', name: '14-analytics' },
   { path: '/settings/integrations', name: '15-settings-integrations' },
+  // Development-only, and part of the Settings section rather than a stray page.
+  { path: '/test-center', name: '16-test-centre' },
 ];
 
 for (const theme of ['light', 'dark'] as const) {

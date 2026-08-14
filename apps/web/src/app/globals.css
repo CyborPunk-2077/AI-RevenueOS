@@ -261,37 +261,11 @@
   }
 
   /*
-   * The transitional status chip.
-   *
-   * Section 9 of the UI/UX system bans the filled rounded pill outright: it made
-   * every row shout equally and is the clearest tell of a generated interface.
-   * `StatusPill` survives only as a shim while its callers migrate to
-   * `StatusText` / `SeverityMark` / `LabelChip`, so what it renders here is
-   * already the endpoint — rectangular, bordered, unfilled, and readable in
-   * grayscale. The four tones differ in text colour alone.
+   * The `.pill` rules that used to live here are gone, with `StatusPill`. Every
+   * caller now uses `StatusText`, `SeverityMark` or `LabelChip` from
+   * `features/ui/status.tsx` - the system section 9 describes, where a chip is
+   * the last resort rather than the default.
    */
-  .pill {
-    @apply inline-flex items-center gap-1.5 px-1.5 py-0.5 text-xs font-medium;
-    border: 1px solid hsl(var(--border-strong));
-    border-radius: var(--radius-sm);
-    color: hsl(var(--text-secondary));
-    background-color: transparent;
-  }
-  .pill-success {
-    color: hsl(var(--positive));
-    border-color: hsl(var(--positive) / 0.4);
-  }
-  .pill-warning {
-    color: hsl(var(--warning));
-    border-color: hsl(var(--warning) / 0.4);
-  }
-  .pill-danger {
-    color: hsl(var(--critical));
-    border-color: hsl(var(--critical) / 0.45);
-  }
-  .pill-neutral {
-    color: hsl(var(--text-secondary));
-  }
 
   /* A plain placeholder block. Shimmer where a still shape works is decoration. */
   .skeleton {

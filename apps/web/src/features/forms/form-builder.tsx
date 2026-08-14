@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { mutate } from '@/lib/csrf';
-import { Card, EmptyState, StatusPill } from '@/features/ui/primitives';
+import { Card, EmptyState } from '@/features/ui/primitives';
+import { LabelChip } from '@/features/ui/status';
 
 /**
  * The capture form builder.
@@ -318,7 +319,7 @@ function PublishedPanel({ form }: { form: CaptureForm }): JSX.Element {
     <Card>
       <div className="flex items-center gap-2">
         <h2 className="heading text-base">Live now</h2>
-        <StatusPill tone="success">Published</StatusPill>
+        <LabelChip tone="positive">Published</LabelChip>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
         This is the snapshot visitors see, taken when you last published.
@@ -380,12 +381,12 @@ export function FormList({
                 <span className="heading text-sm">{form.name}</span>
                 <span className="flex gap-2">
                   {form.is_published ? (
-                    <StatusPill tone="success">Published</StatusPill>
+                    <LabelChip tone="positive">Published</LabelChip>
                   ) : (
-                    <StatusPill tone="neutral">Draft</StatusPill>
+                    <LabelChip tone="neutral">Draft</LabelChip>
                   )}
                   {form.has_unpublished_changes ? (
-                    <StatusPill tone="warning">Unpublished changes</StatusPill>
+                    <LabelChip tone="warning">Unpublished changes</LabelChip>
                   ) : null}
                 </span>
               </div>

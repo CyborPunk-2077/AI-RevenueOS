@@ -13,10 +13,9 @@ import {
   PageHeader,
   SectionHeader,
   Stat,
-  StatusPill,
 } from './primitives';
 import { RecordHeader } from './record-header';
-import { LabelChip, StatusText } from './status';
+import { LabelChip, SeverityMark, StatusText } from './status';
 import { ThemePair } from './theme-pair';
 import { FilterLinks, Toolbar } from './toolbar';
 
@@ -56,13 +55,12 @@ export const Status: Story = {
           <LabelChip tone="critical">failed</LabelChip>
           <LabelChip tone="accent">pilot</LabelChip>
         </p>
-        {/* Kept visible while callers migrate, so a regression in the shim is
-            caught rather than discovered on an un-rebuilt screen. */}
-        <p className="flex flex-wrap gap-2">
-          <StatusPill tone="neutral">Draft</StatusPill>
-          <StatusPill tone="success">Won</StatusPill>
-          <StatusPill tone="warning">At risk</StatusPill>
-          <StatusPill tone="danger">Overdue</StatusPill>
+        <p className="relative flex flex-wrap gap-2 border-l-2 border-critical pl-3">
+          <SeverityMark tone="critical" label="Overdue" />
+          <span className="text-muted-foreground">
+            A row carrying the 2px critical mark, which is what a whole row gets
+            instead of a badge.
+          </span>
         </p>
       </div>
     </ThemePair>

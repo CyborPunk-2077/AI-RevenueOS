@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { apiFetch } from '@/lib/session';
 import { WorkspaceShell } from '@/features/crm/workspace-shell';
+import { SettingsShell } from '@/features/ui/settings-shell';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +33,9 @@ export default async function TestCenterLayout({
       workspaceKind={me.data.workspace_kind}
       active="test-center"
     >
-      {children}
+      <SettingsShell tenantSlug={me.data.tenant_slug} active="test-center">
+        {children}
+      </SettingsShell>
     </WorkspaceShell>
   );
 }

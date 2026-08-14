@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { WorkspaceShell } from '@/features/crm/workspace-shell';
+import { SettingsShell } from '@/features/ui/settings-shell';
 import { apiFetch } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -26,7 +27,9 @@ export default async function IntegrationSettingsLayout({
       workspaceKind={me.data.workspace_kind}
       active="settings"
     >
-      {children}
+      <SettingsShell tenantSlug={me.data.tenant_slug} active="integrations">
+        {children}
+      </SettingsShell>
     </WorkspaceShell>
   );
 }

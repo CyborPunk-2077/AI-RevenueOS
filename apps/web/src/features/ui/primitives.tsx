@@ -16,30 +16,12 @@ import { cn } from './cn';
  *   overdue, waiting, unassigned, failed - must still be identifiable.
  */
 
-/**
- * @deprecated Use `StatusText`, `SeverityMark` or `LabelChip` from `./status`.
- *
- * A compatibility shim while the last callers migrate. The filled rounded pill
- * it used to render is the pattern section 9 of the UI/UX system bans outright;
- * what it renders now is already the endpoint - rectangular, bordered, unfilled -
- * so a screen that has not been rebuilt yet does not look like a different
- * product. Delete it once nothing imports it.
+/*
+ * `StatusPill` used to live here. It is gone, along with the `.pill` rules in
+ * `globals.css`, now that its last caller has moved to `LabelChip`. The filled
+ * rounded pill is the pattern section 9 of the UI/UX system bans outright: it
+ * made every row shout equally, which means none of them shouted.
  */
-export function StatusPill({
-  tone = 'neutral',
-  children,
-}: {
-  tone?: 'neutral' | 'success' | 'warning' | 'danger';
-  children: ReactNode;
-}): JSX.Element {
-  const toneClass = {
-    neutral: 'pill-neutral',
-    success: 'pill-success',
-    warning: 'pill-warning',
-    danger: 'pill-danger',
-  }[tone];
-  return <span className={`pill ${toneClass}`}>{children}</span>;
-}
 
 /**
  * A genuine panel: 1px border, small radius, no shadow, no hover lift.

@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { mutate } from '@/lib/csrf';
-import { Card, EmptyState, StatusPill } from '@/features/ui/primitives';
+import { Card, EmptyState } from '@/features/ui/primitives';
+import { LabelChip } from '@/features/ui/status';
 
 /**
  * Assignment rules.
@@ -162,9 +163,9 @@ export function AssignmentRules({ rules }: { rules: AssignmentRule[] }): JSX.Ele
                   </div>
                   <div className="flex items-center gap-2">
                     {rule.is_active ? (
-                      <StatusPill tone="success">Active</StatusPill>
+                      <LabelChip tone="positive">Active</LabelChip>
                     ) : (
-                      <StatusPill tone="neutral">Paused</StatusPill>
+                      <LabelChip tone="neutral">Paused</LabelChip>
                     )}
                     <button
                       type="button"

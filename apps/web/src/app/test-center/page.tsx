@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { apiFetch } from '@/lib/session';
-import { Card, PageHeader, StatusPill } from '@/features/ui/primitives';
+import { Card, PageHeader } from '@/features/ui/primitives';
+import { LabelChip, type Severity } from '@/features/ui/status';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,12 +26,12 @@ const STATUS_LABEL: Record<Status, string> = {
   'not-built': 'Not built',
 };
 
-const STATUS_TONE: Record<Status, 'success' | 'warning' | 'neutral' | 'danger'> = {
-  usable: 'success',
+const STATUS_TONE: Record<Status, Severity> = {
+  usable: 'positive',
   partial: 'warning',
   gated: 'neutral',
   'backend-only': 'neutral',
-  'not-built': 'danger',
+  'not-built': 'critical',
 };
 
 interface Feature {
@@ -265,8 +266,8 @@ interface ReadinessReport {
   readonly summary: { readonly ready: number; readonly attention: number; readonly manual: number };
 }
 
-const READINESS_TONE: Record<ReadinessCheck['state'], 'success' | 'warning' | 'neutral'> = {
-  ready: 'success',
+const READINESS_TONE: Record<ReadinessCheck['state'], Severity> = {
+  ready: 'positive',
   attention: 'warning',
   manual: 'neutral',
 };
@@ -304,10 +305,10 @@ interface WhatsAppCheck {
   readonly detail: string;
 }
 
-const WHATSAPP_TONE: Record<WhatsAppStatus['state'], 'success' | 'warning' | 'danger'> = {
-  CONNECTED: 'success',
+const WHATSAPP_TONE: Record<WhatsAppStatus['state'], Severity> = {
+  CONNECTED: 'positive',
   NOT_CONFIGURED: 'warning',
-  ERROR: 'danger',
+  ERROR: 'critical',
 };
 
 export default async function TestCenterPage(): Promise<JSX.Element> {
@@ -415,9 +416,9 @@ export default async function TestCenterPage(): Promise<JSX.Element> {
                     <td className="px-5 py-3 font-medium">{check.label}</td>
                     <td className="px-5 py-3 text-muted-foreground">{check.detail}</td>
                     <td className="px-5 py-3">
-                      <StatusPill tone={READINESS_TONE[check.state]}>
+                      <LabelChip tone={READINESS_TONE[check.state]}>
                         {READINESS_LABEL[check.state]}
-                      </StatusPill>
+                      </LabelChip>
                     </td>
                   </tr>
                 ))}
@@ -452,9 +453,9 @@ export default async function TestCenterPage(): Promise<JSX.Element> {
               <span className="font-medium">Connection: </span>
               <span data-testid="whatsapp-state">
                 {whatsapp ? (
-                  <StatusPill tone={WHATSAPP_TONE[whatsapp.state]}>{whatsapp.state}</StatusPill>
+                  <LabelChip tone={WHATSAPP_TONE[whatsapp.state]}>{whatsapp.state}</LabelChip>
                 ) : (
-                  <StatusPill tone="warning">UNKNOWN</StatusPill>
+                  <LabelChip tone="warning">UNKNOWN</LabelChip>
                 )}
               </span>
             </p>
@@ -504,9 +505,9 @@ export default async function TestCenterPage(): Promise<JSX.Element> {
                     <td className="px-5 py-3 font-medium">{check.label}</td>
                     <td className="px-5 py-3 text-muted-foreground">{check.detail}</td>
                     <td className="px-5 py-3">
-                      <StatusPill tone={check.observed ? 'success' : 'neutral'}>
+                      <LabelChip tone={check.observed ? 'positive' : 'neutral'}>
                         {check.observed ? 'Observed' : 'Not yet'}
-                      </StatusPill>
+                      </LabelChip>
                     </td>
                   </tr>
                 ))}
@@ -552,9 +553,9 @@ export default async function TestCenterPage(): Promise<JSX.Element> {
                 <td className="py-2 pr-4 font-medium">{row.name}</td>
                 <td className="py-2 pr-4 text-muted-foreground">{row.source}</td>
                 <td className="py-2">
-                  <StatusPill tone={row.trusted ? 'success' : 'warning'}>
+                  <LabelChip tone={row.trusted ? 'positive' : 'warning'}>
                     {row.trusted ? 'From real use' : 'Not checked'}
-                  </StatusPill>
+                  </LabelChip>
                 </td>
               </tr>
             ))}
@@ -606,9 +607,9 @@ export default async function TestCenterPage(): Promise<JSX.Element> {
                 <tr key={feature.name} className="border-b border-border/60">
                   <td className="px-5 py-3 font-medium">{feature.name}</td>
                   <td className="px-5 py-3">
-                    <StatusPill tone={STATUS_TONE[feature.status]}>
+                    <LabelChip tone={STATUS_TONE[feature.status]}>
                       {STATUS_LABEL[feature.status]}
-                    </StatusPill>
+                    </LabelChip>
                   </td>
                   <td className="px-5 py-3 text-muted-foreground">{feature.what}</td>
                   <td className="px-5 py-3 text-right">
@@ -677,7 +678,7 @@ export default async function TestCenterPage(): Promise<JSX.Element> {
                 <tr className="border-b border-border/60">
                   <td className="px-5 py-3">Messaging channels</td>
                   <td className="px-5 py-3">
-                    <StatusPill tone="neutral">Unknown</StatusPill>
+                    <LabelChip tone="neutral">Unknown</LabelChip>
                   </td>
                   <td className="px-5 py-3 text-muted-foreground">
                     The check did not return an answer.
@@ -690,9 +691,9 @@ export default async function TestCenterPage(): Promise<JSX.Element> {
                       {channel.channel.replace(/_/g, ' ')}
                     </td>
                     <td className="px-5 py-3">
-                      <StatusPill tone={channel.ready ? 'success' : 'neutral'}>
+                      <LabelChip tone={channel.ready ? 'positive' : 'neutral'}>
                         {channel.ready ? 'Yes' : 'No'}
-                      </StatusPill>
+                      </LabelChip>
                     </td>
                     <td className="px-5 py-3 text-muted-foreground">
                       {channel.ready
@@ -705,9 +706,9 @@ export default async function TestCenterPage(): Promise<JSX.Element> {
               <tr className="border-b border-border/60">
                 <td className="px-5 py-3 font-medium">File storage</td>
                 <td className="px-5 py-3">
-                  <StatusPill tone={storageOk ? 'success' : 'neutral'}>
+                  <LabelChip tone={storageOk ? 'positive' : 'neutral'}>
                     {storageOk ? 'Yes' : 'No'}
-                  </StatusPill>
+                  </LabelChip>
                 </td>
                 <td className="px-5 py-3 text-muted-foreground">
                   {storageOk
@@ -718,9 +719,9 @@ export default async function TestCenterPage(): Promise<JSX.Element> {
               <tr>
                 <td className="px-5 py-3 font-medium">Calendar sync</td>
                 <td className="px-5 py-3">
-                  <StatusPill tone={calendarOk ? 'success' : 'neutral'}>
+                  <LabelChip tone={calendarOk ? 'positive' : 'neutral'}>
                     {calendarOk ? 'Yes' : 'No'}
-                  </StatusPill>
+                  </LabelChip>
                 </td>
                 <td className="px-5 py-3 text-muted-foreground">
                   {calendarOk
