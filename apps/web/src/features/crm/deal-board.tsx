@@ -76,7 +76,7 @@ export function DealBoard({ stages }: { stages: BoardStage[] }): JSX.Element {
   return (
     <div className="space-y-4">
       {error ? (
-        <p role="alert" data-testid="board-error" className="text-sm text-destructive">
+        <p role="alert" data-testid="board-error" className="text-[13px] text-critical">
           {error}
         </p>
       ) : null}
@@ -87,26 +87,41 @@ export function DealBoard({ stages }: { stages: BoardStage[] }): JSX.Element {
             key={stage.id}
             aria-labelledby={`stage-${stage.id}`}
             data-testid={`stage-${stage.name}`}
-            className="rounded border p-3"
+            className="rounded-lg border border-border bg-surface-sunken p-2.5"
           >
-            <h3 id={`stage-${stage.id}`} className="text-sm font-medium">
-              {stage.name}
-              <span className="ml-2 text-xs text-muted-foreground">{stage.deal_count}</span>
+            <h3
+              id={`stage-${stage.id}`}
+              className="flex items-baseline justify-between gap-2 px-0.5 text-[13px] font-semibold text-foreground"
+            >
+              <span>
+                {stage.name}
+                <span className="ml-1.5 font-normal tabular text-muted-foreground">
+                  {stage.deal_count}
+                </span>
+              </span>
+              <span className="text-[13px] font-normal tabular text-muted-foreground">
+                {money(stage.value_minor)}
+              </span>
             </h3>
-            <p className="mt-1 text-xs text-muted-foreground">{money(stage.value_minor)}</p>
 
-            <ul className="mt-3 space-y-2">
+            <ul className="mt-2.5 space-y-2">
               {stage.deals.map((deal) => (
-                <li key={deal.id} className="rounded border bg-background p-2 text-sm">
-                  <Link href={`/deals/${deal.id}`} className="font-medium underline">
+                <li
+                  key={deal.id}
+                  className="rounded border border-border bg-surface p-2.5 text-sm"
+                >
+                  <Link
+                    href={`/deals/${deal.id}`}
+                    className="font-medium text-foreground underline-offset-2 hover:underline"
+                  >
                     {deal.title}
                   </Link>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="mt-0.5 text-[13px] text-muted-foreground">
                     {money(deal.amount_minor, deal.currency)}
                     {deal.account_name ? ` · ${deal.account_name}` : ''}
                   </p>
                   {deal.status !== 'open' ? (
-                    <p className="mt-1 text-xs uppercase text-muted-foreground">{deal.status}</p>
+                    <p className="mt-0.5 text-[13px] text-muted-foreground">{deal.status}</p>
                   ) : null}
 
                   <label htmlFor={`move-${deal.id}`} className="sr-only">
@@ -121,7 +136,7 @@ export function DealBoard({ stages }: { stages: BoardStage[] }): JSX.Element {
                       const target = stages.find((s) => s.id === event.target.value);
                       if (target && target.id !== deal.stage_id) void move(deal, target);
                     }}
-                    className="mt-2 w-full rounded border px-2 py-1 text-xs"
+                    className="mt-2 w-full rounded border border-border-strong bg-surface px-2 py-1 text-[13px] text-secondary-foreground"
                   >
                     {stages.map((option) => (
                       <option key={option.id} value={option.id}>
@@ -134,7 +149,7 @@ export function DealBoard({ stages }: { stages: BoardStage[] }): JSX.Element {
             </ul>
 
             {stage.deals.length === 0 ? (
-              <p className="mt-3 text-xs text-muted-foreground">Empty</p>
+              <p className="px-0.5 py-3 text-[13px] text-muted-foreground">Nothing here</p>
             ) : null}
           </section>
         ))}

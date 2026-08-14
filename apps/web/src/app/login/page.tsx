@@ -2,7 +2,15 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { Button, controlClass } from '@/features/ui/controls';
 
+/**
+ * The first screen anybody sees, and deliberately the plainest.
+ *
+ * No illustration, no gradient, no marketing copy. Somebody arriving here at
+ * 9:40am wants two fields and a button, and a sign-in page that tries to sell
+ * the product to the person already using it is a page that wastes their time.
+ */
 export default function LoginPage(): JSX.Element {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -32,58 +40,67 @@ export default function LoginPage(): JSX.Element {
   }
 
   return (
-    <main id="main-content" className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
-      <h1 className="text-2xl font-semibold">Sangam</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Sign in to your organisation.</p>
+    <main
+      id="main-content"
+      className="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center px-6"
+    >
+      <div className="rounded-lg border border-border bg-surface p-7">
+        <h1 className="text-2xl font-semibold tracking-[-0.01em] text-foreground">Sangam</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Sign in to your organisation.</p>
 
-      <form onSubmit={onSubmit} className="mt-8 space-y-4" noValidate>
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium">
-            Email
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="username"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
-        </div>
+        <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
+          <div>
+            <label htmlFor="email" className="block text-[13px] font-medium text-foreground">
+              Email
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="username"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={`${controlClass(false)} mt-1`}
+            />
+          </div>
 
-        <div>
-          <label htmlFor="password" className="block text-sm font-medium">
-            Password
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
-        </div>
+          <div>
+            <label htmlFor="password" className="block text-[13px] font-medium text-foreground">
+              Password
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={`${controlClass(false)} mt-1`}
+            />
+          </div>
 
-        {error ? (
-          <p role="alert" className="rounded border border-destructive px-3 py-2 text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
+          {error ? (
+            <p
+              role="alert"
+              className="rounded border border-critical/40 bg-critical-soft px-3 py-2 text-[13px] text-critical"
+            >
+              {error}
+            </p>
+          ) : null}
 
-        <button
-          type="submit"
-          disabled={busy}
-          data-testid="sign-in"
-          className="w-full rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
-        >
-          {busy ? 'Signing in...' : 'Sign in'}
-        </button>
-      </form>
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={busy}
+            data-testid="sign-in"
+            className="w-full"
+          >
+            {busy ? 'Signing in…' : 'Sign in'}
+          </Button>
+        </form>
+      </div>
     </main>
   );
 }

@@ -15,11 +15,16 @@ export default async function AppointmentsPage(): Promise<JSX.Element> {
   const sync = syncResult.data;
 
   return (
-    <div className="space-y-8">
-      <PageHeader title="Appointments" description="Double booking is prevented by the database, not by a check &mdash; two requests for the same slot cannot both succeed." />
+    <div className="space-y-5">
+      <PageHeader
+        title="Appointments"
+        description="Meetings booked with a customer, and what came of them."
+      />
 
+      {/* The real reason calendar sync is off, stated rather than left to be
+          inferred from an absent feature. */}
       {sync && !sync.enabled ? (
-        <p data-testid="calendar-gated" className="rounded border border-dashed p-3 text-sm text-muted-foreground">
+        <p data-testid="calendar-gated" className="max-w-reading text-[13px] text-muted-foreground">
           {sync.blocker}
         </p>
       ) : null}

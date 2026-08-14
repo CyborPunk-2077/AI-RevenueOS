@@ -2,6 +2,7 @@ import { apiFetch } from '@/lib/session';
 import { DealBoard, type BoardStage } from '@/features/crm/deal-board';
 import { money } from '@/lib/money';
 import { NewDealForm } from '@/features/crm/new-deal-form';
+import { MetricStrip, type Metric } from '@/features/ui/metric-strip';
 import { PageHeader } from '@/features/ui/primitives';
 
 export const dynamic = 'force-dynamic';
@@ -32,7 +33,10 @@ export default async function DealsPage(): Promise<JSX.Element> {
 
   if (!boardResult.ok || !boardResult.data) {
     return (
-      <p role="alert" className="rounded border border-destructive p-4 text-sm text-destructive">
+      <p
+        role="alert"
+        className="max-w-reading rounded border border-critical/40 bg-critical-soft px-3 py-2 text-sm text-critical"
+      >
         {boardResult.error ?? 'Could not load the pipeline.'}
       </p>
     );
@@ -45,32 +49,32 @@ export default async function DealsPage(): Promise<JSX.Element> {
     name: `${c.first_name} ${c.last_name ?? ''}`.trim(),
   }));
 
+  const totals: Metric[] = [
+    { key: 'open', label: 'Open deals', value: String(board.totals.open_count) },
+    { key: 'value', label: 'Open value', value: money(board.totals.open_value_minor) },
+    {
+      key: 'weighted',
+      label: 'Weighted',
+      value: money(board.totals.weighted_value_minor),
+      hint: 'by stage probability',
+      testId: 'weighted-value',
+    },
+    { key: 'won', label: 'Won', value: money(board.totals.won_value_minor) },
+  ];
+
   return (
-    <div className="space-y-8">
-      <PageHeader title="Deals" description="Pipeline: {board.pipeline.name}" />
+    <div className="space-y-5">
+      {/* The pipeline's own name, which this used to print as the literal
+          template string `{board.pipeline.name}`. */}
+      <PageHeader
+        title="Deals"
+        description={`Pipeline: ${board.pipeline.name}`}
+        actions={<NewDealForm accounts={accounts} contacts={contacts} />}
+      />
 
-      <dl className="grid gap-4 sm:grid-cols-4" data-testid="pipeline-totals">
-        <div className="surface p-5">
-          <dt className="text-xs text-muted-foreground">Open deals</dt>
-          <dd className="text-lg font-medium">{board.totals.open_count}</dd>
-        </div>
-        <div className="surface p-5">
-          <dt className="text-xs text-muted-foreground">Open value</dt>
-          <dd className="text-lg font-medium">{money(board.totals.open_value_minor)}</dd>
-        </div>
-        <div className="surface p-5">
-          <dt className="text-xs text-muted-foreground">Weighted</dt>
-          <dd className="text-lg font-medium" data-testid="weighted-value">
-            {money(board.totals.weighted_value_minor)}
-          </dd>
-        </div>
-        <div className="surface p-5">
-          <dt className="text-xs text-muted-foreground">Won</dt>
-          <dd className="text-lg font-medium">{money(board.totals.won_value_minor)}</dd>
-        </div>
-      </dl>
-
-      <NewDealForm accounts={accounts} contacts={contacts} />
+      <div data-testid="pipeline-totals">
+        <MetricStrip metrics={totals} aria-label="Pipeline totals" />
+      </div>
 
       <DealBoard stages={board.stages} />
     </div>

@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import { apiFetch } from '@/lib/session';
 import { NewAccountForm } from '@/features/crm/new-account-form';
+import { Avatar } from '@/features/ui/avatar';
+import { Button, controlClass } from '@/features/ui/controls';
+import { DataTable, TableEmpty, type Column } from '@/features/ui/data-table';
 import { PageHeader } from '@/features/ui/primitives';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +16,55 @@ interface Account {
   readonly contact_count: number | null;
 }
 
+const COLUMNS: Array<Column<Account>> = [
+  {
+    key: 'name',
+    header: 'Account',
+    width: '42%',
+    cell: (account) => (
+      <span className="flex items-center gap-2">
+        <Avatar name={account.name} />
+        <Link
+          href={`/accounts/${account.id}`}
+          data-testid={`account-link-${account.id}`}
+          title={account.name}
+          className="truncate font-medium text-foreground underline-offset-2 hover:underline"
+        >
+          {account.name}
+        </Link>
+      </span>
+    ),
+  },
+  {
+    key: 'industry',
+    header: 'Industry',
+    width: '26%',
+    cell: (account) => (
+      <span className="block truncate text-secondary-foreground">{account.industry ?? '—'}</span>
+    ),
+  },
+  {
+    key: 'website',
+    header: 'Website',
+    width: '20%',
+    dropAt: 900,
+    cell: (account) => (
+      <span className="block truncate text-muted-foreground" title={account.website ?? undefined}>
+        {account.website ?? '—'}
+      </span>
+    ),
+  },
+  {
+    key: 'contacts',
+    header: 'Contacts',
+    align: 'right',
+    width: '12%',
+    cell: (account) => (
+      <span className="text-secondary-foreground">{account.contact_count ?? 0}</span>
+    ),
+  },
+];
+
 export default async function AccountsPage({
   searchParams,
 }: {
@@ -24,10 +76,14 @@ export default async function AccountsPage({
   const accounts = result.data?.accounts ?? [];
 
   return (
-    <div className="space-y-8">
-      <PageHeader title="Accounts" description="Companies you work with. Contacts can be linked to one." />
+    <div className="space-y-5">
+      <PageHeader
+        title="Accounts"
+        description="Companies you work with. Contacts can be linked to one."
+        actions={<NewAccountForm />}
+      />
 
-      <form method="get" role="search" className="flex gap-2">
+      <form method="get" role="search" className="flex flex-wrap items-center gap-2">
         <label htmlFor="account_search" className="sr-only">
           Search accounts
         </label>
@@ -38,22 +94,26 @@ export default async function AccountsPage({
           defaultValue={search}
           placeholder="Name or industry"
           data-testid="account-search"
-          className="w-full max-w-sm rounded border px-3 py-2"
+          className={`${controlClass(false)} max-w-sm`}
         />
-        <button type="submit" className="rounded border px-4 py-2">
+        <Button variant="secondary" type="submit">
           Search
-        </button>
+        </Button>
         {search ? (
-          <Link href="/accounts" className="rounded border px-4 py-2">
+          <Link
+            href="/accounts"
+            className="text-[13px] text-accent underline-offset-2 hover:underline"
+          >
             Clear
           </Link>
         ) : null}
       </form>
 
-      <NewAccountForm />
-
       {!result.ok ? (
-        <p role="alert" className="rounded border border-destructive p-4 text-sm text-destructive">
+        <p
+          role="alert"
+          className="max-w-reading rounded border border-critical/40 bg-critical-soft px-3 py-2 text-sm text-critical"
+        >
           {result.error ?? 'Could not load accounts.'}
         </p>
       ) : null}
@@ -62,49 +122,24 @@ export default async function AccountsPage({
         <h2 id="account-list-heading" className="sr-only">
           Account list
         </h2>
-
-        {accounts.length === 0 ? (
-          <p
-            data-testid="accounts-empty"
-            className="surface border-dashed p-6 text-center text-sm text-muted-foreground"
-          >
-            {search ? `No accounts match “${search}”.` : 'No accounts yet. Create one above.'}
-          </p>
-        ) : (
-          <table className="w-full text-left text-sm">
-            <caption className="sr-only">Accounts for your organisation</caption>
-            <thead>
-              <tr className="row-hover border-b border-border/60">
-                <th scope="col" className="py-2">
-                  Name
-                </th>
-                <th scope="col" className="py-2">
-                  Industry
-                </th>
-                <th scope="col" className="py-2">
-                  Contacts
-                </th>
-              </tr>
-            </thead>
-            <tbody data-testid="account-rows">
-              {accounts.map((account) => (
-                <tr key={account.id} className="border-b">
-                  <td className="py-2">
-                    <Link
-                      href={`/accounts/${account.id}`}
-                      data-testid={`account-link-${account.id}`}
-                      className="underline"
-                    >
-                      {account.name}
-                    </Link>
-                  </td>
-                  <td className="py-2">{account.industry ?? '—'}</td>
-                  <td className="py-2">{account.contact_count ?? 0}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <DataTable
+          caption="Accounts for your organisation"
+          columns={COLUMNS}
+          rows={accounts}
+          rowKey={(account) => account.id}
+          bodyTestId="account-rows"
+          empty={
+            <TableEmpty
+              data-testid="accounts-empty"
+              title={search ? 'Nothing matches that search' : 'No accounts yet'}
+              description={
+                search
+                  ? `No accounts match “${search}”. Try part of the company name or its industry.`
+                  : 'An account is a company. Create one, or it appears when a prospect converts.'
+              }
+            />
+          }
+        />
       </section>
     </div>
   );

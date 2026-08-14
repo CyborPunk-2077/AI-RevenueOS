@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
+import { Button, controlClass } from '@/features/ui/controls';
+import { Drawer } from '@/features/ui/drawer';
 
 export function NewAccountForm(): JSX.Element {
   const router = useRouter();
@@ -37,75 +39,76 @@ export function NewAccountForm(): JSX.Element {
     router.refresh();
   }
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        data-testid="new-account"
-        onClick={() => setOpen(true)}
-        className="rounded bg-primary px-4 py-2 text-primary-foreground"
-      >
-        New account
-      </button>
-    );
-  }
+  const label = 'block text-[13px] font-medium text-foreground';
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 rounded border p-4" noValidate>
-      <h2 className="font-medium">New account</h2>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div>
-          <label htmlFor="account_name" className="block text-sm font-medium">
-            Name
-          </label>
-          <input
-            id="account_name"
-            name="name"
-            required
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
-        </div>
-        <div>
-          <label htmlFor="account_industry" className="block text-sm font-medium">
-            Industry
-          </label>
-          <input
-            id="account_industry"
-            name="industry"
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
-        </div>
-        <div>
-          <label htmlFor="account_website" className="block text-sm font-medium">
-            Website
-          </label>
-          <input
-            id="account_website"
-            name="website"
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
-        </div>
-      </div>
+    <>
+      <Button variant="primary" data-testid="new-account" onClick={() => setOpen(true)}>
+        New account
+      </Button>
 
-      {error ? (
-        <p role="alert" data-testid="account-error" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+      <Drawer
+        open={open}
+        onClose={() => setOpen(false)}
+        title="New account"
+        description="A company you deal with. Contacts and deals hang off it."
+        footer={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="primary"
+              type="submit"
+              form="new-account-form"
+              disabled={busy}
+              data-testid="create-account"
+            >
+              {busy ? 'Creating…' : 'Create account'}
+            </Button>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        }
+      >
+        <form id="new-account-form" onSubmit={onSubmit} className="space-y-4" noValidate>
+          <div>
+            <label htmlFor="account_name" className={label}>
+              Name
+            </label>
+            <input
+              id="account_name"
+              name="name"
+              required
+              className={`${controlClass(false)} mt-1`}
+            />
+          </div>
+          <div>
+            <label htmlFor="account_industry" className={label}>
+              Industry
+            </label>
+            <input
+              id="account_industry"
+              name="industry"
+              className={`${controlClass(false)} mt-1`}
+            />
+          </div>
+          <div>
+            <label htmlFor="account_website" className={label}>
+              Website
+            </label>
+            <input
+              id="account_website"
+              name="website"
+              className={`${controlClass(false)} mt-1`}
+            />
+          </div>
 
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={busy}
-          data-testid="create-account"
-          className="rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
-        >
-          {busy ? 'Creating...' : 'Create account'}
-        </button>
-        <button type="button" onClick={() => setOpen(false)} className="rounded border px-4 py-2">
-          Cancel
-        </button>
-      </div>
-    </form>
+          {error ? (
+            <p role="alert" data-testid="account-error" className="text-[13px] text-critical">
+              {error}
+            </p>
+          ) : null}
+        </form>
+      </Drawer>
+    </>
   );
 }

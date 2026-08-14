@@ -125,7 +125,7 @@ export function DataTable<T>({
         className="border-b border-border last:border-b-0 transition-colors hover:bg-surface-hover"
       >
         {columns.map((column, index) => (
-          <td key={column.key} className={cellClass(column, index)}>
+          <td key={column.key} data-label={column.header} className={cellClass(column, index)}>
             {index === 0 && mark ? <SeverityMark tone={mark.tone} label={mark.label} /> : null}
             {column.cell(row)}
           </td>
@@ -144,7 +144,11 @@ export function DataTable<T>({
     // block. The rounded top corners live on the first and last header cells
     // instead, which is why the header carries its own background.
     <div className={cn('rounded-lg border border-border bg-surface', className)}>
-      <table className={cn('w-full border-collapse text-left', fixed && 'table-fixed')}>
+      {/* `table-stacked` is the media-query hook that turns rows into records
+          below 700px. See the block at the foot of `globals.css`. */}
+      <table
+        className={cn('table-stacked w-full border-collapse text-left', fixed && 'table-fixed')}
+      >
         <caption className="sr-only">{caption}</caption>
         <thead>
           <tr className="border-b border-border-strong">

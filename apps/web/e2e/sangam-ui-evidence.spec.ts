@@ -178,4 +178,30 @@ test('the shell holds together as the desktop narrows', async ({ page }) => {
     await shoot(page, '/today', `narrow-${width}-today`);
     await shoot(page, '/leads', `narrow-${width}-prospects`);
   }
+
+  // Below 900px the sidebar becomes an overlay behind a hamburger. Opened here
+  // rather than only measured, because a navigation drawer that cannot be
+  // dismissed is worse than no navigation at all.
+  await page.setViewportSize({ width: 820, height: 900 });
+  await page.goto('/today');
+  const open = page.getByRole('button', { name: 'Open navigation' });
+  await expect(open).toBeVisible();
+  await page.screenshot({ path: `${EVIDENCE}/narrow-820-today.png` });
+  await open.click();
+  await expect(page.getByTestId('nav-leads')).toBeVisible();
+  await page.screenshot({ path: `${EVIDENCE}/narrow-820-navigation-open.png` });
+  await page.keyboard.press('Escape');
+  // Exactly one element carries the marker at every width; below 900px it is
+  // simply hidden again rather than removed, because it is the same sidebar.
+  await expect(page.getByTestId('nav-leads')).toHaveCount(1);
+  await expect(page.getByTestId('nav-leads')).toBeHidden();
+
+  // 320px without two-dimensional scrolling is a standing requirement.
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto('/leads');
+  const overflows = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+  );
+  expect(overflows, 'the page must not scroll sideways at 320px').toBe(false);
+  await page.screenshot({ path: `${EVIDENCE}/narrow-320-prospects.png` });
 });

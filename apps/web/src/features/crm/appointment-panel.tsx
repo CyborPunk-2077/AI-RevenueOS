@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
+import { Button, controlClass } from '@/features/ui/controls';
+import { SectionHeader } from '@/features/ui/primitives';
 import { formatDateTime } from '@/lib/dates';
 
 export interface AppointmentEntry {
@@ -84,87 +86,162 @@ export function AppointmentPanel({
     router.refresh();
   }
 
+  const label = 'block text-[13px] font-medium text-foreground';
+
   return (
-    <section aria-labelledby="appointments-heading" className="space-y-4">
-      <h2 id="appointments-heading" className="font-medium">Appointments</h2>
+    <section className="space-y-5">
+      <div className="space-y-3">
+        <SectionHeader
+          title="Book a slot"
+          description="Two requests for the same slot cannot both succeed; the database refuses the second."
+        />
+        <form onSubmit={onBook} className="flex flex-wrap items-end gap-3" noValidate>
+          <div className="min-w-[16rem] grow">
+            <label htmlFor="appt_title" className={label}>
+              Title
+            </label>
+            <input id="appt_title" name="title" required className={`${controlClass(false)} mt-1`} />
+          </div>
+          <div>
+            <label htmlFor="appt_start" className={label}>
+              Starts
+            </label>
+            <input
+              id="appt_start"
+              name="start_at"
+              type="datetime-local"
+              required
+              className={`${controlClass(false)} mt-1 w-auto`}
+            />
+          </div>
+          <div>
+            <label htmlFor="appt_duration" className={label}>
+              Minutes
+            </label>
+            <input
+              id="appt_duration"
+              name="duration_minutes"
+              type="number"
+              min="5"
+              step="5"
+              defaultValue="30"
+              className={`${controlClass(false)} mt-1 w-20`}
+            />
+          </div>
+          <div>
+            <label htmlFor="appt_location" className={label}>
+              Where
+            </label>
+            <select
+              id="appt_location"
+              name="location_type"
+              defaultValue="physical"
+              className={`${controlClass(false)} mt-1 w-auto`}
+            >
+              <option value="physical">In person</option>
+              <option value="virtual">Virtual</option>
+              <option value="phone">Phone</option>
+            </select>
+          </div>
+          <Button variant="primary" type="submit" disabled={busy} data-testid="book-appointment">
+            Book
+          </Button>
+        </form>
 
-      <form onSubmit={onBook} className="flex flex-wrap items-end gap-3 rounded border p-4" noValidate>
-        <div className="grow">
-          <label htmlFor="appt_title" className="block text-sm">Title</label>
-          <input id="appt_title" name="title" required className="mt-1 w-full rounded border px-3 py-2" />
-        </div>
-        <div>
-          <label htmlFor="appt_start" className="block text-sm">Starts</label>
-          <input id="appt_start" name="start_at" type="datetime-local" required
-            className="mt-1 rounded border px-3 py-2" />
-        </div>
-        <div>
-          <label htmlFor="appt_duration" className="block text-sm">Minutes</label>
-          <input id="appt_duration" name="duration_minutes" type="number" min="5" step="5"
-            defaultValue="30" className="mt-1 w-24 rounded border px-3 py-2" />
-        </div>
-        <div>
-          <label htmlFor="appt_location" className="block text-sm">Where</label>
-          <select id="appt_location" name="location_type" defaultValue="physical"
-            className="mt-1 rounded border px-3 py-2">
-            <option value="physical">In person</option>
-            <option value="virtual">Virtual</option>
-            <option value="phone">Phone</option>
-          </select>
-        </div>
-        <button type="submit" disabled={busy} data-testid="book-appointment"
-          className="rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50">
-          Book
-        </button>
-      </form>
+        {error ? (
+          <p role="alert" data-testid="appointment-error" className="text-[13px] text-critical">
+            {error}
+          </p>
+        ) : null}
+      </div>
 
-      {error ? (<p role="alert" data-testid="appointment-error" className="text-sm text-destructive">{error}</p>) : null}
-
-      {appointments.length === 0 ? (
-        <p data-testid="appointments-empty" className="rounded border border-dashed p-6 text-sm text-muted-foreground">
-          Nothing booked yet.
-        </p>
-      ) : (
-        <ul className="divide-y" data-testid="appointment-rows">
-          {appointments.map((appointment) => (
-            <li key={appointment.id} className="flex items-center justify-between gap-4 py-3 text-sm">
-              <div>
-                <span className={appointment.status === 'cancelled' ? 'line-through text-muted-foreground' : ''}>
-                  {appointment.title}
-                </span>
-                <span className="ml-2 rounded bg-muted px-2 py-0.5 text-xs uppercase">{appointment.status}</span>
-                <p className="text-xs text-muted-foreground">
-                  {when(appointment.start_at)} · {appointment.location_type}
-                  {appointment.contact_name ? ` · ${appointment.contact_name}` : ''}
-                  {appointment.organizer_name ? ` · ${appointment.organizer_name}` : ''}
-                </p>
-                {appointment.cancelled_reason ? (
-                  <p className="text-xs text-muted-foreground">Cancelled: {appointment.cancelled_reason}</p>
-                ) : null}
-                {appointment.outcome ? (
-                  <p className="text-xs text-muted-foreground">Outcome: {appointment.outcome}</p>
-                ) : null}
-              </div>
-              {appointment.status === 'scheduled' || appointment.status === 'confirmed' ? (
-                <div className="flex shrink-0 gap-2">
-                  <button type="button" disabled={busy} data-testid={`complete-appt-${appointment.id}`}
-                    onClick={() => void call(`/api/appointments/${appointment.id}/outcome`,
-                      { status: 'completed' }, appointment.version)}
-                    className="rounded border px-3 py-1 text-xs disabled:opacity-50">
-                    Completed
-                  </button>
-                  <button type="button" disabled={busy} data-testid={`cancel-appt-${appointment.id}`}
-                    onClick={() => void call(`/api/appointments/${appointment.id}/cancel`,
-                      { reason: 'Cancelled from the app' }, appointment.version)}
-                    className="rounded border px-3 py-1 text-xs disabled:opacity-50">
-                    Cancel
-                  </button>
+      <div className="space-y-3 border-t border-border pt-5">
+        <SectionHeader title="Booked" />
+        {appointments.length === 0 ? (
+          <p data-testid="appointments-empty" className="text-sm text-muted-foreground">
+            Nothing booked yet.
+          </p>
+        ) : (
+          <ul
+            className="divide-y divide-border rounded-lg border border-border bg-surface"
+            data-testid="appointment-rows"
+          >
+            {appointments.map((appointment) => (
+              <li
+                key={appointment.id}
+                className="flex flex-wrap items-start justify-between gap-3 px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="flex flex-wrap items-baseline gap-2">
+                    <span
+                      className={
+                        appointment.status === 'cancelled'
+                          ? 'text-sm text-muted-foreground line-through'
+                          : 'text-sm font-medium text-foreground'
+                      }
+                    >
+                      {appointment.title}
+                    </span>
+                    {/* Plain words. A booked meeting and a cancelled one are
+                        different facts, not different colours. */}
+                    <span className="text-[13px] text-muted-foreground">{appointment.status}</span>
+                  </p>
+                  <p className="mt-0.5 text-[13px] text-muted-foreground">
+                    {when(appointment.start_at)} &middot; {appointment.location_type}
+                    {appointment.contact_name ? ` · ${appointment.contact_name}` : ''}
+                    {appointment.organizer_name ? ` · ${appointment.organizer_name}` : ''}
+                  </p>
+                  {appointment.cancelled_reason ? (
+                    <p className="text-[13px] text-muted-foreground">
+                      Cancelled: {appointment.cancelled_reason}
+                    </p>
+                  ) : null}
+                  {appointment.outcome ? (
+                    <p className="text-[13px] text-muted-foreground">
+                      Outcome: {appointment.outcome}
+                    </p>
+                  ) : null}
                 </div>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      )}
+
+                {appointment.status === 'scheduled' || appointment.status === 'confirmed' ? (
+                  <div className="flex shrink-0 gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={busy}
+                      data-testid={`complete-appt-${appointment.id}`}
+                      onClick={() =>
+                        void call(
+                          `/api/appointments/${appointment.id}/outcome`,
+                          { status: 'completed' },
+                          appointment.version,
+                        )
+                      }
+                    >
+                      Completed
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      data-testid={`cancel-appt-${appointment.id}`}
+                      onClick={() =>
+                        void call(
+                          `/api/appointments/${appointment.id}/cancel`,
+                          { reason: 'Cancelled from the app' },
+                          appointment.version,
+                        )
+                      }
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }

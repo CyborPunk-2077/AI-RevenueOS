@@ -159,7 +159,24 @@ const WORKSPACE_LABELS: Record<
  * two elements. An accessible name that comes from the element's own text cannot
  * collide with a form label, and it needs no second source of truth.
  */
-const LABEL_AT_FULL_WIDTH = 'sr-only min-[1200px]:not-sr-only';
+/*
+ * Three widths, one element, no duplicated markers.
+ *
+ * The sidebar is full at 1200px and above, a 64px icon rail between 900 and
+ * 1200, and an overlay below 900 - and it is the *same* `<aside>` in all three.
+ * When the overlay opens, `data-open` goes on that one element and these
+ * variants expand it, wherever the viewport happens to be.
+ *
+ * Rendering a second copy for the overlay is the obvious approach and it is
+ * wrong twice over: two elements would carry every `nav-*` marker, so a locator
+ * that is unambiguous on a laptop becomes a strict-mode failure on a tablet, and
+ * two lists drift.
+ */
+const EXPANDED = 'sr-only min-[1200px]:not-sr-only group-data-[open=true]:not-sr-only';
+const EXPANDED_BLOCK = 'hidden min-[1200px]:block group-data-[open=true]:block';
+const COLLAPSED_ONLY = 'min-[1200px]:hidden group-data-[open=true]:hidden';
+const ROW_LAYOUT =
+  'justify-center px-0 min-[1200px]:justify-start min-[1200px]:px-2.5 group-data-[open=true]:justify-start group-data-[open=true]:px-2.5';
 
 function SidebarPanel({
   tenantSlug,
@@ -167,29 +184,27 @@ function SidebarPanel({
   workspaceKind,
   active,
   onNavigate,
-  /** The overlay is always full width, whatever the viewport is. */
-  alwaysExpanded = false,
 }: {
   tenantSlug: string;
   workspaceName?: string | null;
   workspaceKind?: string | null;
   active: SectionKey;
   onNavigate?: () => void;
-  alwaysExpanded?: boolean;
 }): JSX.Element {
   const groups = groupsFor(tenantSlug);
   const kind = workspaceKind ? WORKSPACE_LABELS[workspaceKind] : undefined;
   const name = workspaceName ?? tenantSlug;
-  const expanded = alwaysExpanded ? 'inline' : LABEL_AT_FULL_WIDTH;
-  const expandedBlock = alwaysExpanded ? 'block' : 'hidden min-[1200px]:block';
-  const rowLayout = alwaysExpanded ? 'justify-start px-2.5' : 'justify-center min-[1200px]:justify-start px-0 min-[1200px]:px-2.5';
+  const expanded = EXPANDED;
+  const expandedBlock = EXPANDED_BLOCK;
+  const rowLayout = ROW_LAYOUT;
 
   return (
     <>
       <div
         className={cn(
           'flex h-[var(--utility-bar-height)] shrink-0 items-center border-b border-border',
-          alwaysExpanded ? 'px-3' : 'justify-center min-[1200px]:justify-start min-[1200px]:px-3',
+          'justify-center min-[1200px]:justify-start min-[1200px]:px-3',
+          'group-data-[open=true]:justify-start group-data-[open=true]:px-3',
         )}
       >
         <Link
@@ -198,7 +213,7 @@ function SidebarPanel({
           className="text-base font-semibold tracking-[-0.01em] text-foreground"
         >
           <span className={expanded}>Sangam</span>
-          <span className={alwaysExpanded ? 'hidden' : 'min-[1200px]:hidden'} aria-hidden="true">
+          <span className={COLLAPSED_ONLY} aria-hidden="true">
             S
           </span>
         </Link>
@@ -251,7 +266,12 @@ function SidebarPanel({
       </nav>
 
       {/* Which workspace this is, said permanently and in one place. */}
-      <div className={cn('border-t border-border py-3', alwaysExpanded ? 'px-3' : 'px-2 min-[1200px]:px-3')}>
+      <div
+        className={cn(
+          'border-t border-border py-3 px-2',
+          'min-[1200px]:px-3 group-data-[open=true]:px-3',
+        )}
+      >
         <p className={cn('text-[11px] uppercase tracking-[0.06em] text-muted-foreground', expandedBlock)}>
           Workspace
         </p>
@@ -259,8 +279,9 @@ function SidebarPanel({
           data-testid="workspace-name"
           title={kind?.hint}
           className={cn(
-            'truncate text-sm font-medium text-foreground',
-            alwaysExpanded ? 'mt-1' : 'text-center text-xs min-[1200px]:mt-1 min-[1200px]:text-left min-[1200px]:text-sm',
+            'truncate text-center text-xs font-medium text-foreground',
+            'min-[1200px]:mt-1 min-[1200px]:text-left min-[1200px]:text-sm',
+            'group-data-[open=true]:mt-1 group-data-[open=true]:text-left group-data-[open=true]:text-sm',
           )}
         >
           {name}
@@ -312,47 +333,48 @@ export function AppShell({
   return (
     <div className="flex min-h-screen">
       {/*
-        In the flow rather than `fixed`, with the panel inside it sticky. A fixed
+        One `<aside>` at all three widths.
+
+        In the flow rather than `fixed`, with the panel inside it sticky: a fixed
         sidebar leaves the rest of the column blank on any page taller than the
-        viewport - including in a full-page screenshot, which is how this product
-        is reviewed - and it takes the layout out of the flex row for no gain.
+        viewport - including in the full-page screenshots this product is
+        reviewed with - and it takes the layout out of the flex row for no gain.
+
+        Below 900px it is hidden until the hamburger opens it, at which point
+        `data-open` turns this same element into the overlay. A second rendered
+        copy would put two elements behind every `nav-*` marker, so a locator
+        that is unambiguous on a laptop would fail on a tablet.
       */}
-      <aside className="hidden w-[var(--sidebar-collapsed)] shrink-0 border-r border-border bg-surface min-[900px]:block min-[1200px]:w-[var(--sidebar-width)]">
+      <aside
+        data-open={overlayOpen}
+        className={cn(
+          'group hidden w-[var(--sidebar-collapsed)] shrink-0 border-r border-border bg-surface',
+          'min-[900px]:block min-[1200px]:w-[var(--sidebar-width)]',
+          // `!block`, because Tailwind emits `hidden` after `block` and the two
+          // have equal specificity - the plain utility would lose to the
+          // `hidden` that keeps this off the screen below 900px.
+          overlayOpen &&
+            '!block fixed inset-y-0 left-0 z-50 w-[var(--sidebar-width)] shadow-drawer',
+        )}
+      >
         <div className="sticky top-0 flex h-screen flex-col">
           <SidebarPanel
             tenantSlug={tenantSlug}
             workspaceName={workspaceName}
             workspaceKind={workspaceKind}
             active={active}
+            onNavigate={overlayOpen ? () => setOverlayOpen(false) : undefined}
           />
         </div>
       </aside>
 
-      {/*
-        Below 900px the same navigation arrives as an overlay. It is a second
-        instance of `SidebarPanel`, not a second list: it is never mounted at the
-        same time as the fixed one, because the trigger that mounts it does not
-        exist above 900px.
-      */}
       {overlayOpen ? (
-        <div className="min-[900px]:hidden">
-          <button
-            type="button"
-            aria-label="Close navigation"
-            onClick={() => setOverlayOpen(false)}
-            className="fixed inset-0 z-40 animate-overlay-in bg-foreground/25"
-          />
-          <aside className="fixed inset-y-0 left-0 z-50 flex w-[var(--sidebar-width)] flex-col border-r border-border bg-surface shadow-drawer">
-            <SidebarPanel
-              tenantSlug={tenantSlug}
-              workspaceName={workspaceName}
-              workspaceKind={workspaceKind}
-              active={active}
-              alwaysExpanded
-              onNavigate={() => setOverlayOpen(false)}
-            />
-          </aside>
-        </div>
+        <button
+          type="button"
+          aria-label="Close navigation"
+          onClick={() => setOverlayOpen(false)}
+          className="fixed inset-0 z-40 animate-overlay-in bg-foreground/25 min-[900px]:hidden"
+        />
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col">

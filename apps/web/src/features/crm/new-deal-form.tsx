@@ -3,12 +3,19 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
+import { Button, controlClass } from '@/features/ui/controls';
+import { Drawer } from '@/features/ui/drawer';
 
 interface Option {
   readonly id: string;
   readonly name: string;
 }
 
+/**
+ * A new deal, in the same right-hand drawer every other "create a record from a
+ * list" action uses. One pattern across the product beats four screens each
+ * pushing their list down by a different amount when a form opens.
+ */
 export function NewDealForm({
   accounts,
   contacts,
@@ -51,59 +58,106 @@ export function NewDealForm({
     router.refresh();
   }
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        data-testid="new-deal"
-        onClick={() => setOpen(true)}
-        className="rounded bg-primary px-4 py-2 text-primary-foreground"
-      >
-        New deal
-      </button>
-    );
-  }
+  const label = 'block text-[13px] font-medium text-foreground';
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 rounded border p-4" noValidate>
-      <h2 className="font-medium">New deal</h2>
-      <div className="grid gap-4 sm:grid-cols-4">
-        <div>
-          <label htmlFor="deal_title" className="block text-sm font-medium">Title</label>
-          <input id="deal_title" name="title" required className="mt-1 w-full rounded border px-3 py-2" />
-        </div>
-        <div>
-          <label htmlFor="deal_amount" className="block text-sm font-medium">Amount (₹)</label>
-          <input id="deal_amount" name="amount" type="number" min="0" step="1"
-            defaultValue="0" className="mt-1 w-full rounded border px-3 py-2" />
-        </div>
-        <div>
-          <label htmlFor="deal_account" className="block text-sm font-medium">Account</label>
-          <select id="deal_account" name="account_id" defaultValue=""
-            className="mt-1 w-full rounded border px-3 py-2">
-            <option value="">None</option>
-            {accounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="deal_contact" className="block text-sm font-medium">Contact</label>
-          <select id="deal_contact" name="contact_id" defaultValue=""
-            className="mt-1 w-full rounded border px-3 py-2">
-            <option value="">None</option>
-            {contacts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-          </select>
-        </div>
-      </div>
+    <>
+      <Button variant="primary" data-testid="new-deal" onClick={() => setOpen(true)}>
+        New deal
+      </Button>
 
-      {error ? (<p role="alert" data-testid="deal-error" className="text-sm text-destructive">{error}</p>) : null}
+      <Drawer
+        open={open}
+        onClose={() => setOpen(false)}
+        title="New deal"
+        description="A named opportunity with a value, on the pipeline board."
+        footer={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="primary"
+              type="submit"
+              form="new-deal-form"
+              disabled={busy}
+              data-testid="create-deal"
+            >
+              {busy ? 'Creating…' : 'Create deal'}
+            </Button>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        }
+      >
+        <form id="new-deal-form" onSubmit={onSubmit} className="space-y-4" noValidate>
+          <div>
+            <label htmlFor="deal_title" className={label}>
+              Title
+            </label>
+            <input
+              id="deal_title"
+              name="title"
+              required
+              className={`${controlClass(false)} mt-1`}
+            />
+          </div>
+          <div className="max-w-[12rem]">
+            <label htmlFor="deal_amount" className={label}>
+              Amount (₹)
+            </label>
+            <input
+              id="deal_amount"
+              name="amount"
+              type="number"
+              min="0"
+              step="1"
+              defaultValue="0"
+              className={`${controlClass(false)} mt-1`}
+            />
+          </div>
+          <div>
+            <label htmlFor="deal_account" className={label}>
+              Account
+            </label>
+            <select
+              id="deal_account"
+              name="account_id"
+              defaultValue=""
+              className={`${controlClass(false)} mt-1`}
+            >
+              <option value="">None</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="deal_contact" className={label}>
+              Contact
+            </label>
+            <select
+              id="deal_contact"
+              name="contact_id"
+              defaultValue=""
+              className={`${controlClass(false)} mt-1`}
+            >
+              <option value="">None</option>
+              {contacts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-      <div className="flex gap-2">
-        <button type="submit" disabled={busy} data-testid="create-deal"
-          className="rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50">
-          {busy ? 'Creating...' : 'Create deal'}
-        </button>
-        <button type="button" onClick={() => setOpen(false)} className="rounded border px-4 py-2">Cancel</button>
-      </div>
-    </form>
+          {error ? (
+            <p role="alert" data-testid="deal-error" className="text-[13px] text-critical">
+              {error}
+            </p>
+          ) : null}
+        </form>
+      </Drawer>
+    </>
   );
 }

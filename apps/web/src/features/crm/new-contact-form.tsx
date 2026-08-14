@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
+import { Button, controlClass } from '@/features/ui/controls';
+import { Drawer } from '@/features/ui/drawer';
 
 export interface AccountOption {
   readonly id: string;
@@ -53,104 +55,110 @@ export function NewContactForm({ accounts }: { accounts: AccountOption[] }): JSX
     router.refresh();
   }
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        data-testid="new-contact"
-        onClick={() => setOpen(true)}
-        className="rounded bg-primary px-4 py-2 text-primary-foreground"
-      >
-        New contact
-      </button>
-    );
-  }
+  const label = 'block text-[13px] font-medium text-foreground';
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 rounded border p-4" noValidate>
-      <h2 className="font-medium">New contact</h2>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div>
-          <label htmlFor="first_name" className="block text-sm font-medium">
-            First name
-          </label>
-          <input
-            id="first_name"
-            name="first_name"
-            required
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
-        </div>
-        <div>
-          <label htmlFor="last_name" className="block text-sm font-medium">
-            Last name
-          </label>
-          <input id="last_name" name="last_name" className="mt-1 w-full rounded border px-3 py-2" />
-        </div>
-        <div>
-          <label htmlFor="title" className="block text-sm font-medium">
-            Job title
-          </label>
-          <input id="title" name="title" className="mt-1 w-full rounded border px-3 py-2" />
-        </div>
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium">
-            Email
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
-        </div>
-        <div>
-          <label htmlFor="phone" className="block text-sm font-medium">
-            Phone
-          </label>
-          <input id="phone" name="phone" className="mt-1 w-full rounded border px-3 py-2" />
-        </div>
-        <div>
-          <label htmlFor="account_id" className="block text-sm font-medium">
-            Account
-          </label>
-          <select
-            id="account_id"
-            name="account_id"
-            defaultValue=""
-            className="mt-1 w-full rounded border px-3 py-2"
-          >
-            <option value="">No account</option>
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+    <>
+      <Button variant="primary" data-testid="new-contact" onClick={() => setOpen(true)}>
+        New contact
+      </Button>
 
-      <p className="text-xs text-muted-foreground">An email address or a phone number is required.</p>
+      <Drawer
+        open={open}
+        onClose={() => setOpen(false)}
+        title="New contact"
+        description="A named person at an account. An email address or a phone number is required."
+        footer={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="primary"
+              type="submit"
+              form="new-contact-form"
+              disabled={busy}
+              data-testid="create-contact"
+            >
+              {busy ? 'Creating…' : 'Create contact'}
+            </Button>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        }
+      >
+        <form id="new-contact-form" onSubmit={onSubmit} className="space-y-4" noValidate>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor="first_name" className={label}>
+                First name
+              </label>
+              <input
+                id="first_name"
+                name="first_name"
+                required
+                className={`${controlClass(false)} mt-1`}
+              />
+            </div>
+            <div>
+              <label htmlFor="last_name" className={label}>
+                Last name
+              </label>
+              <input id="last_name" name="last_name" className={`${controlClass(false)} mt-1`} />
+            </div>
+          </div>
 
-      {error ? (
-        <p role="alert" data-testid="contact-error" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+          <div>
+            <label htmlFor="title" className={label}>
+              Job title
+            </label>
+            <input id="title" name="title" className={`${controlClass(false)} mt-1`} />
+          </div>
 
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={busy}
-          data-testid="create-contact"
-          className="rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
-        >
-          {busy ? 'Creating...' : 'Create contact'}
-        </button>
-        <button type="button" onClick={() => setOpen(false)} className="rounded border px-4 py-2">
-          Cancel
-        </button>
-      </div>
-    </form>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor="email" className={label}>
+                Email
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                className={`${controlClass(false)} mt-1`}
+              />
+            </div>
+            <div>
+              <label htmlFor="phone" className={label}>
+                Phone
+              </label>
+              <input id="phone" name="phone" className={`${controlClass(false)} mt-1`} />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="account_id" className={label}>
+              Account
+            </label>
+            <select
+              id="account_id"
+              name="account_id"
+              defaultValue=""
+              className={`${controlClass(false)} mt-1`}
+            >
+              <option value="">No account</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {error ? (
+            <p role="alert" data-testid="contact-error" className="text-[13px] text-critical">
+              {error}
+            </p>
+          ) : null}
+        </form>
+      </Drawer>
+    </>
   );
 }

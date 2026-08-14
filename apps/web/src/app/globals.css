@@ -399,6 +399,60 @@
   }
 }
 
+/*
+ * Below 700px a data table stops being a table and becomes a list of records.
+ *
+ * Seven columns squeezed into a phone is not mobile support - it is the same
+ * table with every value truncated to three characters, which destroys the
+ * hierarchy rather than adapting it. So the rows reflow: the identifying cell
+ * leads, and each remaining value is labelled with its own column header.
+ *
+ * Done in CSS on the same elements rather than by rendering a second list,
+ * because a second list would put two elements behind every `data-testid` and
+ * would drift from the table it is meant to mirror. Columns already dropped at
+ * 900px and 1100px stay dropped here, which is what keeps the stack short.
+ */
+@media (max-width: 699px) {
+  .table-stacked thead {
+    display: none;
+  }
+
+  .table-stacked tr {
+    display: block;
+    padding: 10px 16px;
+  }
+
+  /*
+   * `:not(.hidden)` matters: a column dropped at 900px or 1100px carries
+   * Tailwind's `.hidden`, and `.table-stacked td` outranks it on specificity.
+   * Without this the narrow layout would helpfully reinstate every column the
+   * wider ones had already decided was not worth the space.
+   */
+  .table-stacked td:not(.hidden) {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 2px 0;
+    text-align: left;
+  }
+
+  .table-stacked td:first-child {
+    padding-bottom: 4px;
+  }
+
+  /* The identifying cell needs no label; it is the subject of the record. */
+  .table-stacked td:not(:first-child)[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 7.5rem;
+    color: hsl(var(--text-muted));
+    font-size: 13px;
+  }
+
+  .table-stacked th[colspan] {
+    display: block;
+  }
+}
+
 /* Reflow at 320px without two-dimensional scrolling. */
 @media (max-width: 320px) {
   .dashboard-grid {
