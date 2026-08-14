@@ -128,7 +128,28 @@ for (const theme of ['light', 'dark'] as const) {
       await conversation.click();
       await page.waitForLoadState('networkidle');
       await page.screenshot({ path: `${EVIDENCE}/${theme}-08-inbox-thread.png` });
+
+      /*
+       * The same thread on a large monitor, which is the only place the
+       * conversation layout can be judged.
+       *
+       * Direction is the whole claim - customer left, us right - and at 1440 the
+       * pane is narrow enough that two short messages can look merely indented
+       * rather than opposed. The founders' thread also ends on a genuinely failed
+       * send, so this frame doubles as the failed-message evidence rather than
+       * needing one manufactured for it.
+       */
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await expect(page.getByTestId('thread-messages')).toBeVisible();
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: `${EVIDENCE}/${theme}-08b-inbox-thread-1920.png` });
+      await page.setViewportSize(LAPTOP);
     }
+
+    // Integrations at the width its two-column state panels are designed for.
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await shoot(page, '/settings/integrations', `${theme}-15b-settings-integrations-1920`);
+    await page.setViewportSize(LAPTOP);
   });
 }
 
@@ -173,7 +194,12 @@ test('the shell holds together as the desktop narrows', async ({ page }) => {
   // The widths the responsiveness table names: a wide desktop where Today's
   // observations sit beside the table, a laptop where they stack beneath it, and
   // the width at which the sidebar becomes a 64px icon rail.
-  for (const width of [1680, 1440, 1280, 1024]) {
+  //
+  // 1920 is in the list because the workspace cap is 1600px: it is the only
+  // width here that photographs the centred-with-margins case, which is what a
+  // reviewer on a large monitor actually sees, and the case a left-aligned
+  // layout gets wrong by leaving a third of the desk empty.
+  for (const width of [1920, 1680, 1440, 1280, 1024]) {
     await page.setViewportSize({ width, height: 900 });
     await shoot(page, '/today', `narrow-${width}-today`);
     await shoot(page, '/leads', `narrow-${width}-prospects`);
