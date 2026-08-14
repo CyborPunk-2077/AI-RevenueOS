@@ -375,7 +375,7 @@ export function FormList({
       {forms.map((form) => (
         <li key={form.id}>
           <a href={`/${tenantSlug}/forms/${form.id}`} className="block">
-            <Card interactive>
+            <Card>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="heading text-sm">{form.name}</span>
                 <span className="flex gap-2">

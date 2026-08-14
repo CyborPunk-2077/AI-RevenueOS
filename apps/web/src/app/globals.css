@@ -39,7 +39,13 @@
     /* --- text ------------------------------------------------------------- */
     --text-primary: 24 10% 12%; /* warm charcoal — 15.8:1 on surface */
     --text-secondary: 24 7% 32%; /* 9.1:1 */
-    --text-muted: 24 6% 45%; /* 5.9:1 — the floor for real content */
+    /*
+     * 5.1:1 on `--surface`, and 4.7:1 on `--surface-sunken`, which is the one
+     * that matters: the table header is muted text on the sunken surface, and at
+     * the 45% this started as it measured 4.36:1 there and failed the gate. Every
+     * ratio in this file is against the surface the text actually sits on.
+     */
+    --text-muted: 24 6% 43%;
     --text-disabled: 24 6% 60%; /* non-content only */
 
     /* --- boundaries ------------------------------------------------------- */

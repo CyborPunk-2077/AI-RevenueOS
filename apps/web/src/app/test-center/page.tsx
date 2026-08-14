@@ -636,7 +636,7 @@ export default async function TestCenterPage(): Promise<JSX.Element> {
         </h2>
         <div className="grid gap-4 sm:grid-cols-2">
           {SCENARIOS.map((scenario) => (
-            <Card key={scenario.title} interactive>
+            <Card key={scenario.title}>
               <h3 className="font-medium">{scenario.title}</h3>
               <p className="mt-2 text-sm text-muted-foreground">{scenario.steps}</p>
               <p className="mt-3">
