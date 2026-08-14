@@ -52,9 +52,21 @@ export function FilterLinks({
             )}
           >
             {link.label}
+            {/*
+              Parenthesised, because a bare number beside a word reads as part of
+              the label at a glance ("Overdue 3" looks like a heading). It is also
+              the shape the Inbox's counts already had, and the browser suite that
+              proves an empty view can be told apart from an empty inbox asserts
+              on it.
+            */}
             {link.count === undefined ? null : (
-              <span className={cn('tabular', current ? 'text-secondary-foreground' : 'text-muted-foreground')}>
-                {link.count}
+              <span
+                className={cn(
+                  'tabular',
+                  current ? 'text-secondary-foreground' : 'text-muted-foreground',
+                )}
+              >
+                ({link.count})
               </span>
             )}
           </Link>

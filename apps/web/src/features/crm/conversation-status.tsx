@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
+import { controlClass } from '@/features/ui/controls';
 
 export function ConversationStatus({
   conversationId,
@@ -36,17 +37,28 @@ export function ConversationStatus({
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <label htmlFor="conv_status" className="text-sm text-muted-foreground">Status</label>
-      <select id="conv_status" data-testid="conversation-status" value={status} disabled={busy}
+    <div className="flex shrink-0 items-center gap-2">
+      <label htmlFor="conv_status" className="text-[13px] text-muted-foreground">
+        Status
+      </label>
+      <select
+        id="conv_status"
+        data-testid="conversation-status"
+        value={status}
+        disabled={busy}
         onChange={(e) => void change(e.target.value)}
-        className="rounded border px-2 py-1 text-sm">
+        className={`${controlClass(false)} w-auto`}
+      >
         <option value="active">Active</option>
         <option value="resolved">Resolved</option>
         <option value="archived">Archived</option>
         <option value="spam">Spam</option>
       </select>
-      {error ? (<span role="alert" className="text-xs text-destructive">{error}</span>) : null}
+      {error ? (
+        <span role="alert" className="text-[13px] text-critical">
+          {error}
+        </span>
+      ) : null}
     </div>
   );
 }

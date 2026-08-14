@@ -1,31 +1,14 @@
-import Link from 'next/link';
 import { apiFetch } from '@/lib/session';
 import { AutoRefresh } from '@/features/crm/auto-refresh';
+import {
+  ConversationFilters,
+  ConversationList,
+  type ConversationSummary,
+} from '@/features/crm/conversation-list';
 import { NewConversationForm } from '@/features/crm/new-conversation-form';
 import { PageHeader } from '@/features/ui/primitives';
-import { formatDateTime } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
-
-interface LeadContext {
-  readonly id: string;
-  readonly name: string;
-  readonly company: string | null;
-  readonly phone: string | null;
-  readonly owner_name: string | null;
-}
-
-interface Conversation {
-  readonly id: string;
-  readonly subject: string | null;
-  readonly primary_channel: string;
-  readonly status: string;
-  readonly contact_name: string | null;
-  readonly assignee_name: string | null;
-  readonly unread_count: number;
-  readonly last_message_at: string | null;
-  readonly lead: LeadContext | null;
-}
 
 interface NamedContact {
   readonly id: string;
@@ -33,8 +16,18 @@ interface NamedContact {
   readonly last_name: string | null;
 }
 
-interface Channel { readonly channel: string; readonly ready: boolean }
+interface Channel {
+  readonly channel: string;
+  readonly ready: boolean;
+}
 
+/**
+ * Communications operations, not a messaging app.
+ *
+ * Two panes above 1100px: the conversation list on the left and the transcript
+ * on the right, which is the shape somebody works a queue in. Below that they
+ * are separate routes, as they always were.
+ */
 export default async function InboxPage({
   searchParams,
 }: {
@@ -44,7 +37,7 @@ export default async function InboxPage({
   const query = status ? `&status=${encodeURIComponent(status)}` : '';
 
   const [inboxResult, contactResult, channelResult] = await Promise.all([
-    apiFetch<{ conversations: Conversation[]; status_counts: Record<string, number> }>(
+    apiFetch<{ conversations: ConversationSummary[]; status_counts: Record<string, number> }>(
       `/conversations?page_size=50${query}`,
     ),
     apiFetch<{ contacts: NamedContact[] }>('/contacts?page_size=200'),
@@ -62,91 +55,58 @@ export default async function InboxPage({
   const unavailable = channels.filter((c) => !c.ready).map((c) => c.channel);
 
   return (
-    <div className="space-y-8">
-      <PageHeader title="Inbox" description="Conversations across every channel. Only your organisation&rsquo;s threads are visible." />
+    <div className="space-y-5">
+      <PageHeader
+        title="Inbox"
+        description="Conversations across every channel. Only your organisation’s threads are visible."
+        actions={<NewConversationForm contacts={contacts} channels={channels} />}
+      />
 
+      {/*
+        Which channels genuinely cannot send. Stated once, at the top, rather
+        than discovered when a reply silently fails to arrive.
+      */}
       {unavailable.length > 0 ? (
-        <p data-testid="gated-channels" className="rounded border border-dashed p-3 text-sm text-muted-foreground">
-          Not configured for sending: <strong>{unavailable.join(', ')}</strong>. Replies on those
-          channels are recorded and held as <code>queued</code> until a provider credential exists.
+        <p data-testid="gated-channels" className="max-w-reading text-[13px] text-muted-foreground">
+          Not configured for sending: <strong className="text-foreground">{unavailable.join(', ')}</strong>.
+          Replies on those channels are recorded and held as <code>queued</code> until a provider
+          credential exists.
         </p>
       ) : null}
-
-      {/* Counts on every filter. An empty Active while threads sat in Archived
-          read as data loss to the founder; the filter still filters, it just
-          says where everything else is. */}
-      <nav aria-label="Filter" className="flex gap-2 text-sm" data-testid="inbox-filters">
-        {['', 'active', 'resolved', 'archived'].map((value) => (
-          <Link key={value || 'all'} href={value ? `/inbox?status=${value}` : '/inbox'}
-            aria-current={status === value ? 'page' : undefined}
-            data-testid={`filter-${value || 'all'}`}
-            className={status === value ? 'rounded border px-3 py-1 font-medium' : 'rounded border px-3 py-1 text-muted-foreground'}>
-            {value || 'All'} ({counts[value || 'all'] ?? 0})
-          </Link>
-        ))}
-      </nav>
 
       {/* New threads arrive from providers, so the list has to go and look. */}
       <AutoRefresh intervalMs={10000} />
 
-      <NewConversationForm contacts={contacts} channels={channels} />
-
       <section aria-labelledby="inbox-list-heading">
-        <h2 id="inbox-list-heading" className="sr-only">Conversations</h2>
-        {conversations.length === 0 ? (
-          <p data-testid="inbox-empty" className="surface border-dashed p-6 text-center text-sm text-muted-foreground">
-            {totalEverywhere > 0 ? (
-              <>
-                Nothing under <strong>{status || 'All'}</strong>. This workspace has{' '}
-                {totalEverywhere} conversation{totalEverywhere === 1 ? '' : 's'} under the other
-                filters &mdash; nothing has been lost.{' '}
-                <Link href="/inbox" className="underline">
-                  Show all
-                </Link>
-              </>
-            ) : (
-              'No conversations yet. Open one above.'
-            )}
-          </p>
-        ) : (
-          <ul className="divide-y" data-testid="conversation-rows">
-            {conversations.map((conversation) => (
-              <li key={conversation.id} className="flex items-center justify-between gap-4 py-3 text-sm">
-                <div>
-                  <Link href={`/inbox/${conversation.id}`} data-testid={`conversation-link-${conversation.id}`}
-                    className="font-medium underline">
-                    {conversation.subject ?? '(no subject)'}
-                  </Link>
-                  {/* Who it is with, read from the matched prospect. */}
-                  <p className="text-xs text-muted-foreground" data-testid={`who-${conversation.id}`}>
-                    {conversation.primary_channel}
-                    {conversation.lead
-                      ? ` · ${conversation.lead.name}${
-                          conversation.lead.company ? ` (${conversation.lead.company})` : ''
-                        }`
-                      : conversation.contact_name
-                        ? ` · ${conversation.contact_name}`
-                        : ''}
-                    {conversation.assignee_name ?? conversation.lead?.owner_name
-                      ? ` · ${conversation.assignee_name ?? conversation.lead?.owner_name}`
-                      : ''}
-                  </p>
-                </div>
-                <div className="text-right text-xs text-muted-foreground">
-                  <span className="rounded bg-muted px-2 py-0.5 uppercase">{conversation.status}</span>
-                  {conversation.unread_count > 0 ? (
-                    <span data-testid={`unread-${conversation.id}`} className="ml-2 font-medium text-foreground">
-                      {conversation.unread_count} unread
-                    </span>
-                  ) : null}
-                  {conversation.last_message_at ? (
-                    <p className="mt-1">{formatDateTime(conversation.last_message_at)}</p>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <h2 id="inbox-list-heading" className="sr-only">
+          Conversations
+        </h2>
+
+        <div className="overflow-hidden rounded-lg border border-border bg-surface min-[1100px]:flex min-[1100px]:items-stretch">
+          <div className="min-[1100px]:w-[22.5rem] min-[1100px]:shrink-0 min-[1100px]:border-r min-[1100px]:border-border">
+            <div className="border-b border-border bg-surface-sunken px-4 py-1.5">
+              <ConversationFilters status={status} counts={counts} />
+            </div>
+            <ConversationList
+              conversations={conversations}
+              totalEverywhere={totalEverywhere}
+              status={status}
+            />
+          </div>
+
+          {/*
+            The transcript pane, empty until a conversation is chosen. Above
+            1100px the shape of the screen stays the same whether or not one is
+            open, which is what makes working down a queue feel continuous.
+          */}
+          <div className="hidden flex-1 items-center justify-center p-10 text-center min-[1100px]:flex">
+            <p className="max-w-reading text-sm text-muted-foreground">
+              {conversations.length > 0
+                ? 'Choose a conversation to read it and reply.'
+                : 'Conversations opened by a customer, or by you, appear here.'}
+            </p>
+          </div>
+        </div>
       </section>
     </div>
   );

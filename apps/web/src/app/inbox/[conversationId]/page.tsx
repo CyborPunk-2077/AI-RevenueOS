@@ -2,12 +2,20 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { apiFetch } from '@/lib/session';
 import { AutoRefresh } from '@/features/crm/auto-refresh';
+import {
+  ConversationFilters,
+  ConversationList,
+  type ConversationSummary,
+} from '@/features/crm/conversation-list';
 import { ConversationStatus } from '@/features/crm/conversation-status';
 import {
   ConversationThread,
   type ChannelReadiness,
   type ThreadMessage,
 } from '@/features/crm/conversation-thread';
+import { Avatar } from '@/features/ui/avatar';
+import { ChannelIcon, channelLabel } from '@/features/ui/channel-icon';
+import { StatusText } from '@/features/ui/status';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,84 +53,146 @@ export default async function ConversationPage({
   if (!result.ok || !result.data) notFound();
   const conversation = result.data;
 
-  const [threadResult, channelResult] = await Promise.all([
+  const [threadResult, channelResult, listResult] = await Promise.all([
     apiFetch<{ messages: ThreadMessage[] }>(`/conversations/${params.conversationId}/messages`),
     apiFetch<{ channels: ChannelReadiness[] }>('/conversations/channels'),
+    // The list beside the transcript, so working a queue does not mean going
+    // back to a different page between every conversation.
+    apiFetch<{ conversations: ConversationSummary[]; status_counts: Record<string, number> }>(
+      '/conversations?page_size=50',
+    ),
   ]);
   const messages = threadResult.data?.messages ?? [];
   const channels = channelResult.data?.channels ?? [];
+  const conversations = listResult.data?.conversations ?? [];
+  const counts = listResult.data?.status_counts ?? {};
+
+  const lead = conversation.lead;
+  const business = lead?.company ?? lead?.name ?? conversation.contact_name ?? null;
+  const contact = lead?.company && lead.name !== lead.company ? lead.name : null;
+  // The thread's own assignee if somebody set one, otherwise the prospect's
+  // owner - which is who is actually responsible.
+  const owner = conversation.assignee_name ?? lead?.owner_name ?? null;
 
   return (
-    <div className="space-y-8">
-      <nav aria-label="Breadcrumb" className="text-sm">
-        <Link href="/inbox" className="underline">Inbox</Link>
+    <div className="space-y-4">
+      <nav aria-label="Breadcrumb" className="text-[13px]">
+        <Link href="/inbox" className="text-muted-foreground underline-offset-2 hover:underline">
+          &larr; Inbox
+        </Link>
       </nav>
-
-      <section className="space-y-3">
-        <h1 className="text-xl font-semibold" data-testid="conversation-subject">
-          {conversation.subject ?? '(no subject)'}
-        </h1>
-        {/* Who this actually is. Read from the matched prospect rather than from
-            anything copied into the conversation, so a rename or a reassignment
-            on the prospect is true here the moment it happens. */}
-        <dl className="grid gap-3 text-sm sm:grid-cols-4" data-testid="conversation-identity">
-          <div>
-            <dt className="text-muted-foreground">Channel</dt>
-            <dd>{conversation.primary_channel}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Customer</dt>
-            <dd data-testid="conversation-customer">
-              {conversation.lead ? (
-                <Link href={`/leads/${conversation.lead.id}`} className="underline">
-                  {conversation.lead.name}
-                </Link>
-              ) : conversation.contact_id && conversation.contact_name ? (
-                <Link href={`/contacts/${conversation.contact_id}`} className="underline">
-                  {conversation.contact_name}
-                </Link>
-              ) : (
-                <span className="text-muted-foreground">Not matched to anyone yet</span>
-              )}
-              {conversation.lead?.company ? (
-                <span className="block text-xs text-muted-foreground">
-                  {conversation.lead.company}
-                </span>
-              ) : null}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Phone</dt>
-            <dd className="tabular" data-testid="conversation-phone">
-              {conversation.lead?.phone ?? '—'}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Assigned to</dt>
-            <dd data-testid="conversation-owner">
-              {/* The thread's own assignee if somebody set one, otherwise the
-                  prospect's owner - which is who is actually responsible. */}
-              {conversation.assignee_name ?? conversation.lead?.owner_name ?? 'Unassigned'}
-            </dd>
-          </div>
-        </dl>
-
-        <ConversationStatus conversationId={conversation.id} status={conversation.status}
-          version={conversation.version} />
-
-        {conversation.automation_stopped ? (
-          <p data-testid="automation-stopped" className="text-xs text-muted-foreground">
-            Automation is paused on this thread because a human replied.
-          </p>
-        ) : null}
-      </section>
 
       {/* Inbound messages and status changes arrive from a provider, not from
           this browser, so the screen has to go and look. */}
       <AutoRefresh intervalMs={6000} />
 
-      <ConversationThread conversationId={conversation.id} channel={conversation.primary_channel}
-        messages={messages} channels={channels} />
+      <div className="overflow-hidden rounded-lg border border-border bg-surface min-[1100px]:flex min-[1100px]:items-stretch">
+        <div className="hidden min-[1100px]:block min-[1100px]:w-[22.5rem] min-[1100px]:shrink-0 min-[1100px]:border-r min-[1100px]:border-border">
+          <div className="border-b border-border bg-surface-sunken px-4 py-1.5">
+            <ConversationFilters status="" counts={counts} />
+          </div>
+          <ConversationList
+            conversations={conversations}
+            activeId={conversation.id}
+            totalEverywhere={counts.all ?? 0}
+            status=""
+          />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          {/*
+            The customer, above the transcript. Read from the matched prospect
+            rather than from anything copied onto the conversation, so a rename
+            or a reassignment on the prospect is true here the moment it happens.
+          */}
+          <header className="border-b border-border px-5 py-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-2.5">
+                <Avatar name={business ?? 'Unmatched'} size="lg" className="mt-0.5" />
+                <div className="min-w-0">
+                  <h1
+                    className="truncate text-lg font-semibold text-foreground"
+                    data-testid="conversation-subject"
+                  >
+                    {conversation.subject ?? '(no subject)'}
+                  </h1>
+                  <dl
+                    className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[13px]"
+                    data-testid="conversation-identity"
+                  >
+                    <div className="flex items-baseline gap-1.5">
+                      <dt className="text-muted-foreground">Customer</dt>
+                      <dd data-testid="conversation-customer" className="text-foreground">
+                        {lead ? (
+                          <Link
+                            href={`/leads/${lead.id}`}
+                            className="text-accent underline-offset-2 hover:underline"
+                          >
+                            {business}
+                          </Link>
+                        ) : conversation.contact_id && conversation.contact_name ? (
+                          <Link
+                            href={`/contacts/${conversation.contact_id}`}
+                            className="text-accent underline-offset-2 hover:underline"
+                          >
+                            {conversation.contact_name}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">Not matched to anyone yet</span>
+                        )}
+                      </dd>
+                    </div>
+                    {contact ? (
+                      <div className="flex items-baseline gap-1.5">
+                        <dt className="text-muted-foreground">Contact</dt>
+                        <dd className="text-foreground">{contact}</dd>
+                      </div>
+                    ) : null}
+                    <div className="flex items-baseline gap-1.5">
+                      <dt className="text-muted-foreground">Phone</dt>
+                      <dd className="tabular text-foreground" data-testid="conversation-phone">
+                        {lead?.phone ?? '—'}
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                      <dt className="text-muted-foreground">Assigned to</dt>
+                      <dd data-testid="conversation-owner" className="text-foreground">
+                        {owner ?? <StatusText tone="critical">Unassigned</StatusText>}
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                      <dt className="text-muted-foreground">Channel</dt>
+                      <dd className="flex items-center gap-1.5 text-foreground">
+                        <ChannelIcon channel={conversation.primary_channel} size={14} />
+                        {channelLabel(conversation.primary_channel)}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+
+              <ConversationStatus
+                conversationId={conversation.id}
+                status={conversation.status}
+                version={conversation.version}
+              />
+            </div>
+
+            {conversation.automation_stopped ? (
+              <p data-testid="automation-stopped" className="mt-2 text-[13px] text-muted-foreground">
+                Automation is paused on this thread because a human replied.
+              </p>
+            ) : null}
+          </header>
+
+          <ConversationThread
+            conversationId={conversation.id}
+            channel={conversation.primary_channel}
+            messages={messages}
+            channels={channels}
+          />
+        </div>
+      </div>
     </div>
   );
 }
