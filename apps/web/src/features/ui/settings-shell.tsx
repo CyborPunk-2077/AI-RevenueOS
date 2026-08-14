@@ -10,9 +10,19 @@ import { cn } from './cn';
  * Settings contained without going there and looking. A persistent list is both
  * the map and the navigation.
  *
- * The Test Centre is listed only outside production. The route itself refuses to
- * render there, so this is not the security boundary; it is just not offering a
- * door that is locked.
+ * The Test Centre is developer tooling and is listed only when somebody asks for
+ * it by name, with `SHOW_TEST_CENTRE=true`.
+ *
+ * Gating it on `NODE_ENV !== 'production'` was not enough. The local demo *is* a
+ * development build, so the one context where this matters most - a founder
+ * showing Sangam to an SME - was exactly the context that displayed a section
+ * labelled "Development only" in the customer-facing Settings menu. Category D
+ * tooling must not look like a product feature.
+ *
+ * The route is deliberately kept and still works when opened directly; it is the
+ * advertisement that is withdrawn, not the tool. Production remains barred by the
+ * route itself, which is the actual security boundary - this is only about which
+ * doors are offered.
  */
 
 export type SettingsSection = 'integrations' | 'webchat' | 'team' | 'test-center';
@@ -42,7 +52,7 @@ export function SettingsShell({
     { key: 'team', href: `/${tenantSlug}/settings/team`, label: 'Team', hint: 'People and invitations' },
   ];
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' && process.env.SHOW_TEST_CENTRE === 'true') {
     sections.push({
       key: 'test-center',
       href: '/test-center',

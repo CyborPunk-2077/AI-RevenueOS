@@ -298,6 +298,63 @@ function Wait-ForStack {
 }
 
 
+function Invoke-ComposeCapture {
+    <#
+        Runs docker compose, shows the output, and returns it as well.
+
+        `Invoke-Compose` writes straight to the host, which is right for every
+        other call. This one needs the text too, and the seed's own progress must
+        still appear as it happens rather than arriving in a silent block at the
+        end.
+    #>
+    param([Parameter(Mandatory)][string[]]$ComposeArgs)
+
+    $lines = & docker compose @ComposeArgs 2>&1 | ForEach-Object {
+        Write-Host $_
+        $_
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "docker compose $($ComposeArgs -join ' ') failed with exit code $LASTEXITCODE"
+    }
+    return ($lines | Out-String)
+}
+
+function Get-PasswordAppliesTo {
+    <#
+        Which accounts the seed actually applied the supplied password to.
+
+        `seed_sangam.py` prints one machine-readable line for this. An empty list
+        is the normal answer on any run after the first, and means the password
+        this script generated was set on nobody - so there is nothing it may
+        legitimately verify with.
+
+        A missing line is treated the same way. An older container image would not
+        print it, and guessing is exactly the failure this replaces.
+    #>
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$SeedOutput)
+
+    $match = [regex]::Match($SeedOutput, 'SANGAM_PASSWORD_APPLIES_TO=([^\r\n]*)')
+    if (-not $match.Success) { return @() }
+    return $match.Groups[1].Value.Split(',') |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ }
+}
+
+function Select-VerifiableAccount {
+    <#
+        One account whose password this run genuinely knows, or $null.
+
+        Prefers the founder because that is the account the printed instructions
+        send people to, but any account the password was applied to proves the
+        same path: the same seed, the same hash, the same BFF, the same cookie.
+    #>
+    param([string[]]$AppliesTo)
+
+    if (-not $AppliesTo -or $AppliesTo.Count -eq 0) { return $null }
+    if ($AppliesTo -contains 'abhishek@sangam.co.in') { return 'abhishek@sangam.co.in' }
+    return $AppliesTo[0]
+}
+
 function Test-DemoLogin {
     <#
         Sign in as a demo user through the web app, the way the browser does.
@@ -576,10 +633,17 @@ try {
     # because this tenant is meant to be used for real prospecting. Rebuild the
     # synthetic rows deliberately with:
     #   docker compose exec api python src/scripts/seed_sangam.py --refresh
+    #
+    # The output is captured as well as shown, because one line of it -
+    # SANGAM_PASSWORD_APPLIES_TO - is the only thing that can tell this script
+    # which accounts the password it just printed was actually set on. Existing
+    # people deliberately keep their own passwords, so on every run after the
+    # first that list is empty.
     Write-Step 'Seeding the Sangam workspace'
-    Invoke-Compose -ComposeArgs @(
+    $seedOutput = Invoke-ComposeCapture -ComposeArgs @(
         'exec', '-T', '-e', "DEMO_PASSWORD=$Password", 'api', 'python', 'src/scripts/seed_sangam.py'
     )
+    $passwordAppliesTo = Get-PasswordAppliesTo -SeedOutput $seedOutput
     Write-Ok 'Sangam workspace seeded'
 
     # --- wait for the web app ---------------------------------------------
@@ -593,8 +657,27 @@ try {
     # to sign in twice before being locked out of their own demo. One successful
     # sign-in proves the whole credential path: same password, same seed, same
     # cookie handling.
-    Write-Step 'Verifying the sign-in through the web app'
-    Test-DemoLogin -Email 'abhishek@sangam.co.in' -DemoPassword $Password
+    #
+    # **Only an account the password was actually applied to.** This used to test
+    # abhishek@sangam.co.in unconditionally. That account normally already exists,
+    # normally keeps the password it already had - which is the correct, deliberate
+    # behaviour of the seed - and so the launcher was signing in with a credential
+    # that had never been set on it. A perfectly healthy stack failed on a 401, and
+    # the failure pointed at credentials, which sent people to RESET_DEMO to fix a
+    # problem that did not exist.
+    #
+    # A verification that cannot be performed is not a failure. It is simply
+    # unavailable, and the honest thing is to say so and carry on.
+    $verifyAccount = Select-VerifiableAccount -AppliesTo $passwordAppliesTo
+    if ($verifyAccount) {
+        Write-Step 'Verifying the sign-in through the web app'
+        Test-DemoLogin -Email $verifyAccount -DemoPassword $Password
+    } else {
+        Write-Step 'Sign-in verification'
+        Write-Warn 'Skipped: every demo account already existed, so this run set no password'
+        Write-Warn 'it could test with. Their existing passwords are unchanged and still work.'
+        Write-Warn 'The API, workers and web app were all verified above.'
+    }
 
     # --- done --------------------------------------------------------------
     $rule = ('=' * 68)
@@ -611,15 +694,32 @@ try {
     Write-Host '    priya@sangam.co.in      sees her team''s prospects (manager)'
     Write-Host '    kiran@sangam.co.in      sees only his own (salesperson)'
     Write-Host ''
+    # Say who the printed password is actually for.
+    #
+    # It used to be printed as a single fact under every account on the screen,
+    # which was true on a first run and wrong on every one after it: the Sangam
+    # accounts keep their own passwords by design, so somebody reading this was
+    # told a credential for accounts it had never been set on.
+    if ($passwordAppliesTo.Count -gt 0) {
+        Write-Host "  Password    $Password" -ForegroundColor Yellow
+        Write-Host "              applies to the $($passwordAppliesTo.Count) account(s) created on this run:"
+        foreach ($account in $passwordAppliesTo) { Write-Host "                $account" }
+        if ($generated) {
+            Write-Host '              generated for this run and stored nowhere;'
+            Write-Host '              pass -Password to choose your own'
+        }
+    } else {
+        Write-Host '  Password    unchanged - every account above already existed' -ForegroundColor Yellow
+        Write-Host '              and kept the password it already had.'
+        Write-Host '              To set a known one for the Sangam demo accounts:'
+        Write-Host '                docker compose exec -e DEMO_PASSWORD=your-passphrase api \'
+        Write-Host '                  python src/scripts/seed_sangam.py --reset-passwords'
+    }
+    Write-Host ''
     Write-Host '  Also available, for the tenant-isolation check:' -ForegroundColor Cyan
     Write-Host '    asha@acme.test     tenant acme    (a few sample leads)'
     Write-Host '    ravi@globex.test   tenant globex  (empty, which is the point)'
-    Write-Host ''
-    Write-Host "  Password    $Password" -ForegroundColor Yellow
-    if ($generated) {
-        Write-Host '              generated for this run and stored nowhere;'
-        Write-Host '              pass -Password to choose your own'
-    }
+    Write-Host "    both use: $Password" -ForegroundColor Yellow
     Write-Host ''
     Write-Host '  Sign in as abhishek@sangam.co.in and start on Today. The guide is'
     Write-Host '  in docs\OWNER-TEST-GUIDE.md and takes about ten minutes.'

@@ -852,7 +852,7 @@ def _spec(
 
 async def ensure_workspace(
     password_hash: str, *, reset_passwords: bool = False
-) -> tuple[dict[str, UUID], int]:
+) -> tuple[dict[str, UUID], list[str]]:
     """The founders' workspace, plus the empty one the browser tests write to.
 
     The tenant, role, user, branch and team routines this used to carry live in
@@ -866,8 +866,14 @@ async def ensure_workspace(
     founders out of their own workspace - which is exactly what happened. A first
     seed may create credentials; a later start must not rotate them. Rotation is
     now something somebody asks for by name, with `--reset-passwords`.
+
+    Returns the emails the supplied password was *actually applied to*, not a
+    count. The launcher needs to know which specific accounts it may verify with
+    the password it printed: a count told it "three accounts got this", which is
+    not the same as "this account got this", and it went on to test the founder's
+    login with a credential that had never been set on it.
     """
-    created = 0
+    created: list[str] = []
     async with admin_session() as session:
         result = await provision_workspace(
             session,
@@ -881,7 +887,7 @@ async def ensure_workspace(
             password_hash=password_hash,
             reset_credentials=reset_passwords,
         )
-        created += len(result.created_users)
+        created += result.created_users
         e2e = await provision_workspace(
             session,
             _spec(
@@ -894,7 +900,7 @@ async def ensure_workspace(
             password_hash=password_hash,
             reset_credentials=reset_passwords,
         )
-        created += len(e2e.created_users)
+        created += e2e.created_users
         pilot = await provision_workspace(
             session,
             _spec(
@@ -907,7 +913,7 @@ async def ensure_workspace(
             password_hash=password_hash,
             reset_credentials=reset_passwords,
         )
-        created += len(pilot.created_users)
+        created += pilot.created_users
 
     return result.users, created
 
@@ -1335,9 +1341,10 @@ async def main() -> int:
         raise SystemExit(f"seed_sangam refuses to run in the '{settings.environment}' environment")
 
     password, generated = resolve_password()
-    users, created = await ensure_workspace(
+    users, applied_to = await ensure_workspace(
         hash_password(password), reset_passwords=args.reset_passwords
     )
+    created = len(applied_to)
 
     if args.adopt_existing_samples:
         from application.tenants.demo_data import adopt_existing_demo_rows
@@ -1362,6 +1369,19 @@ async def main() -> int:
     # to. Printing it unconditionally is how somebody ends up certain they know a
     # credential that was never set - and how a normal start silently locked the
     # founders out of their own workspace.
+    # A stable, machine-readable line for the launcher, listing the accounts the
+    # printed password was actually applied to.
+    #
+    # The launcher used to infer this from a count, which cannot answer the only
+    # question it has: may I verify *this* account with the password I printed?
+    # With three new accounts and a pre-existing founder it inferred yes, tested
+    # abhishek@sangam.co.in with a credential that had never been set on it, and
+    # failed a healthy stack on a 401. An explicit list cannot be misread, and an
+    # empty one is a legitimate answer meaning "verify nothing".
+    if args.reset_passwords:
+        applied_to = [email for email, _n, _r, _s in (*TEAM, *E2E_TEAM, *PILOT_E2E_TEAM)]
+    print(f"SANGAM_PASSWORD_APPLIES_TO={','.join(sorted(applied_to))}")  # noqa: T201
+
     if args.reset_passwords:
         print(f"\n  password (reset for everyone): {password}")  # noqa: T201
     elif created:

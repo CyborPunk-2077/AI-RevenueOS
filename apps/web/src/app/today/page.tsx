@@ -190,21 +190,41 @@ const COLUMNS: Array<Column<AttentionRow>> = [
     header: 'Next action',
     dropAt: 900,
     width: '18%',
-    cell: (row) =>
-      row.nextAction ? (
+    cell: (row) => {
+      if (!row.nextAction) return <MissingValue>None set</MissingValue>;
+      /*
+       * One red word per row, not three.
+       *
+       * An overdue row already carries a critical severity rule down its left
+       * edge; when the wait itself is overdue the Waiting column says so in red
+       * as well. Repeating it here made a single fact shout from three places
+       * across one row, which is the "everything is red" problem in miniature -
+       * and the rows where the *task* is overdue but the wait is not, which are
+       * the ones this column exists to surface, were no louder than the rest.
+       *
+       * So the marker stays wherever it is the only textual signal, and steps
+       * back to muted where the Waiting column has already said it. Nothing is
+       * removed: every overdue row still reads "Overdue" in words, and the rule
+       * and the sr-only label are untouched.
+       */
+      const alreadySaidInWaiting = row.whenTone === 'critical';
+      return (
         <span className="flex items-baseline gap-2">
           <span className="truncate text-secondary-foreground" title={row.nextAction.title}>
             {row.nextAction.title}
           </span>
           {row.nextAction.overdue ? (
-            <StatusText tone="critical" className="shrink-0">
-              Overdue
-            </StatusText>
+            alreadySaidInWaiting ? (
+              <span className="shrink-0 text-xs text-muted-foreground">overdue</span>
+            ) : (
+              <StatusText tone="critical" className="shrink-0">
+                Overdue
+              </StatusText>
+            )
           ) : null}
         </span>
-      ) : (
-        <MissingValue>None set</MissingValue>
-      ),
+      );
+    },
   },
 ];
 
