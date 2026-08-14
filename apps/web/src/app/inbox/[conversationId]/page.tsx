@@ -15,7 +15,7 @@ import {
 } from '@/features/crm/conversation-thread';
 import { Avatar } from '@/features/ui/avatar';
 import { ChannelIcon, channelLabel } from '@/features/ui/channel-icon';
-import { StatusText } from '@/features/ui/status';
+import { MissingValue } from '@/features/ui/status';
 
 export const dynamic = 'force-dynamic';
 
@@ -172,7 +172,7 @@ export default async function ConversationPage({
                     <div className="flex items-baseline gap-1.5">
                       <dt className="text-muted-foreground">Assigned to</dt>
                       <dd data-testid="conversation-owner" className="text-foreground">
-                        {owner ?? <StatusText tone="critical">Unassigned</StatusText>}
+                        {owner ?? <MissingValue>Unassigned</MissingValue>}
                       </dd>
                     </div>
                     <div className="flex items-baseline gap-1.5">

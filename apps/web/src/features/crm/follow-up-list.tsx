@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { mutate } from '@/lib/csrf';
 import { Button } from '@/features/ui/controls';
 import { DataTable, TableEmpty, type Column } from '@/features/ui/data-table';
-import { StatusText } from '@/features/ui/status';
+import { MissingValue, StatusText } from '@/features/ui/status';
 import { formatDate } from '@/lib/dates';
 
 export interface FollowUp {
@@ -163,7 +163,7 @@ export function FollowUpList({
         task.assignee_name ? (
           <span className="block truncate text-secondary-foreground">{task.assignee_name}</span>
         ) : (
-          <StatusText tone="critical">Unassigned</StatusText>
+          <MissingValue>Unassigned</MissingValue>
         ),
     },
     {

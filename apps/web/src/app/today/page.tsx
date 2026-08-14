@@ -7,7 +7,7 @@ import { DataTable, TableEmpty, type Column, type RowGroup } from '@/features/ui
 import { duration, elapsedSince, minutesBetween, RelativeTime } from '@/features/ui/format';
 import { MetricStrip, type Metric } from '@/features/ui/metric-strip';
 import { PageHeader, SectionHeader } from '@/features/ui/primitives';
-import { StatusText } from '@/features/ui/status';
+import { MissingValue, StatusText } from '@/features/ui/status';
 import { money } from '@/lib/money';
 
 export const dynamic = 'force-dynamic';
@@ -157,7 +157,7 @@ const COLUMNS: Array<Column<AttentionRow>> = [
       row.owner ? (
         <span className="block truncate text-secondary-foreground">{row.owner}</span>
       ) : (
-        <StatusText tone="critical">Unassigned</StatusText>
+        <MissingValue>Unassigned</MissingValue>
       ),
   },
   {
@@ -203,7 +203,7 @@ const COLUMNS: Array<Column<AttentionRow>> = [
           ) : null}
         </span>
       ) : (
-        <StatusText tone="critical">None set</StatusText>
+        <MissingValue>None set</MissingValue>
       ),
   },
 ];
@@ -549,7 +549,7 @@ export default async function TodayPage(): Promise<JSX.Element> {
                   <div key={name} className="flex items-baseline justify-between gap-3">
                     <dt className="truncate text-muted-foreground">
                       {name === 'Unassigned' ? (
-                        <StatusText tone="critical">Unassigned</StatusText>
+                        <MissingValue>Unassigned</MissingValue>
                       ) : (
                         name
                       )}

@@ -55,6 +55,38 @@ export function StatusText({
   );
 }
 
+/**
+ * A fact that is absent, said plainly: `Unassigned`, `None set`, `No reply yet`.
+ *
+ * These were `StatusText tone="critical"`, which put them in the same red as
+ * `Overdue` and `Failed`. On a queue where most rows are unowned and most have
+ * no next action - which is exactly what a fresh prospecting list looks like -
+ * that painted almost the entire table red, and the two rows that had genuinely
+ * gone wrong were indistinguishable from the twenty that were merely new.
+ *
+ * Red is reserved for a deadline that has passed or a provider that refused. An
+ * empty field is not a failure; it is work that has not been done yet, and the
+ * word already says so. Medium weight keeps it findable while scanning without
+ * making it compete, and the word itself is what survives grayscale.
+ *
+ * Where an absence *has* become risky - a first reply nobody has sent in seven
+ * days - the risk is carried by the thing that measures it, not by this.
+ */
+export function MissingValue({
+  children,
+  className = '',
+  ...rest
+}: {
+  children: ReactNode;
+  className?: string;
+} & { 'data-testid'?: string; title?: string }): JSX.Element {
+  return (
+    <span className={cn('font-medium text-muted-foreground', className)} {...rest}>
+      {children}
+    </span>
+  );
+}
+
 const MARK_TONE: Record<Severity, string> = {
   neutral: 'bg-transparent',
   critical: 'bg-critical',

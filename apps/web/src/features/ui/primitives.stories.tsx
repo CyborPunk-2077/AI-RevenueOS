@@ -15,7 +15,7 @@ import {
   Stat,
 } from './primitives';
 import { RecordHeader } from './record-header';
-import { LabelChip, SeverityMark, StatusText } from './status';
+import { LabelChip, MissingValue, SeverityMark, StatusText } from './status';
 import { ThemePair } from './theme-pair';
 import { FilterLinks, Toolbar } from './toolbar';
 
@@ -46,7 +46,7 @@ export const Status: Story = {
       <div className="space-y-3 text-sm">
         <p>
           <StatusText>Contacted</StatusText> · <StatusText tone="critical">Overdue</StatusText> ·{' '}
-          <StatusText tone="critical">Unassigned</StatusText> ·{' '}
+          <MissingValue>Unassigned</MissingValue> ·{' '}
           <StatusText tone="warning">Due today</StatusText> ·{' '}
           <StatusText tone="positive">Answered</StatusText>
         </p>
@@ -160,7 +160,7 @@ const COLUMNS: Array<Column<Row>> = [
     header: 'Owner',
     cell: (row) =>
       row.owner === 'Unassigned' ? (
-        <StatusText tone="critical">Unassigned</StatusText>
+        <MissingValue>Unassigned</MissingValue>
       ) : (
         row.owner
       ),

@@ -12,7 +12,7 @@ import { WhatsAppReplyBox } from '@/features/crm/whatsapp-reply-box';
 import { duration, minutesBetween } from '@/features/ui/format';
 import { SectionHeader } from '@/features/ui/primitives';
 import { RecordHeader, type MetaFact } from '@/features/ui/record-header';
-import { LabelChip, StatusText } from '@/features/ui/status';
+import { LabelChip, MissingValue, StatusText } from '@/features/ui/status';
 import { formatDate } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
@@ -136,7 +136,7 @@ export default async function LeadDetailPage({
       value: owner ? (
         owner.full_name
       ) : (
-        <StatusText tone="critical">Unassigned</StatusText>
+        <MissingValue>Unassigned</MissingValue>
       ),
     },
     { key: 'source', label: 'Source', value: lead.source.replace(/_/g, ' ') },

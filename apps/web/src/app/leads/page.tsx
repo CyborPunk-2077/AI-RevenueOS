@@ -6,7 +6,7 @@ import { Avatar } from '@/features/ui/avatar';
 import { DataTable, TableEmpty, type Column } from '@/features/ui/data-table';
 import { duration, minutesBetween } from '@/features/ui/format';
 import { PageHeader } from '@/features/ui/primitives';
-import { LabelChip, StatusText } from '@/features/ui/status';
+import { LabelChip, MissingValue, StatusText } from '@/features/ui/status';
 import { FilterLinks, Toolbar, type FilterLink } from '@/features/ui/toolbar';
 
 export const dynamic = 'force-dynamic';
@@ -192,7 +192,7 @@ const COLUMNS: Array<Column<Row>> = [
       ) : row.settled ? (
         <span className="text-muted-foreground">&mdash;</span>
       ) : (
-        <StatusText tone="critical">None set</StatusText>
+        <MissingValue>None set</MissingValue>
       ),
   },
   {
@@ -205,7 +205,7 @@ const COLUMNS: Array<Column<Row>> = [
         {row.replyMinutes !== null ? (
           <span className="text-secondary-foreground">{duration(row.replyMinutes)}</span>
         ) : row.noReply ? (
-          <StatusText tone="critical">Not yet</StatusText>
+          <MissingValue>Not yet</MissingValue>
         ) : (
           <span className="text-muted-foreground">&mdash;</span>
         )}
