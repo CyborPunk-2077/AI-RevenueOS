@@ -203,15 +203,12 @@
   /*
    * Inline links in prose and in table cells are not 44px blocks. This exemption
    * is what makes a dense operational table possible at all; removing it inflates
-   * every row to the height of a button.
+   * every row to the height of a button. It is deliberately the whole list - the
+   * sidebar keeps full-size targets rather than being granted a fourth exception.
    */
   p a[href],
   li a[href],
-  td a[href],
-  nav a[href],
-  .inline-target,
-  .inline-target a[href],
-  .inline-target button {
+  td a[href] {
     min-height: 0;
     min-width: 0;
   }

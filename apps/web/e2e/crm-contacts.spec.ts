@@ -112,7 +112,9 @@ test("a second tenant cannot see the first tenant's contact or account", async (
   await expect(contactLink).toBeVisible();
   const contactHref = await contactLink.getAttribute('href');
 
-  // Switch tenants.
+  // Switch tenants. Sign-out moved into the account menu in the utility bar when
+  // the eleven-tab header became a sidebar, so the menu is opened first.
+  await page.getByTestId('account-menu').click();
   await page.getByTestId('sign-out').click();
   await page.waitForURL('**/login');
   await context.clearCookies();

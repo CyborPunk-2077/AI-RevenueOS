@@ -72,7 +72,9 @@ test('a second tenant cannot see the first tenant\'s record', async ({ page, con
   const href = await link.getAttribute('href');
   expect(href).toBeTruthy();
 
-  // Sign out and in as the other tenant.
+  // Sign out and in as the other tenant. Sign-out moved into the account menu in
+  // the utility bar when the eleven-tab header became a sidebar.
+  await page.getByTestId('account-menu').click();
   await page.getByTestId('sign-out').click();
   await page.waitForURL('**/login');
   await context.clearCookies();
