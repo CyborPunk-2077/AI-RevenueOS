@@ -38,10 +38,13 @@ import { ThemeToggle } from './theme-toggle';
  *   collapsed state is how the previous header ended up duplicated across three
  *   layouts - and it would also mean two elements carrying every `nav-*` test id.
  * - **The group labels are not printed.** Five uppercase headings above twelve
- *   items is more chrome than navigation. Grouping is carried by spacing and a
- *   hairline, and named on each list for assistive technology.
- * - **The active item is a 2px rule**, plus foreground text and a sunken
- *   background. Never a filled pill.
+ *   items is more chrome than navigation. Grouping is carried by spacing alone -
+ *   16px between groups against 2px between items - and named on each list for
+ *   assistive technology. The hairlines that used to do this drew a ladder down
+ *   the edge of every screen and made navigation the busiest column in the
+ *   product.
+ * - **The active item is a 3px rule**, plus foreground text, an accent-tinted
+ *   icon and a sunken background. Never a filled pill.
  *
  * Widths follow section 24 of the UI/UX system: 240px with labels, a 64px icon
  * rail below 1200px, an overlay below 900px.
@@ -174,7 +177,6 @@ const WORKSPACE_LABELS: Record<
  */
 const EXPANDED = 'sr-only min-[1200px]:not-sr-only group-data-[open=true]:not-sr-only';
 const EXPANDED_BLOCK = 'hidden min-[1200px]:block group-data-[open=true]:block';
-const COLLAPSED_ONLY = 'min-[1200px]:hidden group-data-[open=true]:hidden';
 const ROW_LAYOUT =
   'justify-center px-0 min-[1200px]:justify-start min-[1200px]:px-2.5 group-data-[open=true]:justify-start group-data-[open=true]:px-2.5';
 
@@ -207,24 +209,36 @@ function SidebarPanel({
           'group-data-[open=true]:justify-start group-data-[open=true]:px-3',
         )}
       >
+        {/*
+          The wordmark, given the weight a product name should carry. It was
+          16px text, which made the one piece of permanent brand in the
+          application smaller than a table heading. The mark is a flat accent
+          square with the initial - not a gradient, not a logo lockup - so the
+          identity survives the 64px rail where the word cannot.
+        */}
         <Link
           href="/today"
           onClick={onNavigate}
-          className="text-base font-semibold tracking-[-0.01em] text-foreground"
+          className="flex items-center gap-2.5 rounded text-foreground"
         >
-          <span className={expanded}>Sangam</span>
-          <span className={COLLAPSED_ONLY} aria-hidden="true">
+          <span
+            aria-hidden="true"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-accent text-[13px] font-semibold text-accent-foreground"
+          >
             S
+          </span>
+          <span className={cn(expanded, 'text-[17px] font-semibold tracking-[-0.015em]')}>
+            Sangam
           </span>
         </Link>
       </div>
 
-      <nav aria-label="Sections" className="flex-1 overflow-y-auto px-2 py-3">
+      <nav aria-label="Sections" className="flex-1 overflow-y-auto px-2.5 py-3">
         {groups.map((group, index) => (
           <ul
             key={group.name}
             aria-label={group.name}
-            className={cn(index > 0 && 'mt-2 border-t border-border pt-2')}
+            className={cn('space-y-0.5', index > 0 && 'mt-4')}
           >
             {group.items.map((item) => {
               const current = item.key === active;
@@ -238,24 +252,27 @@ function SidebarPanel({
                     title={item.label}
                     onClick={onNavigate}
                     className={cn(
-                      // 40px, not the global 44px. `li a[href]` is already exempt
+                      // 42px, not the global 44px. `li a[href]` is already exempt
                       // from that rule for prose and table links; a twelve-item
                       // sidebar at 44px pushes the workspace block off a 720px
                       // viewport, which is the height a laptop actually has.
-                      'relative flex min-h-[40px] items-center gap-2.5 rounded text-sm transition-colors',
+                      'relative flex min-h-[var(--nav-row-height)] items-center gap-3 rounded text-sm transition-colors',
                       rowLayout,
+                      // The active row reads at a glance rather than on
+                      // inspection, and still is not a filled pill: the label
+                      // stays foreground-coloured and the row stays a row.
                       current
-                        ? 'bg-surface-sunken font-medium text-foreground'
+                        ? 'bg-surface-sunken font-medium text-foreground [&>svg]:text-accent'
                         : 'text-secondary-foreground hover:bg-surface-hover hover:text-foreground',
                     )}
                   >
                     {current ? (
                       <span
                         aria-hidden="true"
-                        className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-accent"
+                        className="absolute inset-y-1.5 left-0 w-[3px] rounded-r bg-accent"
                       />
                     ) : null}
-                    <Icon size={17} strokeWidth={1.75} />
+                    <Icon size={17} strokeWidth={1.75} className="shrink-0" />
                     <span className={expanded}>{item.label}</span>
                   </Link>
                 </li>
@@ -404,8 +421,22 @@ export function AppShell({
           </div>
         </header>
 
-        <main id="main-content" className="flex-1 px-5 py-6 min-[900px]:px-8 min-[900px]:py-7">
-          <div className="max-w-page">{children}</div>
+        {/*
+          Fluid to `--page-max`, and centred only once it gets there.
+
+          `mx-auto` matters at the top of the range and nowhere else. Left-aligned
+          content on a 2560px display puts the table against one edge with a third
+          of the desk empty beside it; centring a capped column keeps the
+          composition deliberate instead. Below the cap both margins are zero, so
+          nothing moves on a laptop. Padding steps up with the viewport because
+          32px that frames a 1136px column looks like a rounding error against a
+          1600px one.
+        */}
+        <main
+          id="main-content"
+          className="flex-1 px-5 py-6 min-[900px]:px-8 min-[900px]:py-7 min-[1600px]:px-12"
+        >
+          <div className="mx-auto max-w-page">{children}</div>
         </main>
       </div>
     </div>

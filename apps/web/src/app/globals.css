@@ -164,9 +164,28 @@
     --sidebar-width: 240px;
     --sidebar-collapsed: 64px;
     --utility-bar-height: 52px;
-    --page-max: 1280px;
+    /*
+     * The workspace cap, not a content cap.
+     *
+     * This was 1280px, which is a sensible measure for prose and the wrong one
+     * for this product: at 1920 it left roughly a third of the monitor as dead
+     * grey to the right of every table, and the application read as a phone
+     * layout that had been stretched. Operational screens - queues, the Inbox,
+     * anything with columns - want the width, because the alternative to using
+     * it is truncating customer names.
+     *
+     * 1600px is where a table stops gaining and starts drifting: the eye has to
+     * travel too far from the business name to the owner. Reading-width content
+     * is capped separately and much earlier by `--reading-max`, which is what
+     * `max-w-reading` exists for. Two different problems, two different caps.
+     */
+    --page-max: 1600px;
     --page-pad-x: 32px;
     --reading-max: 68ch;
+
+    /* Navigation. 42px sits in the middle of the 40-44 target: comfortable
+       under the cursor, and twelve of them still clear a 720px laptop. */
+    --nav-row-height: 42px;
   }
 
   * {

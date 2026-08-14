@@ -86,26 +86,41 @@ export default async function ConversationPage({
           this browser, so the screen has to go and look. */}
       <AutoRefresh intervalMs={6000} />
 
-      <div className="overflow-hidden rounded-lg border border-border bg-surface min-[1100px]:flex min-[1100px]:items-stretch">
-        <div className="hidden min-[1100px]:block min-[1100px]:w-[22.5rem] min-[1100px]:shrink-0 min-[1100px]:border-r min-[1100px]:border-border">
-          <div className="border-b border-border bg-surface-sunken px-4 py-1.5">
+      {/*
+        A workspace, not a document.
+
+        The transcript scrolls inside its own pane and the composer sits at the
+        bottom of it, which is only true if the panel has a height of its own -
+        so on a desktop it takes the viewport minus the chrome above it. Left as
+        an ordinary block the page scrolled instead: the composer sat below the
+        fold on any conversation longer than a screen, and answering a customer
+        began by scrolling past their entire history to find the box.
+
+        Below 1100px it flows normally again, because a 700px-tall pane inside a
+        720px window is worse than a page that simply scrolls.
+      */}
+      <div className="overflow-hidden rounded-lg border border-border bg-surface min-[1100px]:flex min-[1100px]:h-[calc(100vh-var(--utility-bar-height)-7.5rem)] min-[1100px]:items-stretch">
+        <div className="hidden min-[1100px]:flex min-[1100px]:w-[21rem] min-[1100px]:shrink-0 min-[1100px]:flex-col min-[1100px]:border-r min-[1100px]:border-border min-[1400px]:w-[24rem]">
+          <div className="shrink-0 border-b border-border bg-surface-sunken px-4 py-1.5">
             <ConversationFilters status="" counts={counts} />
           </div>
-          <ConversationList
-            conversations={conversations}
-            activeId={conversation.id}
-            totalEverywhere={counts.all ?? 0}
-            status=""
-          />
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <ConversationList
+              conversations={conversations}
+              activeId={conversation.id}
+              totalEverywhere={counts.all ?? 0}
+              status=""
+            />
+          </div>
         </div>
 
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
           {/*
             The customer, above the transcript. Read from the matched prospect
             rather than from anything copied onto the conversation, so a rename
             or a reassignment on the prospect is true here the moment it happens.
           */}
-          <header className="border-b border-border px-5 py-4">
+          <header className="shrink-0 border-b border-border px-5 py-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-2.5">
                 <Avatar name={business ?? 'Unmatched'} size="lg" className="mt-0.5" />

@@ -1,13 +1,12 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { mutate } from '@/lib/csrf';
 import { channelLabel } from '@/features/ui/channel-icon';
 import { cn } from '@/features/ui/cn';
 import { Button, controlClass } from '@/features/ui/controls';
-import { LabelChip } from '@/features/ui/status';
-import { formatDateTime } from '@/lib/dates';
+import { dayKey, formatDayHeading, formatDateTime, formatTime } from '@/lib/dates';
 
 export interface ThreadMessage {
   readonly id: string;
@@ -27,25 +26,39 @@ export interface ChannelReadiness {
 }
 
 /**
- * A conversation transcript with a reply box.
+ * A customer conversation, in the grammar people already read conversations in.
  *
- * **Readability first, and not a chat app.** One column, capped at a comfortable
- * measure, left-aligned. Inbound and outbound are told apart by a surface step, a
- * 2px accent rule on our own messages, and a stated sender - not by coloured
- * balloons with tails on alternating sides, which is a consumer messaging idiom
- * and reads as a toy in an operations screen.
+ * **This replaces a single left-aligned column of bordered records.** That column
+ * was defensible - it was chosen to avoid looking like a consumer chat app - and
+ * in use it was wrong. Every message was a full-width rectangle with a header
+ * line, so a fourteen-message thread read as fourteen database rows and the one
+ * question an operator actually asks a transcript, *who said this*, had to be
+ * answered by reading rather than by looking.
  *
- * **Provider truth is visually quiet and never invented.** `queued`, `sent`,
- * `delivered` and `read` are small muted words under the message, exactly as the
- * provider reported them. There is no tick system, because a tick implies a
- * state machine richer than the one Meta actually gives us. `failed` is the one
- * that earns critical treatment and a chip: it means the customer never received
- * it, and that is not a detail.
+ * So: **inbound left, outbound right**, which is the one layout convention every
+ * user of this product already knows. What is deliberately *not* borrowed is the
+ * decoration - no tails, no provider green, no wallpaper, no ticks. The bubbles
+ * are the same two surfaces the rest of the application uses, with the same 1px
+ * borders and the same 6px radius. Direction is carried by position and surface;
+ * everything else stays Sangam.
  *
- * The reply box never claims a message was sent. The API answers `queued`, and
- * when a channel has no provider credential the UI says so in plain words - an
- * operator believing a customer received something that never left the building
- * is the failure mode this whole gating design exists to prevent.
+ * Three things hold the density down:
+ *
+ * - **Runs group.** Consecutive messages from the same side are 2px apart with
+ *   one attribution and one timestamp for the run, rather than each carrying its
+ *   own header. Six rapid-fire customer messages become one visual paragraph.
+ * - **Days separate.** A hairline with the date, so a thread spanning a week is
+ *   legible without reading timestamps.
+ * - **Status is quiet.** `sent` / `delivered` / `read` sit under the last message
+ *   of an outbound run, muted and small.
+ *
+ * **Provider truth is never invented.** Those words are exactly what Meta
+ * reported and nothing else; there is no tick system, because a tick implies a
+ * state machine richer than the one we actually get. `queued` says plainly that
+ * it has not been sent. `failed` is the one state that earns critical colour and
+ * a full-width line, because it means the customer never received the message,
+ * and an operator who misses that will follow up on a conversation that never
+ * happened.
  */
 
 /** What the provider has told us, in the words it told us. */
@@ -56,6 +69,50 @@ const DELIVERY_WORDS: Record<string, string> = {
   read: 'read',
   failed: 'failed',
 };
+
+interface Run {
+  readonly outbound: boolean;
+  readonly messages: ThreadMessage[];
+}
+
+interface DayGroup {
+  readonly key: string;
+  readonly iso: string;
+  readonly runs: Run[];
+}
+
+/**
+ * Messages into days, and each day into runs of one direction.
+ *
+ * Done here rather than in the markup because the alternative - comparing
+ * against the previous element mid-render - is where off-by-one grouping bugs
+ * live, and because a run needs to know its own last message to decide where the
+ * timestamp and the delivery state go.
+ */
+function group(messages: ThreadMessage[]): DayGroup[] {
+  const days: DayGroup[] = [];
+  for (const message of messages) {
+    const key = dayKey(message.created_at);
+    let day = days[days.length - 1];
+    if (!day || day.key !== key) {
+      day = { key, iso: message.created_at ?? '', runs: [] };
+      days.push(day);
+    }
+    const outbound = message.direction === 'outbound';
+    const run = day.runs[day.runs.length - 1];
+    // A failed message always starts its own run. Folding it into a group would
+    // hide the one state that has to be seen, behind a shared status line that
+    // describes a different message.
+    const failed = message.status === 'failed';
+    const previousFailed = run?.messages[run.messages.length - 1]?.status === 'failed';
+    if (run && run.outbound === outbound && !failed && !previousFailed) {
+      run.messages.push(message);
+    } else {
+      day.runs.push({ outbound, messages: [message] });
+    }
+  }
+  return days;
+}
 
 export function ConversationThread({
   conversationId,
@@ -72,8 +129,22 @@ export function ConversationThread({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const foot = useRef<HTMLDivElement | null>(null);
 
   const ready = channels.find((c) => c.channel === channel)?.ready ?? false;
+  const days = group(messages);
+
+  /*
+   * Open at the newest message, the way every transcript in the world opens.
+   *
+   * `block: 'nearest'` on a scroll container that is itself inside the page
+   * scroller: without it the browser also scrolls the *page* to bring the
+   * transcript into view, which throws the utility bar and the customer header
+   * off the top of the screen on arrival.
+   */
+  useEffect(() => {
+    foot.current?.scrollIntoView({ block: 'nearest' });
+  }, [messages.length]);
 
   async function post(path: string, content: string): Promise<boolean> {
     setBusy(true);
@@ -81,7 +152,9 @@ export function ConversationThread({
     setNotice(null);
     const response = await mutate(path, { method: 'POST', body: { content } });
     if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
       setError(payload.error?.message ?? 'Could not save the message.');
       setBusy(false);
       return false;
@@ -110,107 +183,171 @@ export function ConversationThread({
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <h2 className="sr-only">Messages</h2>
 
       {/*
         The transcript sits on the canvas, not on the panel surface. Inbound
-        messages are `--surface` and outbound `--surface-sunken`, and that step is
-        only a step if the paper behind them is a third value - on a surface
-        background the inbound messages would simply disappear.
+        bubbles are `--surface` and outbound `--accent-soft`, and neither step is
+        a step unless the paper behind them is a third value.
       */}
-      <div className="bg-canvas px-5 py-4">
+      <div className="min-h-[22rem] flex-1 overflow-y-auto bg-canvas px-5 py-5">
         {messages.length === 0 ? (
           <p data-testid="thread-empty" className="py-8 text-center text-sm text-muted-foreground">
             Nothing in this thread yet.
           </p>
         ) : (
-          <ol className="max-w-reading space-y-3" data-testid="thread-messages">
-            {messages.map((message) => {
-              const outbound = message.direction === 'outbound';
-              const failed = message.status === 'failed';
-              return (
-                <li
-                  key={message.id}
-                  className={cn(
-                    'rounded border px-3.5 py-2.5',
-                    outbound
-                      ? 'border-l-2 border-border border-l-accent bg-surface-sunken'
-                      : 'border-border bg-surface',
-                  )}
-                >
-                  <p className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
-                    {/* Said in words. Which side of the screen something is on is
-                        not information a screen reader can use. */}
-                    <span>
-                      {outbound
-                        ? `${message.sender_name ?? 'Us'} · ${channelLabel(message.channel)}`
-                        : `Customer · ${channelLabel(message.channel)}`}
-                    </span>
-                    <span className="tabular">
-                      {message.created_at ? formatDateTime(message.created_at) : ''}
-                    </span>
-                  </p>
+          /*
+            Capped and centred, which a transcript needs and a table does not.
 
-                  <p className="mt-1 whitespace-pre-wrap text-sm leading-[21px] text-foreground">
-                    {message.redacted ? (
-                      <em className="text-muted-foreground">Message redacted</em>
-                    ) : (
-                      message.content
-                    )}
-                  </p>
+            The pane itself takes whatever width the monitor gives it, and at
+            1920 that put a customer's message against the left edge and the
+            reply nearly 1200px away on the right - two columns of unrelated
+            text rather than one exchange. Alternation only reads as alternation
+            when both sides are inside one field of view.
+          */
+          <ol className="mx-auto max-w-[58rem] space-y-5" data-testid="thread-messages">
+            {days.map((day) => (
+              <li key={day.key}>
+                {/* A hairline through the date, rather than a floating chip. */}
+                <p className="flex items-center gap-3 pb-4 text-xs font-medium text-muted-foreground">
+                  <span aria-hidden="true" className="h-px flex-1 bg-border" />
+                  <span>{formatDayHeading(day.iso)}</span>
+                  <span aria-hidden="true" className="h-px flex-1 bg-border" />
+                </p>
 
-                  {outbound ? (
-                    <p className="mt-1.5 text-xs" data-testid={`status-${message.id}`}>
-                      {failed ? (
-                        <>
-                          <LabelChip tone="critical">failed</LabelChip>
-                          <span className="ml-2 text-muted-foreground">
-                            {message.failure_reason ?? 'the provider rejected it'} &mdash; the
-                            customer did not receive this.
+                <ol className="space-y-3">
+                  {day.runs.map((run) => {
+                    const last = run.messages[run.messages.length - 1];
+                    const failed = last.status === 'failed';
+                    const who = run.outbound
+                      ? (last.sender_name ?? 'Sangam')
+                      : (last.sender_name ?? 'Customer');
+                    return (
+                      <li
+                        key={run.messages[0].id}
+                        className={cn(
+                          'flex flex-col gap-0.5',
+                          run.outbound ? 'items-end' : 'items-start',
+                        )}
+                      >
+                        {/*
+                          Said in words, above the run. Which side of the screen
+                          something is on is not information a screen reader can
+                          use, and `sr-only` here would mean the sighted reader
+                          loses the sender's name on a shared inbox.
+                        */}
+                        <p className="px-1 text-xs text-muted-foreground">
+                          {who} · {channelLabel(last.channel)}
+                        </p>
+
+                        {run.messages.map((message) => (
+                          <div
+                            key={message.id}
+                            data-direction={run.outbound ? 'outbound' : 'inbound'}
+                            data-testid={`message-${message.id}`}
+                            className={cn(
+                              'max-w-[min(34rem,78%)] rounded-lg border px-3.5 py-2 text-sm leading-[21px]',
+                              run.outbound
+                                ? 'border-accent-soft bg-accent-soft text-foreground'
+                                : 'border-border bg-surface text-foreground',
+                              // The one state that is allowed to shout.
+                              message.status === 'failed' && 'border-critical/45 bg-critical-soft',
+                            )}
+                          >
+                            <p className="whitespace-pre-wrap">
+                              {message.redacted ? (
+                                <em className="text-muted-foreground">Message redacted</em>
+                              ) : (
+                                message.content
+                              )}
+                            </p>
+                          </div>
+                        ))}
+
+                        {/*
+                          One timestamp and one delivery state for the run, under
+                          its last message. Per-message stamps on a burst of four
+                          replies is four lines of chrome describing ninety
+                          seconds.
+                        */}
+                        <p
+                          className={cn(
+                            'flex flex-wrap items-baseline gap-x-2 px-1 text-xs',
+                            run.outbound ? 'justify-end' : 'justify-start',
+                          )}
+                          data-testid={`status-${last.id}`}
+                        >
+                          <span
+                            className="tabular text-muted-foreground"
+                            title={formatDateTime(last.created_at)}
+                          >
+                            {formatTime(last.created_at)}
                           </span>
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          {DELIVERY_WORDS[message.status] ?? message.status}
-                          {message.failure_reason ? ` · ${message.failure_reason}` : ''}
-                        </span>
-                      )}
-                    </p>
-                  ) : null}
-                </li>
-              );
-            })}
+                          {run.outbound ? (
+                            failed ? (
+                              <span className="font-medium text-critical">
+                                Failed — {last.failure_reason ?? 'the provider rejected it'}. The
+                                customer did not receive this.
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                · {DELIVERY_WORDS[last.status] ?? last.status}
+                                {last.failure_reason ? ` · ${last.failure_reason}` : ''}
+                              </span>
+                            )
+                          ) : null}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </li>
+            ))}
           </ol>
         )}
+        <div ref={foot} aria-hidden="true" />
       </div>
 
-      <div className="space-y-3 border-t border-border px-5 py-4">
-        {!ready ? (
-          <p data-testid="channel-gated" className="max-w-reading text-[13px] text-muted-foreground">
-            <strong className="text-foreground">{channelLabel(channel)}</strong> has no provider
-            credential configured. Replies are recorded and held as <code>queued</code>; nothing is
-            delivered until the channel is activated.
-          </p>
-        ) : null}
+      {/*
+        The composer, anchored to the bottom of the conversation column.
 
-        <form onSubmit={onReply} className="max-w-reading space-y-2" noValidate>
-          <label htmlFor="reply" className="block text-[13px] font-medium text-foreground">
-            Reply
-          </label>
-          <textarea
-            id="reply"
-            name="reply"
-            rows={3}
-            required
-            className={controlClass(false)}
-          />
-          <Button variant="primary" type="submit" disabled={busy} data-testid="send-reply">
-            {ready ? 'Send' : 'Queue reply'}
-          </Button>
-        </form>
+        `sticky` rather than `fixed`: it belongs to this pane, and a fixed
+        composer would sit over the conversation list on the left as well.
+      */}
+      <div className="sticky bottom-0 shrink-0 border-t border-border bg-surface px-5 py-4">
+        <div className="mx-auto max-w-[58rem] space-y-3">
+          {!ready ? (
+            <p
+              data-testid="channel-gated"
+              className="max-w-reading text-[13px] text-muted-foreground"
+            >
+              <strong className="text-foreground">{channelLabel(channel)}</strong> has no provider
+              credential configured. Replies are recorded and held as <code>queued</code>; nothing
+              is delivered until the channel is activated.
+            </p>
+          ) : null}
 
-        {/* Manufacturing a customer message by hand.
+          <form onSubmit={onReply} className="space-y-2" noValidate>
+            <label htmlFor="reply" className="sr-only">
+              Reply
+            </label>
+            <textarea
+              id="reply"
+              name="reply"
+              rows={2}
+              required
+              placeholder={ready ? 'Write a reply…' : 'Write a reply — it will be queued…'}
+              className={cn(controlClass(false), 'min-h-[4.5rem] resize-y')}
+            />
+            <div className="flex items-center justify-end">
+              <Button variant="primary" type="submit" disabled={busy} data-testid="send-reply">
+                {ready ? 'Send' : 'Queue reply'}
+              </Button>
+            </div>
+          </form>
+
+          {/* Manufacturing a customer message by hand.
 
             This existed so the thread could be exercised before any provider was
             connected. Once one is, it becomes a way for an ordinary employee to
@@ -221,43 +358,49 @@ export function ConversationThread({
             So it disappears the moment the channel can genuinely receive. The
             endpoint stays: the browser suites still drive channels that have no
             provider, and that is exactly the case this control still serves. */}
-        {!ready ? (
-          <form
-            onSubmit={onSimulateInbound}
-            className="max-w-reading space-y-2 border-t border-dashed border-border pt-3"
-            noValidate
-          >
-            <label htmlFor="inbound" className="block text-[13px] font-medium text-foreground">
-              Record an inbound message
-            </label>
-            <p className="text-[13px] text-muted-foreground">
-              Development only, and shown because <strong className="text-foreground">{channelLabel(channel)}</strong>{' '}
-              has no provider connected. Real traffic lands on this same path after webhook
-              signature verification, and this control disappears once the channel is live.
-            </p>
-            <textarea
-              id="inbound"
-              name="inbound"
-              rows={2}
-              required
-              className={controlClass(false)}
-            />
-            <Button variant="ghost" type="submit" disabled={busy} data-testid="record-inbound">
-              Record inbound
-            </Button>
-          </form>
-        ) : null}
+          {!ready ? (
+            <form
+              onSubmit={onSimulateInbound}
+              className="max-w-reading space-y-2 border-t border-dashed border-border pt-3"
+              noValidate
+            >
+              <label htmlFor="inbound" className="block text-[13px] font-medium text-foreground">
+                Record an inbound message
+              </label>
+              <p className="text-[13px] text-muted-foreground">
+                Development only, and shown because{' '}
+                <strong className="text-foreground">{channelLabel(channel)}</strong> has no provider
+                connected. Real traffic lands on this same path after webhook signature
+                verification.
+              </p>
+              <textarea
+                id="inbound"
+                name="inbound"
+                rows={2}
+                required
+                className={controlClass(false)}
+              />
+              <Button variant="ghost" type="submit" disabled={busy} data-testid="record-inbound">
+                Record inbound
+              </Button>
+            </form>
+          ) : null}
 
-        {error ? (
-          <p role="alert" data-testid="thread-error" className="text-[13px] text-critical">
-            {error}
-          </p>
-        ) : null}
-        {notice ? (
-          <p role="status" data-testid="delivery-note" className="text-[13px] text-muted-foreground">
-            {notice}
-          </p>
-        ) : null}
+          {error ? (
+            <p role="alert" data-testid="thread-error" className="text-[13px] text-critical">
+              {error}
+            </p>
+          ) : null}
+          {notice ? (
+            <p
+              role="status"
+              data-testid="delivery-note"
+              className="text-[13px] text-muted-foreground"
+            >
+              {notice}
+            </p>
+          ) : null}
+        </div>
       </div>
     </div>
   );
