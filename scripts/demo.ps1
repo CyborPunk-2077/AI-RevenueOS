@@ -60,6 +60,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Windows PowerShell 5.1 does not load System.Net.Http by default, and the
+# readiness probe needs HttpClient - see Get-HttpStatus for why Invoke-WebRequest
+# is not usable here. PowerShell 7 already has it, so this is a no-op there.
+Add-Type -AssemblyName System.Net.Http
+
 # Run from the repository root regardless of where this was invoked.
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $RepoRoot
@@ -102,6 +107,69 @@ function Invoke-Compose {
     }
 }
 
+function Get-HttpStatus {
+    <#
+        One bounded HTTP GET. Returns the status code, or 0 with the reason in
+        $script:LastProbeError when the request did not complete.
+
+        This uses HttpClient rather than Invoke-WebRequest for one specific
+        reason. `Invoke-WebRequest -TimeoutSec n` sets HttpWebRequest.Timeout,
+        which bounds only the wait for the *response headers*. The response body
+        is governed by ReadWriteTimeout, which -TimeoutSec does not touch and
+        which defaults to 300 seconds on this platform. A server that returns
+        headers immediately and then streams the body slowly - exactly what the
+        Next.js dev server does while it is compiling a route - therefore blocks
+        the call for up to five minutes regardless of the timeout that was asked
+        for, and the polling loop around it cannot re-check its own deadline
+        while that is happening.
+
+        HttpClient.Timeout bounds the whole operation, and ResponseHeadersRead
+        means the status line is enough: readiness is "the app answered", not
+        "the app finished streaming its HTML".
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [Parameter(Mandatory)][int]$TimeoutSec
+    )
+
+    $client = [System.Net.Http.HttpClient]::new()
+    try {
+        $client.Timeout = [TimeSpan]::FromSeconds([Math]::Max(1, $TimeoutSec))
+        $request = [System.Net.Http.HttpRequestMessage]::new(
+            [System.Net.Http.HttpMethod]::Get, $Url)
+        $response = $client.SendAsync(
+            $request, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead
+        ).GetAwaiter().GetResult()
+        try {
+            return [int]$response.StatusCode
+        } finally {
+            $response.Dispose()
+        }
+    } catch {
+        # Connection refused, DNS failure, or the bounded timeout elapsed. All of
+        # them mean "not ready yet"; the reason is kept for the final message.
+        #
+        # Unwrapped to the innermost exception on purpose: PowerShell wraps this
+        # as 'Exception calling "GetResult" with "0" argument(s)', which tells an
+        # operator nothing. The inner message is the one that says whether the
+        # port refused the connection or the request timed out - and those two
+        # need completely different things done about them.
+        $inner = $_.Exception
+        while ($inner.InnerException) { $inner = $inner.InnerException }
+        $script:LastProbeError = if ($inner -is [System.Threading.Tasks.TaskCanceledException]) {
+            # Deliberately does not guess whether the connection was established:
+            # from here the two are indistinguishable, and claiming one would send
+            # somebody looking in the wrong place.
+            "no answer within ${TimeoutSec}s"
+        } else {
+            $inner.Message
+        }
+        return 0
+    } finally {
+        $client.Dispose()
+    }
+}
+
 function Wait-ForUrl {
     <#
         Polls a URL until it answers, and throws if the timeout elapses.
@@ -111,32 +179,61 @@ function Wait-ForUrl {
         output stream, so the caller received @(<log lines>, $false) -- a non-empty
         array, which is truthy -- and sailed past the failure. Throwing cannot be
         swallowed that way, and the caller's catch block already reports it.
+
+        **The per-attempt window is deliberately generous.** It used to be five
+        seconds, which is shorter than a cold Next.js dev server takes to compile
+        `/login` for the first time - so every attempt aborted the compile, the
+        next attempt started it again, and the launcher could sit there while a
+        browser in another window loaded the same URL perfectly well, because a
+        browser waits. A long window costs nothing when the service is genuinely
+        down: an unavailable port refuses the connection immediately rather than
+        hanging, so the loop still spins fast and still reaches its deadline.
+
+        Every attempt is individually bounded and the deadline is re-checked
+        between attempts, so the total wall-clock time cannot exceed $Timeout by
+        more than one attempt window.
     #>
     param(
         [Parameter(Mandatory)][string]$Url,
         [Parameter(Mandatory)][string]$Name,
-        [int]$Timeout = $TimeoutSeconds
+        [int]$Timeout = $TimeoutSeconds,
+        # Long enough for a first compile, short enough that the operator sees
+        # the deadline honoured rather than a frozen spinner.
+        [int]$AttemptTimeout = 30
     )
-    $deadline = (Get-Date).AddSeconds($Timeout)
-    $frames = @('|', '/', '-', '\')
-    $i = 0
-    while ((Get-Date) -lt $deadline) {
-        try {
-            $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 5
-            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
-                Write-Host "`r    $Name is up ($Url)                         " -ForegroundColor Green
-                return
-            }
-        } catch {
-            # Not listening yet, or still compiling. Keep waiting.
-            $null = $_
+
+    $started = Get-Date
+    $deadline = $started.AddSeconds($Timeout)
+    $script:LastProbeError = 'no attempt completed'
+
+    while ($true) {
+        $remaining = [int][Math]::Ceiling(($deadline - (Get-Date)).TotalSeconds)
+        if ($remaining -le 0) { break }
+
+        # Never let a single attempt run past the deadline.
+        $status = Get-HttpStatus -Url $Url -TimeoutSec ([Math]::Min($AttemptTimeout, $remaining))
+
+        # Anything the app answered itself counts. A 4xx from /login is the app
+        # replying; only 5xx and "no answer at all" mean it is not up yet.
+        if ($status -ge 200 -and $status -lt 500) {
+            Write-Host "`r    $Name is up ($Url)                                        " -ForegroundColor Green
+            return
         }
-        Write-Host "`r    waiting for $Name $($frames[$i % 4])" -NoNewline
-        $i = $i + 1
-        Start-Sleep -Seconds 2
+
+        $waited = [int]((Get-Date) - $started).TotalSeconds
+        Write-Host "`r    waiting for $Name - ${waited}s elapsed, ${remaining}s left    " -NoNewline
+
+        # Do not sleep past the deadline: the operator asked for a bound and the
+        # last thing they should see is the script honouring it.
+        $left = ($deadline - (Get-Date)).TotalSeconds
+        if ($left -le 0) { break }
+        Start-Sleep -Seconds ([Math]::Min(2, [Math]::Ceiling($left)))
     }
+
     Write-Host ''
-    Write-Err "$Name did not respond at $Url within $Timeout seconds. Last 40 log lines:"
+    Write-Err "$Name did not respond at $Url within $Timeout seconds."
+    Write-Err "Last probe result: $script:LastProbeError"
+    Write-Err 'Last 40 log lines:'
     # Out-Host keeps this off the output stream, for the reason described above.
     & docker compose logs --tail=40 $Name 2>&1 | Out-Host
     throw "$Name did not become ready within $Timeout seconds."
