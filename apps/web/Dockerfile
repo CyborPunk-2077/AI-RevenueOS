@@ -18,7 +18,23 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
     PATH=/pnpm:$PATH \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 # Pinned by the root package.json, so the image cannot drift from the developer.
-RUN corepack enable
+#
+# `corepack enable` on its own only installs the *shims*. The pnpm binary itself
+# is fetched lazily, the first time `pnpm` is actually invoked - and in the
+# development stage below the first invocation is `CMD ["pnpm", "dev"]`, which
+# runs when the container starts, not when the image is built.
+#
+# So the web container was downloading pnpm from registry.npmjs.org on **every
+# start**, and a moment of network trouble stopped the whole demo: the launcher
+# waited out its full five minutes, timed out on a web app that had never begun
+# compiling, and suggested a destructive reset for what was a transient socket
+# error. Somebody demonstrating this on a hotel network would have hit it too.
+#
+# `corepack prepare --activate` reads `packageManager` from the package.json
+# copied beside it and downloads that exact version now, at build time, into the
+# image. Startup is then offline.
+COPY package.json ./package.json
+RUN corepack enable && corepack prepare --activate
 
 # --- dependencies -----------------------------------------------------------
 FROM base AS deps
