@@ -117,11 +117,37 @@ def push_history(current_hash: str | None, history: list[str]) -> list[str]:
 
 
 def lockout_state(failed_count: int, locked_until: datetime | None) -> tuple[bool, int]:
-    """Returns (locked, seconds_remaining)."""
+    """Returns (locked, seconds_remaining).
+
+    A lock window that has run its term is over, and an expired window no longer
+    falls through to the counter below. It used to, and the counter still read
+    MAX_FAILED_ATTEMPTS because only a *successful* login clears it - which the
+    lock itself made impossible. A lockout advertised as temporary was therefore
+    permanent, renewed silently every time it was checked.
+
+    The window is the authority whenever one exists. The counter is consulted
+    only when no window was ever opened, where it stays as a guard against a
+    caller that raises the count without calling `next_lockout`.
+    """
     now = utcnow()
-    if locked_until and locked_until > now:
-        return True, int((locked_until - now).total_seconds())
+    if locked_until is not None:
+        if locked_until > now:
+            return True, int((locked_until - now).total_seconds())
+        return False, 0
     return failed_count >= MAX_FAILED_ATTEMPTS, 0
+
+
+def effective_failed_count(failed_count: int, locked_until: datetime | None) -> int:
+    """The count that the next attempt builds on.
+
+    Serving the lockout is the penalty, so an expired window retires the counter
+    that opened it. Without this, the first wrong password after an expiry would
+    carry 5 to 6 and re-lock instantly - the same trap as the one above, merely
+    reached one attempt later instead of zero.
+    """
+    if locked_until is not None and locked_until <= utcnow():
+        return 0
+    return failed_count
 
 
 def next_lockout(failed_count: int) -> datetime | None:

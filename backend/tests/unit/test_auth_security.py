@@ -34,6 +34,7 @@ from infrastructure.auth.mfa import (
 )
 from infrastructure.auth.passwords import (
     MAX_FAILED_ATTEMPTS,
+    effective_failed_count,
     hash_password,
     hibp_prefix,
     is_in_history,
@@ -137,6 +138,32 @@ class TestPasswordPolicy:
         until = datetime.now(UTC) + timedelta(minutes=15)
         locked, seconds = lockout_state(5, until)
         assert locked is True and 800 < seconds <= 900
+
+    def test_an_expired_window_does_not_latch_on_the_stale_counter(self) -> None:
+        """The regression: expiry used to fall through to `count >= MAX` and re-lock.
+
+        The counter is still at the ceiling here, because only a successful login
+        clears it and the lock is what prevented one. That is precisely the state
+        the check has to read as unlocked.
+        """
+        expired = datetime.now(UTC) - timedelta(seconds=1)
+        assert lockout_state(MAX_FAILED_ATTEMPTS, expired)[0] is False
+        assert lockout_state(MAX_FAILED_ATTEMPTS * 4, expired)[0] is False
+
+    def test_an_expired_window_retires_its_counter(self) -> None:
+        expired = datetime.now(UTC) - timedelta(seconds=1)
+        active = datetime.now(UTC) + timedelta(minutes=15)
+        assert effective_failed_count(MAX_FAILED_ATTEMPTS, expired) == 0
+        # An unexpired window, or none at all, leaves the count exactly as stored.
+        assert effective_failed_count(3, active) == 3
+        assert effective_failed_count(3, None) == 3
+
+    def test_the_first_failure_after_expiry_does_not_re_lock(self) -> None:
+        """One mistake after serving a lockout must not put the account straight back."""
+        expired = datetime.now(UTC) - timedelta(seconds=1)
+        carried = effective_failed_count(MAX_FAILED_ATTEMPTS, expired)
+        assert next_lockout(carried) is None
+        assert lockout_state(carried + 1, next_lockout(carried))[0] is False
 
 
 class TestAccessTokens:

@@ -21,6 +21,7 @@ from sqlalchemy import select
 
 from domain.auth.permissions import Role, widest_scope
 from infrastructure.auth.passwords import (
+    effective_failed_count,
     lockout_state,
     next_lockout,
     verify_password,
@@ -304,7 +305,9 @@ async def login(email: str, password: str, tokens: TokenService) -> AuthResult:
         tenant_id = user.tenant_id
         password_hash = user.password_hash
         status = user.status
-        failed_count = user.failed_login_count
+        # Not the stored count: a lock that has expired takes its counter with it,
+        # so a later mistake starts a fresh cycle rather than resuming at the ceiling.
+        failed_count = effective_failed_count(user.failed_login_count, user.locked_until)
         profile_email, profile_name = user.email, user.full_name
 
     if locked:

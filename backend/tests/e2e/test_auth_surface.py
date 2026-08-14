@@ -148,6 +148,50 @@ def bearer(session: dict[str, Any]) -> dict[str, str]:
     return {"Authorization": f"Bearer {session['access_token']}"}
 
 
+def _lift_login_rate_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Raises the per-IP and per-account ceilings so lockout itself is observable.
+
+    Both limits are lower than `MAX_FAILED_ATTEMPTS` from a single caller, so they
+    answer 429 long before the account ever locks. That ordering is deliberate
+    defence in depth, and is asserted separately below.
+    """
+    from infrastructure.caching.rate_limit import POLICIES, LimitPolicy
+
+    monkeypatch.setitem(POLICIES, "login_ip", LimitPolicy("login_ip", 1_000, 900))
+    monkeypatch.setitem(POLICIES, "login_account", LimitPolicy("login_account", 1_000, 3600))
+
+
+def _advance_clock(monkeypatch: pytest.MonkeyPatch, module: Any, *, minutes: int) -> None:
+    """Moves the clock the lockout helpers read, leaving every other clock alone.
+
+    `lockout_state` and `next_lockout` share this one reference, so a window both
+    expires and is re-opened against the same shifted now.
+    """
+    from datetime import timedelta
+
+    from shared.utils.timeutil import utcnow as real_utcnow
+
+    shift = timedelta(minutes=minutes)
+    monkeypatch.setattr(module, "utcnow", lambda: real_utcnow() + shift)
+
+
+def lock_state(email: str) -> tuple[int, Any]:
+    """`(failed_login_count, locked_until)` read straight from the row."""
+    import asyncio
+
+    from sqlalchemy import select
+
+    from infrastructure.database.models.users import User
+    from infrastructure.database.session import platform_session
+
+    async def read() -> tuple[int, Any]:
+        async with platform_session("test: read lockout state") as session:
+            user = (await session.execute(select(User).where(User.email == email))).scalar_one()
+            return user.failed_login_count, user.locked_until
+
+    return asyncio.new_event_loop().run_until_complete(read())
+
+
 # --- sign-up, verification and recovery -------------------------------------
 
 
@@ -340,6 +384,95 @@ class TestLockout:
         )
         assert locked.status_code == 401
         assert "locked" in locked.json()["error"]["message"].lower()
+
+    def test_the_lock_expires_instead_of_latching_forever(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The whole lockout lifecycle, over HTTP, in the order it happens.
+
+        The regression this pins: once `locked_until` passed, the check fell
+        through to `failed_login_count >= MAX_FAILED_ATTEMPTS`, which was still 5
+        because only a successful login clears it - and the lock was what stopped
+        one happening. A fifteen-minute lockout was in fact permanent.
+
+        Time is moved rather than the row: an expiry the test *waited out* is the
+        only thing that proves the deadline is real, and rewriting `locked_until`
+        would assert against a state the application never produced.
+        """
+        from infrastructure.auth import passwords
+        from infrastructure.auth.passwords import LOCKOUT_MINUTES, MAX_FAILED_ATTEMPTS
+
+        _lift_login_rate_limits(monkeypatch)
+
+        for _ in range(MAX_FAILED_ATTEMPTS):
+            client.post(
+                "/v1/auth/login", json={"email": ACME_EMAIL, "password": "wrong-password-here"}
+            )
+
+        # 1. Five failures opened a real window, and it holds.
+        count, until = lock_state(ACME_EMAIL)
+        assert count == MAX_FAILED_ATTEMPTS
+        assert until is not None
+        during = client.post(
+            "/v1/auth/login", json={"email": ACME_EMAIL, "password": DEMO_PASSWORD}
+        )
+        assert during.status_code == 401
+        assert "locked" in during.json()["error"]["message"].lower()
+
+        # 2. The window runs out. The counter deliberately stays at 5 -- that is the
+        #    exact state that used to make the expiry meaningless.
+        _advance_clock(monkeypatch, passwords, minutes=LOCKOUT_MINUTES + 1)
+        assert lock_state(ACME_EMAIL)[0] == MAX_FAILED_ATTEMPTS
+
+        # 3. The correct password is accepted again.
+        after = client.post("/v1/auth/login", json={"email": ACME_EMAIL, "password": DEMO_PASSWORD})
+        assert after.status_code == 200, after.text
+        assert after.json()["data"]["access_token"]
+
+        # 4. Success cleared the failure state, so nothing carries into the next attempt.
+        assert lock_state(ACME_EMAIL) == (0, None)
+
+    def test_a_wrong_password_after_expiry_starts_a_fresh_cycle(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Serving the lockout is the penalty; the counter does not resume at the ceiling.
+
+        Without this, the first mistake after an expiry would carry 5 to 6 and
+        re-lock on the spot - the same trap, reached one attempt later.
+        """
+        from infrastructure.auth import passwords
+        from infrastructure.auth.passwords import LOCKOUT_MINUTES, MAX_FAILED_ATTEMPTS
+
+        _lift_login_rate_limits(monkeypatch)
+
+        for _ in range(MAX_FAILED_ATTEMPTS):
+            client.post(
+                "/v1/auth/login", json={"email": ACME_EMAIL, "password": "wrong-password-here"}
+            )
+        _advance_clock(monkeypatch, passwords, minutes=LOCKOUT_MINUTES + 1)
+
+        # One wrong password after expiry: counted from zero, and no new window.
+        client.post("/v1/auth/login", json={"email": ACME_EMAIL, "password": "wrong-password-here"})
+        assert lock_state(ACME_EMAIL) == (1, None)
+
+        # The correct password still works, because that single mistake locked nothing.
+        assert (
+            client.post(
+                "/v1/auth/login", json={"email": ACME_EMAIL, "password": DEMO_PASSWORD}
+            ).status_code
+            == 200
+        )
+
+        # And a full fresh run of failures locks the account again, normally.
+        for _ in range(MAX_FAILED_ATTEMPTS):
+            client.post(
+                "/v1/auth/login", json={"email": ACME_EMAIL, "password": "wrong-password-here"}
+            )
+        relocked = client.post(
+            "/v1/auth/login", json={"email": ACME_EMAIL, "password": DEMO_PASSWORD}
+        )
+        assert relocked.status_code == 401
+        assert "locked" in relocked.json()["error"]["message"].lower()
 
     def test_the_per_ip_limit_fires_before_the_account_ever_locks(self, client: TestClient) -> None:
         """The ordering above, asserted rather than assumed."""
