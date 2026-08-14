@@ -42,10 +42,27 @@ async function setTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
   await expect(page.locator('html')).toHaveClass(theme === 'dark' ? /dark/ : /^(?!.*dark).*$/);
 }
 
+/**
+ * Viewport-sized, not full-page.
+ *
+ * A design review asks "what does somebody see when they open this on a laptop",
+ * and that is the viewport. Full-page capture also lies about this layout in two
+ * specific ways: a sticky table header is stitched in at its sticky offset and
+ * paints over the first group heading, and the sidebar's viewport-height panel
+ * leaves the rest of its column blank. Neither happens in a real browser.
+ */
 async function shoot(page: Page, path: string, name: string): Promise<void> {
   await page.goto(path);
   await page.waitForLoadState('networkidle');
-  await page.screenshot({ path: `${EVIDENCE}/${name}.png`, fullPage: true });
+  await page.screenshot({ path: `${EVIDENCE}/${name}.png` });
+}
+
+/** The rest of a long page, for the screens where length is the design problem. */
+async function shootBelowTheFold(page: Page, name: string): Promise<void> {
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(150);
+  await page.screenshot({ path: `${EVIDENCE}/${name}.png` });
+  await page.evaluate(() => window.scrollTo(0, 0));
 }
 
 /** Every screen worth looking at, in the order the working day runs. */
@@ -74,6 +91,11 @@ for (const theme of ['light', 'dark'] as const) {
 
     for (const screen of SCREENS) {
       await shoot(page, screen.path, `${theme}-${screen.name}`);
+      // Today and Analytics are the two screens whose whole design problem is
+      // length, so the bottom of each is photographed as well.
+      if (screen.name === '01-today' || screen.name === '14-analytics') {
+        await shootBelowTheFold(page, `${theme}-${screen.name}-lower`);
+      }
     }
 
     // A record, which is a different layout problem from a list: one dominant
@@ -84,7 +106,8 @@ for (const theme of ['light', 'dark'] as const) {
     await first.click();
     await expect(page.getByTestId('lead-name')).toBeVisible();
     await page.waitForLoadState('networkidle');
-    await page.screenshot({ path: `${EVIDENCE}/${theme}-04-prospect-detail.png`, fullPage: true });
+    await page.screenshot({ path: `${EVIDENCE}/${theme}-04-prospect-detail.png` });
+    await shootBelowTheFold(page, `${theme}-04-prospect-detail-lower`);
 
     // A conversation, if this workspace has one. The Inbox is the most bespoke
     // layout in the product and the one most likely to break in a single theme.
@@ -93,10 +116,7 @@ for (const theme of ['light', 'dark'] as const) {
     if (await conversation.isVisible().catch(() => false)) {
       await conversation.click();
       await page.waitForLoadState('networkidle');
-      await page.screenshot({
-        path: `${EVIDENCE}/${theme}-08-inbox-thread.png`,
-        fullPage: true,
-      });
+      await page.screenshot({ path: `${EVIDENCE}/${theme}-08-inbox-thread.png` });
     }
   });
 }
@@ -105,10 +125,10 @@ test('the shell holds together as the desktop narrows', async ({ page }) => {
   test.setTimeout(180_000);
   await signInAs(page, 'founder');
 
-  // The three widths the responsiveness table names: full layout, the width at
-  // which the right rail gives up, and the width at which the sidebar becomes a
-  // 64px icon rail.
-  for (const width of [1440, 1280, 1024]) {
+  // The widths the responsiveness table names: a wide desktop where Today's
+  // observations sit beside the table, a laptop where they stack beneath it, and
+  // the width at which the sidebar becomes a 64px icon rail.
+  for (const width of [1680, 1440, 1280, 1024]) {
     await page.setViewportSize({ width, height: 900 });
     await shoot(page, '/today', `narrow-${width}-today`);
     await shoot(page, '/leads', `narrow-${width}-prospects`);

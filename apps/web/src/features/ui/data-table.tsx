@@ -41,8 +41,14 @@ export interface RowGroup<T> {
   label: string;
   count?: number;
   rows: T[];
-  /** Said under the heading where the grouping rule is not self-evident. */
+  /** Said beside the heading where the grouping rule is not self-evident. */
   hint?: string;
+  /**
+   * The group's `tbody` marker. Several of these are asserted by browser tests
+   * that predate the grouping - `no-reply-rows` has to keep meaning "the rows
+   * nobody has replied to" wherever those rows are drawn.
+   */
+  testId?: string;
 }
 
 const DROP_CLASS: Record<number, string> = {
@@ -50,9 +56,16 @@ const DROP_CLASS: Record<number, string> = {
   1100: 'hidden min-[1100px]:table-cell',
 };
 
-function headerClass<T>(column: Column<T>): string {
+function headerClass<T>(column: Column<T>, sticky: boolean): string {
   return cn(
-    'whitespace-nowrap px-4 py-2 text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground',
+    'truncate px-4 py-2 text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground',
+    // On the cells, not on `thead`, and with no `overflow` ancestor between them
+    // and the page. Any ancestor whose overflow is not `visible` becomes the
+    // containing block for a sticky child: wrapping the table in `overflow-x-auto`
+    // made the header stick 52px below the top of that wrapper instead of below
+    // the utility bar, which drew a blank band where the first group heading
+    // should have been.
+    sticky && 'sticky top-[var(--utility-bar-height)] z-10 bg-surface-sunken',
     column.align === 'right' ? 'text-right' : 'text-left',
     column.dropAt ? DROP_CLASS[column.dropAt] : undefined,
   );
@@ -60,7 +73,9 @@ function headerClass<T>(column: Column<T>): string {
 
 function cellClass<T>(column: Column<T>, index: number): string {
   return cn(
-    'px-4 py-2.5 align-middle text-sm',
+    // `overflow-hidden` is what makes `truncate` work inside a fixed layout. A
+    // cell that wraps to three lines is how a dense table turns into a wall.
+    'overflow-hidden px-4 py-2.5 align-middle text-sm',
     index === 0 && 'relative',
     column.align === 'right' ? 'text-right tabular' : 'text-left',
     column.dropAt ? DROP_CLASS[column.dropAt] : undefined,
@@ -97,9 +112,7 @@ export function DataTable<T>({
 
   if (flat.length === 0 && empty) {
     return (
-      <div className={cn('overflow-hidden rounded-lg border border-border bg-surface', className)}>
-        {empty}
-      </div>
+      <div className={cn('rounded-lg border border-border bg-surface', className)}>{empty}</div>
     );
   }
 
@@ -121,19 +134,33 @@ export function DataTable<T>({
     );
   };
 
+  // A declared width means the caller has budgeted the row, so the browser is
+  // told to respect it rather than letting one long task title decide how wide
+  // every other column gets to be.
+  const fixed = columns.some((column) => column.width);
+
   return (
-    <div className={cn('overflow-x-auto rounded-lg border border-border bg-surface', className)}>
-      <table className="w-full border-collapse text-left">
+    // No `overflow` on the wrapper: it would clip the sticky header's containing
+    // block. The rounded top corners live on the first and last header cells
+    // instead, which is why the header carries its own background.
+    <div className={cn('rounded-lg border border-border bg-surface', className)}>
+      <table className={cn('w-full border-collapse text-left', fixed && 'table-fixed')}>
         <caption className="sr-only">{caption}</caption>
-        <thead
-          className={cn(
-            'bg-surface-sunken',
-            stickyHeader && 'sticky top-[var(--utility-bar-height)] z-10',
-          )}
-        >
+        <thead>
           <tr className="border-b border-border-strong">
-            {columns.map((column) => (
-              <th key={column.key} scope="col" style={column.width ? { width: column.width } : undefined} className={headerClass(column)}>
+            {columns.map((column, index) => (
+              <th
+                key={column.key}
+                scope="col"
+                title={column.header}
+                style={column.width ? { width: column.width } : undefined}
+                className={cn(
+                  headerClass(column, stickyHeader),
+                  !stickyHeader && 'bg-surface-sunken',
+                  index === 0 && 'rounded-tl-lg',
+                  index === columns.length - 1 && 'rounded-tr-lg',
+                )}
+              >
                 {column.header}
               </th>
             ))}
@@ -142,7 +169,7 @@ export function DataTable<T>({
 
         {groups ? (
           groups.map((group) => (
-            <tbody key={group.key} data-testid={`group-${group.key}`}>
+            <tbody key={group.key} data-testid={group.testId ?? `group-${group.key}`}>
               <tr>
                 {/*
                   A full-width heading row inside the same table. Four separate

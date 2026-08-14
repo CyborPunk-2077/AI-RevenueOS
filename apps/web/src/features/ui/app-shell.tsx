@@ -150,8 +150,16 @@ const WORKSPACE_LABELS: Record<
   },
 };
 
-/** Shown only where the label is: `sr-only` would double the name at full width. */
-const LABEL_AT_FULL_WIDTH = 'hidden min-[1200px]:inline';
+/**
+ * The label is always in the DOM; below 1200px it is only visually hidden.
+ *
+ * That matters more than it looks. Giving the icon rail its accessible name with
+ * `aria-label` instead made every sidebar link match `getByLabel`, and
+ * `getByLabel('Follow-up')` - the task form's own field - suddenly resolved to
+ * two elements. An accessible name that comes from the element's own text cannot
+ * collide with a form label, and it needs no second source of truth.
+ */
+const LABEL_AT_FULL_WIDTH = 'sr-only min-[1200px]:not-sr-only';
 
 function SidebarPanel({
   tenantSlug,
@@ -193,7 +201,6 @@ function SidebarPanel({
           <span className={alwaysExpanded ? 'hidden' : 'min-[1200px]:hidden'} aria-hidden="true">
             S
           </span>
-          <span className={alwaysExpanded ? 'hidden' : 'sr-only min-[1200px]:hidden'}>Sangam</span>
         </Link>
       </div>
 
@@ -213,9 +220,6 @@ function SidebarPanel({
                     href={item.href}
                     data-testid={`nav-${item.key}`}
                     aria-current={current ? 'page' : undefined}
-                    // The accessible name is the label at every width, including
-                    // the icon rail where the text itself is not rendered.
-                    aria-label={item.label}
                     title={item.label}
                     onClick={onNavigate}
                     className={cn(
@@ -237,9 +241,7 @@ function SidebarPanel({
                       />
                     ) : null}
                     <Icon size={17} strokeWidth={1.75} />
-                    <span className={expanded} aria-hidden="true">
-                      {item.label}
-                    </span>
+                    <span className={expanded}>{item.label}</span>
                   </Link>
                 </li>
               );
