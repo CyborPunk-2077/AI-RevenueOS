@@ -40,6 +40,12 @@ export const ACCOUNTS = {
   'pilot-manager': 'manager@pilot-e2e.test',
   'pilot-sales': 'sales@pilot-e2e.test',
   founder: 'abhishek@sangam.co.in',
+  // The other two Sangam roles. Read-only in every suite that uses them: they
+  // exist so the demo acceptance can prove what a manager and a salesperson
+  // actually see in the workspace a founder will be demonstrating, rather than
+  // inferring it from the pilot tenant's identically-shaped roles.
+  'founder-manager': 'priya@sangam.co.in',
+  'founder-member': 'kiran@sangam.co.in',
 } as const;
 
 export type AccountName = keyof typeof ACCOUNTS;
