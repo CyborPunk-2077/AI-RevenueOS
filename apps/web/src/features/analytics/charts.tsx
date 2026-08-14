@@ -14,7 +14,8 @@ import {
   YAxis,
 } from 'recharts';
 
-import { Card } from '@/features/ui/primitives';
+import { Button } from '@/features/ui/controls';
+import { SectionHeader } from '@/features/ui/primitives';
 
 /**
  * Charts, each paired with the table it was drawn from.
@@ -29,10 +30,20 @@ import { Card } from '@/features/ui/primitives';
  * Colours come from the design tokens rather than Recharts defaults, so a theme
  * change moves the charts with everything else and dark mode does not produce
  * neon on charcoal.
+ *
+ * **The categorical series is the accent plus neutral steps, not a rainbow.** A
+ * six-colour palette implies six meanings; these categories have none. Where a
+ * reader needs to tell two bars apart the label under them does it, and where
+ * they need an exact figure the table does it better than any hue could.
  */
 
-const SERIES = ['hsl(var(--primary))', 'hsl(var(--accent))', 'hsl(var(--success))'];
-const AXIS = 'hsl(var(--muted-foreground))';
+const SERIES = [
+  'hsl(var(--accent))',
+  'hsl(var(--text-muted))',
+  'hsl(var(--border-strong))',
+  'hsl(var(--text-secondary))',
+];
+const AXIS = 'hsl(var(--text-muted))';
 const GRID = 'hsl(var(--border))';
 
 interface Row {
@@ -60,47 +71,53 @@ function ChartFrame({
   const render = format ?? ((value: number) => value.toLocaleString('en-IN'));
 
   return (
-    <Card className="animate-fade-up">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="heading text-sm">{title}</h3>
-          {description ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          aria-expanded={asTable}
-          aria-controls={tableId}
-          onClick={() => setAsTable((current) => !current)}
-          className="interactive rounded-full border border-border px-3 py-1 text-xs"
-        >
-          {asTable ? 'View as chart' : 'View as table'}
-        </button>
-      </div>
+    <section className="space-y-3 rounded-lg border border-border bg-surface p-5">
+      <SectionHeader
+        title={title}
+        description={description}
+        actions={
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-expanded={asTable}
+            aria-controls={tableId}
+            onClick={() => setAsTable((current) => !current)}
+          >
+            {asTable ? 'View as chart' : 'View as table'}
+          </Button>
+        }
+      />
 
       {rows.length === 0 ? (
-        <p className="mt-6 text-sm text-muted-foreground">Nothing to show for this period.</p>
+        <p className="py-6 text-sm text-muted-foreground">Nothing to show for this period.</p>
       ) : asTable ? (
-        <table id={tableId} className="mt-4 w-full text-left text-sm">
+        <table id={tableId} className="w-full border-collapse text-left">
           <caption className="sr-only">{title}</caption>
           <thead>
-            <tr className="border-b border-border text-xs uppercase text-muted-foreground">
-              <th scope="col" className="py-2">
+            <tr className="border-b border-border-strong">
+              <th
+                scope="col"
+                className="py-2 text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground"
+              >
                 {title}
               </th>
-              <th scope="col" className="py-2 text-right">
+              <th
+                scope="col"
+                className="py-2 text-right text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground"
+              >
                 {valueHeader}
               </th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.label} className="border-b border-border/60">
-                <th scope="row" className="py-2 font-normal">
+              <tr key={row.label} className="border-b border-border last:border-b-0">
+                <th scope="row" className="py-2 text-sm font-normal text-secondary-foreground">
                   {row.label}
                 </th>
-                <td className="py-2 text-right tabular">{render(row.value)}</td>
+                <td className="py-2 text-right text-sm tabular text-foreground">
+                  {render(row.value)}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -109,7 +126,7 @@ function ChartFrame({
         <>
           {/* The chart is decorative once the table exists; the table below is the
               accessible representation and is always reachable. */}
-          <div id={tableId} aria-hidden="true" className="mt-4 h-56">
+          <div id={tableId} aria-hidden="true" className="h-56">
             {children}
           </div>
           <p className="sr-only">
@@ -117,8 +134,24 @@ function ChartFrame({
           </p>
         </>
       )}
-    </Card>
+    </section>
   );
+}
+
+/**
+ * Axis ticks for a money series.
+ *
+ * Amounts are stored in paise, and an axis that printed them raw read
+ * "240000000" where a person expects "24L". Lakh and crore rather than the
+ * thousands separator, because this is read by people in Bengaluru who think in
+ * those units; the exact figure is a hover or a table row away.
+ */
+function axisRupees(minor: number): string {
+  const rupees = minor / 100;
+  if (rupees >= 10_000_000) return `₹${(rupees / 10_000_000).toFixed(1)}Cr`;
+  if (rupees >= 100_000) return `₹${(rupees / 100_000).toFixed(1)}L`;
+  if (rupees >= 1_000) return `₹${Math.round(rupees / 1_000)}k`;
+  return `₹${Math.round(rupees)}`;
 }
 
 // A tooltip is an overlay, which is the one place a shadow is earned.
@@ -144,9 +177,16 @@ export function PipelineByStage({ rows }: { rows: Row[] }): JSX.Element {
         <BarChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
           <CartesianGrid stroke={GRID} strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="label" stroke={AXIS} fontSize={11} tickLine={false} />
-          <YAxis stroke={AXIS} fontSize={11} tickLine={false} axisLine={false} />
-          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'hsl(var(--primary) / 0.06)' }} />
-          <Bar dataKey="value" radius={[6, 6, 0, 0]} animationDuration={600}>
+          <YAxis
+            stroke={AXIS}
+            fontSize={11}
+            tickLine={false}
+            axisLine={false}
+            width={56}
+            tickFormatter={axisRupees}
+          />
+          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'hsl(var(--accent) / 0.06)' }} />
+          <Bar dataKey="value" radius={[3, 3, 0, 0]} animationDuration={600}>
             {rows.map((row, index) => (
               <Cell key={row.label} fill={SERIES[index % SERIES.length]} />
             ))}
@@ -178,11 +218,11 @@ export function LeadSourceMix({ rows }: { rows: Row[] }): JSX.Element {
             tickLine={false}
             axisLine={false}
           />
-          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'hsl(var(--primary) / 0.06)' }} />
+          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'hsl(var(--accent) / 0.06)' }} />
           <Bar
             dataKey="value"
-            fill="hsl(var(--primary))"
-            radius={[0, 6, 6, 0]}
+            fill="hsl(var(--accent))"
+            radius={[0, 3, 3, 0]}
             animationDuration={600}
           />
         </BarChart>
@@ -204,12 +244,19 @@ export function WonOverTime({ rows }: { rows: Row[] }): JSX.Element {
         <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 8 }}>
           <CartesianGrid stroke={GRID} strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="label" stroke={AXIS} fontSize={11} tickLine={false} />
-          <YAxis stroke={AXIS} fontSize={11} tickLine={false} axisLine={false} />
+          <YAxis
+            stroke={AXIS}
+            fontSize={11}
+            tickLine={false}
+            axisLine={false}
+            width={56}
+            tickFormatter={axisRupees}
+          />
           <Tooltip contentStyle={tooltipStyle} />
           <Line
             type="monotone"
             dataKey="value"
-            stroke="hsl(var(--primary))"
+            stroke="hsl(var(--accent))"
             strokeWidth={2.5}
             dot={false}
             activeDot={{ r: 5 }}
