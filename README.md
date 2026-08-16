@@ -4,7 +4,7 @@
 
 See RevenueOS in action through a short product walkthrough covering the core workspace and revenue-operations workflow.
 
-**[▶ Watch the RevenueOS Demo](https://abhishek-project-demos1.vercel.app/revenueos.html)**
+**[▶ Watch the SANGAM Demo](https://abhishek-project-demos1.vercel.app/revenueos.html)**
 
 > For the full implementation, architecture, setup instructions, and technical documentation, continue below.
 
