@@ -2,13 +2,13 @@
 
 ## 🎬 Product Demo
 
-See RevenueOS in action through a short product walkthrough covering the core workspace and revenue-operations workflow.
+See SANGAM in action through a short product walkthrough covering the core workspace and revenue-operations workflow.
 
 **[▶ Watch the SANGAM Demo](https://abhishek-project-demos1.vercel.app/revenueos.html)**
 
 > For the full implementation, architecture, setup instructions, and technical documentation, continue below.
 
-Multi-tenant B2B RevenueOS for Indian SMEs: canonical customer records, leads,
+Multi-tenant B2B SANGAM for Indian SMEs: canonical customer records, leads,
 opportunities, activities, communications, appointments, documents, payments,
 automation, analytics and compliance.
 
